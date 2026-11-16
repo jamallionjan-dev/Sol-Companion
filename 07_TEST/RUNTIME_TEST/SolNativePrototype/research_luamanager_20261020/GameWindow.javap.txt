@@ -1,0 +1,2693 @@
+Compiled from "GameWindow.java"
+public final class zombie.GameWindow {
+  private static final java.lang.String GAME_TITLE;
+
+  private static final zombie.FPSTracking s_fpsTracking;
+
+  private static final java.lang.ThreadLocal<zombie.GameWindow$StringUTF> stringUTF;
+
+  public static final zombie.core.input.Input GameInput;
+
+  public static final boolean DEBUG_SAVE;
+
+  public static boolean okToSaveOnExit;
+
+  public static java.lang.String lastP;
+
+  public static zombie.gameStates.GameStateMachine states;
+
+  public static boolean serverDisconnected;
+
+  public static boolean loadedAsClient;
+
+  public static java.lang.String kickReason;
+
+  public static boolean drawReloadingLua;
+
+  public static zombie.input.JoypadManager$Joypad activatedJoyPad;
+
+  public static java.lang.String version;
+
+  public static volatile boolean closeRequested;
+
+  public static float averageFPS;
+
+  private static boolean doRenderEvent;
+
+  public static boolean luaDebuggerKeyDown;
+
+  public static zombie.fileSystem.FileSystem fileSystem;
+
+  public static zombie.asset.AssetManagers assetManagers;
+
+  private static long currentTime;
+
+  private static long accumulator;
+
+  public static boolean gameThreadExited;
+
+  public static java.lang.Thread gameThread;
+
+  private static long updateTime;
+
+  public static final java.util.ArrayList<zombie.GameWindow$TexturePack> texturePacks;
+
+  public static final zombie.fileSystem.FileSystem$TexturePackTextures texturePackTextures;
+
+  public zombie.GameWindow();
+    Code:
+       0: aload_0
+       1: invokespecial #3                  // Method java/lang/Object."<init>":()V
+       4: return
+
+  private static void initShared() throws java.lang.Exception;
+    Code:
+       0: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+       3: invokevirtual #15                 // Method zombie/ZomboidFileSystem.getCacheDir:()Ljava/lang/String;
+       6: getstatic     #19                 // Field java/io/File.separator:Ljava/lang/String;
+       9: invokedynamic #25,  0             // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      14: astore_0
+      15: new           #20                 // class java/io/File
+      18: dup
+      19: aload_0
+      20: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+      23: astore_1
+      24: aload_1
+      25: invokevirtual #32                 // Method java/io/File.exists:()Z
+      28: ifne          36
+      31: aload_1
+      32: invokevirtual #36                 // Method java/io/File.mkdirs:()Z
+      35: pop
+      36: iconst_1
+      37: putstatic     #39                 // Field zombie/core/textures/TexturePackPage.ignoreWorldItemTextures:Z
+      40: iconst_2
+      41: istore_2
+      42: ldc           #47                 // String UI
+      44: iconst_2
+      45: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      48: ldc           #55                 // String UI2
+      50: iconst_2
+      51: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      54: ldc           #57                 // String IconsMoveables
+      56: iconst_2
+      57: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      60: ldc           #59                 // String RadioIcons
+      62: iconst_2
+      63: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      66: ldc           #61                 // String ApComUI
+      68: iconst_2
+      69: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      72: ldc           #63                 // String Mechanics
+      74: iconst_2
+      75: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      78: ldc           #65                 // String WeatherFx
+      80: iconst_2
+      81: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      84: invokestatic  #67                 // Method setTexturePackLookup:()V
+      87: invokestatic  #70                 // Method zombie/iso/sprite/IsoCursor.getInstance:()Lzombie/iso/sprite/IsoCursor;
+      90: pop
+      91: invokestatic  #76                 // Method zombie/iso/sprite/IsoReticle.initInstances:()V
+      94: invokestatic  #81                 // Method zombie/gameStates/MainScreenState.preloadBackgroundTextures:()V
+      97: invokestatic  #86                 // Method zombie/characters/skills/PerkFactory.init:()V
+     100: getstatic     #91                 // Field zombie/characters/skills/CustomPerks.instance:Lzombie/characters/skills/CustomPerks;
+     103: invokevirtual #96                 // Method zombie/characters/skills/CustomPerks.init:()V
+     106: getstatic     #91                 // Field zombie/characters/skills/CustomPerks.instance:Lzombie/characters/skills/CustomPerks;
+     109: invokevirtual #97                 // Method zombie/characters/skills/CustomPerks.initLua:()V
+     112: getstatic     #100                // Field zombie/sandbox/CustomSandboxOptions.instance:Lzombie/sandbox/CustomSandboxOptions;
+     115: invokevirtual #105                // Method zombie/sandbox/CustomSandboxOptions.init:()V
+     118: getstatic     #100                // Field zombie/sandbox/CustomSandboxOptions.instance:Lzombie/sandbox/CustomSandboxOptions;
+     121: getstatic     #106                // Field zombie/SandboxOptions.instance:Lzombie/SandboxOptions;
+     124: invokevirtual #111                // Method zombie/sandbox/CustomSandboxOptions.initInstance:(Lzombie/SandboxOptions;)V
+     127: invokestatic  #115                // Method zombie/scripting/objects/ModRegistries.init:()V
+     130: ldc           #118                // String UI_Loading_Scripts
+     132: iconst_0
+     133: anewarray     #4                  // class java/lang/Object
+     136: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     139: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     142: getstatic     #129                // Field zombie/scripting/ScriptManager.instance:Lzombie/scripting/ScriptManager;
+     145: invokevirtual #134                // Method zombie/scripting/ScriptManager.Load:()V
+     148: invokestatic  #137                // Method zombie/spriteModel/SpriteModelManager.getInstance:()Lzombie/spriteModel/SpriteModelManager;
+     151: invokevirtual #142                // Method zombie/spriteModel/SpriteModelManager.init:()V
+     154: ldc           #143                // String UI_Loading_Clothing
+     156: iconst_0
+     157: anewarray     #4                  // class java/lang/Object
+     160: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     163: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     166: invokestatic  #145                // Method zombie/core/skinnedmodel/population/ClothingDecals.init:()V
+     169: invokestatic  #148                // Method zombie/core/skinnedmodel/population/BeardStyles.init:()V
+     172: invokestatic  #151                // Method zombie/core/skinnedmodel/population/HairStyles.init:()V
+     175: invokestatic  #154                // Method zombie/core/skinnedmodel/population/OutfitManager.init:()V
+     178: invokestatic  #157                // Method zombie/core/skinnedmodel/population/VoiceStyles.init:()V
+     181: ldc           #160                // String
+     183: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     186: getstatic     #162                // Field zombie/core/random/RandStandard.INSTANCE:Lzombie/core/random/RandStandard;
+     189: invokevirtual #168                // Method zombie/core/random/RandStandard.init:()V
+     192: getstatic     #169                // Field zombie/core/random/RandLua.INSTANCE:Lzombie/core/random/RandLua;
+     195: invokevirtual #174                // Method zombie/core/random/RandLua.init:()V
+     198: iconst_0
+     199: putstatic     #39                 // Field zombie/core/textures/TexturePackPage.ignoreWorldItemTextures:Z
+     202: getstatic     #175                // Field zombie/core/textures/TextureID.useCompressionOption:Z
+     205: putstatic     #180                // Field zombie/core/textures/TextureID.useCompression:Z
+     208: invokestatic  #183                // Method zombie/input/Mouse.initCustomCursor:()V
+     211: invokestatic  #188                // Method zombie/tileDepth/TileGeometryManager.getInstance:()Lzombie/tileDepth/TileGeometryManager;
+     214: invokevirtual #193                // Method zombie/tileDepth/TileGeometryManager.init:()V
+     217: invokestatic  #194                // Method zombie/tileDepth/TileDepthTextureAssignmentManager.getInstance:()Lzombie/tileDepth/TileDepthTextureAssignmentManager;
+     220: invokevirtual #199                // Method zombie/tileDepth/TileDepthTextureAssignmentManager.init:()V
+     223: invokestatic  #200                // Method zombie/seams/SeamManager.getInstance:()Lzombie/seams/SeamManager;
+     226: invokevirtual #205                // Method zombie/seams/SeamManager.init:()V
+     229: invokestatic  #206                // Method zombie/seating/SeatingManager.getInstance:()Lzombie/seating/SeatingManager;
+     232: invokevirtual #211                // Method zombie/seating/SeatingManager.init:()V
+     235: getstatic     #212                // Field zombie/core/Core.debug:Z
+     238: ifeq          253
+     241: getstatic     #215                // Field zombie/debug/DebugOptions.instance:Lzombie/debug/DebugOptions;
+     244: getfield      #220                // Field zombie/debug/DebugOptions.uiDisableLogoState:Lzombie/debug/BooleanDebugOption;
+     247: invokevirtual #224                // Method zombie/debug/BooleanDebugOption.getValue:()Z
+     250: ifne          270
+     253: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     256: getfield      #233                // Field zombie/gameStates/GameStateMachine.states:Ljava/util/ArrayList;
+     259: new           #238                // class zombie/gameStates/TISLogoState
+     262: dup
+     263: invokespecial #240                // Method zombie/gameStates/TISLogoState."<init>":()V
+     266: invokevirtual #241                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
+     269: pop
+     270: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     273: getfield      #233                // Field zombie/gameStates/GameStateMachine.states:Ljava/util/ArrayList;
+     276: new           #247                // class zombie/gameStates/TermsOfServiceState
+     279: dup
+     280: invokespecial #249                // Method zombie/gameStates/TermsOfServiceState."<init>":()V
+     283: invokevirtual #241                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
+     286: pop
+     287: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     290: getfield      #233                // Field zombie/gameStates/GameStateMachine.states:Ljava/util/ArrayList;
+     293: new           #82                 // class zombie/gameStates/MainScreenState
+     296: dup
+     297: invokespecial #250                // Method zombie/gameStates/MainScreenState."<init>":()V
+     300: invokevirtual #241                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
+     303: pop
+     304: getstatic     #212                // Field zombie/core/Core.debug:Z
+     307: ifne          317
+     310: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     313: iconst_1
+     314: putfield      #251                // Field zombie/gameStates/GameStateMachine.loopToState:I
+     317: getstatic     #255                // Field GameInput:Lzombie/core/input/Input;
+     320: invokevirtual #259                // Method zombie/core/input/Input.initControllers:()V
+     323: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     326: invokevirtual #267                // Method zombie/core/Core.isDefaultOptions:()Z
+     329: ifeq          352
+     332: invokestatic  #270                // Method zombie/core/znet/SteamUtils.isSteamModeEnabled:()Z
+     335: ifeq          352
+     338: invokestatic  #275                // Method zombie/core/znet/SteamUtils.isRunningOnSteamDeck:()Z
+     341: ifeq          352
+     344: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     347: iconst_0
+     348: iconst_1
+     349: invokevirtual #278                // Method zombie/core/Core.setOptionActiveController:(IZ)V
+     352: getstatic     #255                // Field GameInput:Lzombie/core/input/Input;
+     355: invokevirtual #282                // Method zombie/core/input/Input.getControllerCount:()I
+     358: istore_3
+     359: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     362: ldc_w         #292                // String ----------------------------------------------
+     365: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     368: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     371: ldc_w         #297                // String --    Information about controllers
+     374: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     377: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     380: ldc_w         #292                // String ----------------------------------------------
+     383: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     386: iconst_0
+     387: istore        4
+     389: iload         4
+     391: iload_3
+     392: if_icmpge     617
+     395: getstatic     #255                // Field GameInput:Lzombie/core/input/Input;
+     398: iload         4
+     400: invokevirtual #299                // Method zombie/core/input/Input.getController:(I)Lorg/lwjglx/input/Controller;
+     403: astore        5
+     405: aload         5
+     407: ifnonnull     413
+     410: goto          611
+     413: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     416: ldc_w         #292                // String ----------------------------------------------
+     419: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     422: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     425: aload         5
+     427: invokevirtual #303                // Method org/lwjglx/input/Controller.getGamepadName:()Ljava/lang/String;
+     430: invokedynamic #308,  0            // InvokeDynamic #1:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+     435: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     438: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     441: ldc_w         #292                // String ----------------------------------------------
+     444: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     447: aload         5
+     449: invokevirtual #311                // Method org/lwjglx/input/Controller.getAxisCount:()I
+     452: istore        6
+     454: iload         6
+     456: iconst_1
+     457: if_icmple     529
+     460: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     463: ldc_w         #292                // String ----------------------------------------------
+     466: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     469: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     472: iload         4
+     474: invokedynamic #314,  0            // InvokeDynamic #2:makeConcatWithConstants:(I)Ljava/lang/String;
+     479: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     482: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     485: ldc_w         #292                // String ----------------------------------------------
+     488: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     491: iconst_0
+     492: istore        7
+     494: iload         7
+     496: iload         6
+     498: if_icmpge     529
+     501: aload         5
+     503: iload         7
+     505: invokevirtual #317                // Method org/lwjglx/input/Controller.getAxisName:(I)Ljava/lang/String;
+     508: astore        8
+     510: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     513: aload         8
+     515: invokedynamic #320,  0            // InvokeDynamic #3:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+     520: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     523: iinc          7, 1
+     526: goto          494
+     529: aload         5
+     531: invokevirtual #321                // Method org/lwjglx/input/Controller.getButtonCount:()I
+     534: istore        6
+     536: iload         6
+     538: iconst_1
+     539: if_icmple     611
+     542: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     545: ldc_w         #292                // String ----------------------------------------------
+     548: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     551: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     554: iload         4
+     556: invokedynamic #324,  0            // InvokeDynamic #4:makeConcatWithConstants:(I)Ljava/lang/String;
+     561: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     564: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     567: ldc_w         #292                // String ----------------------------------------------
+     570: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     573: iconst_0
+     574: istore        7
+     576: iload         7
+     578: iload         6
+     580: if_icmpge     611
+     583: aload         5
+     585: iload         7
+     587: invokevirtual #325                // Method org/lwjglx/input/Controller.getButtonName:(I)Ljava/lang/String;
+     590: astore        8
+     592: getstatic     #286                // Field zombie/debug/DebugType.Input:Lzombie/debug/DebugType;
+     595: aload         8
+     597: invokedynamic #328,  0            // InvokeDynamic #5:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+     602: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+     605: iinc          7, 1
+     608: goto          576
+     611: iinc          4, 1
+     614: goto          389
+     617: return
+
+  private static void logic();
+    Code:
+       0: invokestatic  #329                // Method org/lwjglx/opengl/Display.imGuiNewFrame:()V
+       3: getstatic     #212                // Field zombie/core/Core.debug:Z
+       6: ifeq          29
+       9: getstatic     #334                // Field zombie/debug/DebugContext.instance:Lzombie/debug/DebugContext;
+      12: invokevirtual #339                // Method zombie/debug/DebugContext.tickFrameStart:()V
+      15: goto          29
+      18: astore_0
+      19: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      22: aload_0
+      23: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+      26: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+      29: getstatic     #357                // Field zombie/network/GameClient.client:Z
+      32: ifeq          49
+      35: getstatic     #362                // Field zombie/network/GameClient.instance:Lzombie/network/GameClient;
+      38: invokevirtual #365                // Method zombie/network/GameClient.update:()V
+      41: goto          49
+      44: astore_0
+      45: aload_0
+      46: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+      49: invokestatic  #374                // Method zombie/spnetwork/SinglePlayerServer.update:()V
+      52: invokestatic  #377                // Method zombie/spnetwork/SinglePlayerClient.update:()V
+      55: goto          63
+      58: astore_0
+      59: aload_0
+      60: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+      63: invokestatic  #382                // Method zombie/GameProfiler.getInstance:()Lzombie/GameProfiler;
+      66: astore_0
+      67: aload_0
+      68: ldc_w         #387                // String Steam Loop
+      71: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+      74: astore_1
+      75: invokestatic  #393                // Method zombie/core/znet/SteamUtils.runLoop:()V
+      78: aload_1
+      79: ifnull        109
+      82: aload_1
+      83: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+      86: goto          109
+      89: astore_2
+      90: aload_1
+      91: ifnull        107
+      94: aload_1
+      95: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+      98: goto          107
+     101: astore_3
+     102: aload_2
+     103: aload_3
+     104: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     107: aload_2
+     108: athrow
+     109: aload_0
+     110: ldc_w         #404                // String Mouse
+     113: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     116: astore_1
+     117: invokestatic  #406                // Method zombie/input/Mouse.update:()V
+     120: aload_1
+     121: ifnull        151
+     124: aload_1
+     125: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     128: goto          151
+     131: astore_2
+     132: aload_1
+     133: ifnull        149
+     136: aload_1
+     137: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     140: goto          149
+     143: astore_3
+     144: aload_2
+     145: aload_3
+     146: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     149: aload_2
+     150: athrow
+     151: aload_0
+     152: ldc_w         #407                // String Keyboard
+     155: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     158: astore_1
+     159: invokestatic  #409                // Method zombie/input/GameKeyboard.update:()V
+     162: aload_1
+     163: ifnull        193
+     166: aload_1
+     167: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     170: goto          193
+     173: astore_2
+     174: aload_1
+     175: ifnull        191
+     178: aload_1
+     179: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     182: goto          191
+     185: astore_3
+     186: aload_2
+     187: aload_3
+     188: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     191: aload_2
+     192: athrow
+     193: getstatic     #255                // Field GameInput:Lzombie/core/input/Input;
+     196: invokevirtual #412                // Method zombie/core/input/Input.updateGameThread:()V
+     199: getstatic     #415                // Field zombie/network/CoopMaster.instance:Lzombie/network/CoopMaster;
+     202: ifnull        211
+     205: getstatic     #415                // Field zombie/network/CoopMaster.instance:Lzombie/network/CoopMaster;
+     208: invokevirtual #420                // Method zombie/network/CoopMaster.update:()V
+     211: getstatic     #421                // Field zombie/characters/IsoPlayer.players:[Lzombie/characters/IsoPlayer;
+     214: iconst_0
+     215: aaload
+     216: ifnull        236
+     219: getstatic     #421                // Field zombie/characters/IsoPlayer.players:[Lzombie/characters/IsoPlayer;
+     222: iconst_0
+     223: aaload
+     224: invokestatic  #427                // Method zombie/characters/IsoPlayer.setInstance:(Lzombie/characters/IsoPlayer;)V
+     227: getstatic     #421                // Field zombie/characters/IsoPlayer.players:[Lzombie/characters/IsoPlayer;
+     230: iconst_0
+     231: aaload
+     232: invokestatic  #431                // Method zombie/iso/IsoCamera.setCameraCharacter:(Lzombie/characters/IsoGameCharacter;)Z
+     235: pop
+     236: aload_0
+     237: ldc           #47                 // String UI
+     239: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     242: astore_1
+     243: invokestatic  #437                // Method zombie/ui/UIManager.update:()V
+     246: aload_1
+     247: ifnull        277
+     250: aload_1
+     251: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     254: goto          277
+     257: astore_2
+     258: aload_1
+     259: ifnull        275
+     262: aload_1
+     263: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     266: goto          275
+     269: astore_3
+     270: aload_2
+     271: aload_3
+     272: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     275: aload_2
+     276: athrow
+     277: aconst_null
+     278: astore_1
+     279: getstatic     #215                // Field zombie/debug/DebugOptions.instance:Lzombie/debug/DebugOptions;
+     282: getfield      #440                // Field zombie/debug/DebugOptions.threadSound:Lzombie/debug/BooleanDebugOption;
+     285: invokevirtual #224                // Method zombie/debug/BooleanDebugOption.getValue:()Z
+     288: ifeq          303
+     291: invokedynamic #443,  0            // InvokeDynamic #6:run:()Ljava/lang/Runnable;
+     296: invokestatic  #447                // Method zombie/core/PZForkJoinPool.commonPool:()Ljava/util/concurrent/ForkJoinPool;
+     299: invokestatic  #453                // Method java/util/concurrent/CompletableFuture.runAsync:(Ljava/lang/Runnable;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;
+     302: astore_1
+     303: invokestatic  #459                // Method zombie/debug/LineDrawer.clear:()V
+     306: getstatic     #464                // Field zombie/input/JoypadManager.instance:Lzombie/input/JoypadManager;
+     309: iconst_m1
+     310: invokevirtual #469                // Method zombie/input/JoypadManager.isAPressed:(I)Z
+     313: ifeq          406
+     316: iconst_0
+     317: istore_2
+     318: iload_2
+     319: getstatic     #464                // Field zombie/input/JoypadManager.instance:Lzombie/input/JoypadManager;
+     322: getfield      #473                // Field zombie/input/JoypadManager.joypadList:Ljava/util/ArrayList;
+     325: invokevirtual #476                // Method java/util/ArrayList.size:()I
+     328: if_icmpge     406
+     331: getstatic     #464                // Field zombie/input/JoypadManager.instance:Lzombie/input/JoypadManager;
+     334: getfield      #473                // Field zombie/input/JoypadManager.joypadList:Ljava/util/ArrayList;
+     337: iload_2
+     338: invokevirtual #479                // Method java/util/ArrayList.get:(I)Ljava/lang/Object;
+     341: checkcast     #483                // class zombie/input/JoypadManager$Joypad
+     344: astore_3
+     345: aload_3
+     346: invokevirtual #485                // Method zombie/input/JoypadManager$Joypad.isAPressed:()Z
+     349: ifeq          400
+     352: getstatic     #487                // Field activatedJoyPad:Lzombie/input/JoypadManager$Joypad;
+     355: ifnonnull     362
+     358: aload_3
+     359: putstatic     #487                // Field activatedJoyPad:Lzombie/input/JoypadManager$Joypad;
+     362: invokestatic  #491                // Method zombie/characters/IsoPlayer.getInstance:()Lzombie/characters/IsoPlayer;
+     365: ifnull        384
+     368: ldc_w         #494                // String OnJoypadActivate
+     371: aload_3
+     372: invokevirtual #496                // Method zombie/input/JoypadManager$Joypad.getID:()I
+     375: invokestatic  #499                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     378: invokestatic  #505                // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;Ljava/lang/Object;)V
+     381: goto          406
+     384: ldc_w         #511                // String OnJoypadActivateUI
+     387: aload_3
+     388: invokevirtual #496                // Method zombie/input/JoypadManager$Joypad.getID:()I
+     391: invokestatic  #499                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     394: invokestatic  #505                // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;Ljava/lang/Object;)V
+     397: goto          406
+     400: iinc          2, 1
+     403: goto          318
+     406: invokestatic  #513                // Method zombie/GameTime.isGamePaused:()Z
+     409: ifne          416
+     412: iconst_1
+     413: goto          417
+     416: iconst_0
+     417: istore_2
+     418: aload_0
+     419: ldc_w         #518                // String Collision Data
+     422: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     425: astore_3
+     426: getstatic     #520                // Field zombie/MapCollisionData.instance:Lzombie/MapCollisionData;
+     429: invokevirtual #525                // Method zombie/MapCollisionData.updateGameState:()V
+     432: aload_3
+     433: ifnull        468
+     436: aload_3
+     437: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     440: goto          468
+     443: astore        4
+     445: aload_3
+     446: ifnull        465
+     449: aload_3
+     450: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     453: goto          465
+     456: astore        5
+     458: aload         4
+     460: aload         5
+     462: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     465: aload         4
+     467: athrow
+     468: invokestatic  #528                // Method zombie/CombatManager.getInstance:()Lzombie/CombatManager;
+     471: iload_2
+     472: invokevirtual #533                // Method zombie/CombatManager.update:(Z)V
+     475: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     478: getfield      #536                // Field zombie/core/Core.displayCursor:Z
+     481: invokestatic  #539                // Method zombie/input/Mouse.setCursorVisible:(Z)V
+     484: iload_2
+     485: ifeq          497
+     488: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     491: invokevirtual #542                // Method zombie/gameStates/GameStateMachine.update:()V
+     494: goto          516
+     497: invokestatic  #543                // Method zombie/iso/IsoCamera.updateAll:()V
+     500: invokestatic  #546                // Method isIngameState:()Z
+     503: ifeq          516
+     506: ldc_w         #549                // String OnTickEvenPaused
+     509: dconst_0
+     510: invokestatic  #551                // Method zombie/core/BoxedStaticValues.toDouble:(D)Ljava/lang/Double;
+     513: invokestatic  #505                // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;Ljava/lang/Object;)V
+     516: aload_1
+     517: ifnull        528
+     520: aload_1
+     521: invokevirtual #557                // Method java/util/concurrent/CompletableFuture.join:()Ljava/lang/Object;
+     524: pop
+     525: goto          628
+     528: aload_0
+     529: ldc_w         #561                // String Voice
+     532: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     535: astore_3
+     536: getstatic     #563                // Field zombie/core/raknet/VoiceManager.instance:Lzombie/core/raknet/VoiceManager;
+     539: invokevirtual #568                // Method zombie/core/raknet/VoiceManager.update:()V
+     542: aload_3
+     543: ifnull        578
+     546: aload_3
+     547: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     550: goto          578
+     553: astore        4
+     555: aload_3
+     556: ifnull        575
+     559: aload_3
+     560: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     563: goto          575
+     566: astore        5
+     568: aload         4
+     570: aload         5
+     572: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     575: aload         4
+     577: athrow
+     578: aload_0
+     579: ldc_w         #569                // String Sound
+     582: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     585: astore_3
+     586: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     589: invokevirtual #576                // Method zombie/BaseSoundManager.Update:()V
+     592: aload_3
+     593: ifnull        628
+     596: aload_3
+     597: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     600: goto          628
+     603: astore        4
+     605: aload_3
+     606: ifnull        625
+     609: aload_3
+     610: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     613: goto          625
+     616: astore        5
+     618: aload         4
+     620: aload         5
+     622: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     625: aload         4
+     627: athrow
+     628: aload_0
+     629: ldc_w         #581                // String UI Resize
+     632: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     635: astore_3
+     636: invokestatic  #583                // Method zombie/ui/UIManager.resize:()V
+     639: aload_3
+     640: ifnull        675
+     643: aload_3
+     644: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     647: goto          675
+     650: astore        4
+     652: aload_3
+     653: ifnull        672
+     656: aload_3
+     657: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     660: goto          672
+     663: astore        5
+     665: aload         4
+     667: aload         5
+     669: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     672: aload         4
+     674: athrow
+     675: invokestatic  #586                // Method zombie/worldMap/WorldMapImages.checkLoadingQueue:()V
+     678: getstatic     #591                // Field fileSystem:Lzombie/fileSystem/FileSystem;
+     681: invokevirtual #595                // Method zombie/fileSystem/FileSystem.updateAsyncTransactions:()V
+     684: getstatic     #600                // Field zombie/input/KeybindId.TAKE_SCREENSHOT:Lzombie/input/KeybindId;
+     687: invokestatic  #606                // Method zombie/input/GameKeyboard.isKeyPressed:(Lzombie/input/KeybindId;)Z
+     690: ifeq          700
+     693: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     696: aconst_null
+     697: invokevirtual #610                // Method zombie/core/Core.TakeFullScreenshot:(Ljava/lang/String;)V
+     700: getstatic     #212                // Field zombie/core/Core.debug:Z
+     703: ifeq          726
+     706: getstatic     #334                // Field zombie/debug/DebugContext.instance:Lzombie/debug/DebugContext;
+     709: invokevirtual #613                // Method zombie/debug/DebugContext.tick:()V
+     712: goto          726
+     715: astore_3
+     716: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     719: aload_3
+     720: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     723: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     726: return
+    Exception table:
+       from    to  target type
+           9    15    18   Class java/lang/Exception
+          35    41    44   Class java/lang/Exception
+          49    55    58   Class java/lang/Throwable
+          75    78    89   Class java/lang/Throwable
+          94    98   101   Class java/lang/Throwable
+         117   120   131   Class java/lang/Throwable
+         136   140   143   Class java/lang/Throwable
+         159   162   173   Class java/lang/Throwable
+         178   182   185   Class java/lang/Throwable
+         243   246   257   Class java/lang/Throwable
+         262   266   269   Class java/lang/Throwable
+         426   432   443   Class java/lang/Throwable
+         449   453   456   Class java/lang/Throwable
+         536   542   553   Class java/lang/Throwable
+         559   563   566   Class java/lang/Throwable
+         586   592   603   Class java/lang/Throwable
+         609   613   616   Class java/lang/Throwable
+         636   639   650   Class java/lang/Throwable
+         656   660   663   Class java/lang/Throwable
+         706   712   715   Class java/lang/Exception
+
+  public static boolean isIngameState();
+    Code:
+       0: getstatic     #616                // Field zombie/gameStates/IngameState.instance:Lzombie/gameStates/IngameState;
+       3: ifnull        37
+       6: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+       9: getfield      #621                // Field zombie/gameStates/GameStateMachine.current:Lzombie/gameStates/GameState;
+      12: getstatic     #616                // Field zombie/gameStates/IngameState.instance:Lzombie/gameStates/IngameState;
+      15: if_acmpeq     33
+      18: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+      21: getfield      #233                // Field zombie/gameStates/GameStateMachine.states:Ljava/util/ArrayList;
+      24: getstatic     #616                // Field zombie/gameStates/IngameState.instance:Lzombie/gameStates/IngameState;
+      27: invokevirtual #625                // Method java/util/ArrayList.contains:(Ljava/lang/Object;)Z
+      30: ifeq          37
+      33: iconst_1
+      34: goto          38
+      37: iconst_0
+      38: ireturn
+
+  public static void render();
+    Code:
+       0: getstatic     #628                // Field zombie/iso/IsoCamera.frameState:Lzombie/iso/IsoCamera$FrameState;
+       3: dup
+       4: getfield      #632                // Field zombie/iso/IsoCamera$FrameState.frameCount:I
+       7: iconst_1
+       8: iadd
+       9: putfield      #632                // Field zombie/iso/IsoCamera$FrameState.frameCount:I
+      12: getstatic     #628                // Field zombie/iso/IsoCamera.frameState:Lzombie/iso/IsoCamera$FrameState;
+      15: invokevirtual #637                // Method zombie/iso/IsoCamera$FrameState.updateUnPausedAccumulator:()V
+      18: invokestatic  #640                // Method renderInternal:()V
+      21: return
+
+  protected static void renderInternal();
+    Code:
+       0: getstatic     #643                // Field zombie/core/SpriteRenderer.instance:Lzombie/core/SpriteRenderer;
+       3: invokevirtual #648                // Method zombie/core/SpriteRenderer.NewFrame:()V
+       6: getstatic     #651                // Field zombie/core/PerformanceSettings.lightingThread:Z
+       9: ifne          55
+      12: getstatic     #656                // Field zombie/iso/LightingJNI.init:Z
+      15: ifeq          55
+      18: invokestatic  #660                // Method zombie/iso/LightingJNI.WaitingForMain:()Z
+      21: ifne          55
+      24: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+      27: getstatic     #669                // Field zombie/core/Core.dirtyGlobalLightsCount:I
+      30: ifle          37
+      33: iconst_1
+      34: goto          38
+      37: iconst_0
+      38: invokestatic  #672                // Method zombie/iso/LightingJNI.DoLightingUpdateNew:(JZ)V
+      41: getstatic     #669                // Field zombie/core/Core.dirtyGlobalLightsCount:I
+      44: ifle          55
+      47: getstatic     #669                // Field zombie/core/Core.dirtyGlobalLightsCount:I
+      50: iconst_1
+      51: isub
+      52: putstatic     #669                // Field zombie/core/Core.dirtyGlobalLightsCount:I
+      55: getstatic     #676                // Field zombie/iso/IsoObjectPicker.Instance:Lzombie/iso/IsoObjectPicker;
+      58: invokevirtual #682                // Method zombie/iso/IsoObjectPicker.StartRender:()V
+      61: invokestatic  #685                // Method zombie/iso/LightingJNI.preUpdate:()V
+      64: getstatic     #688                // Field zombie/GameWindow$s_performance.statesRender:Lzombie/core/profiling/PerformanceProfileProbe;
+      67: invokevirtual #694                // Method zombie/core/profiling/PerformanceProfileProbe.profile:()Lzombie/core/profiling/AbstractPerformanceProfileProbe;
+      70: astore_0
+      71: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+      74: invokevirtual #699                // Method zombie/gameStates/GameStateMachine.render:()V
+      77: aload_0
+      78: ifnull        108
+      81: aload_0
+      82: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+      85: goto          108
+      88: astore_1
+      89: aload_0
+      90: ifnull        106
+      93: aload_0
+      94: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+      97: goto          106
+     100: astore_2
+     101: aload_1
+     102: aload_2
+     103: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     106: aload_1
+     107: athrow
+     108: return
+    Exception table:
+       from    to  target type
+          71    77    88   Class java/lang/Throwable
+          93    97   100   Class java/lang/Throwable
+
+  public static void InitDisplay() throws java.io.IOException, org.lwjglx.LWJGLException;
+    Code:
+       0: ldc_w         #705                // String Project Zomboid
+       3: invokestatic  #707                // Method org/lwjglx/opengl/Display.setTitle:(Ljava/lang/String;)V
+       6: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+       9: invokevirtual #710                // Method zombie/core/Core.loadOptions:()Z
+      12: ifne          121
+      15: iconst_1
+      16: invokestatic  #713                // Method zombie/core/Core.setFullScreen:(Z)V
+      19: iconst_1
+      20: invokestatic  #716                // Method org/lwjglx/opengl/Display.setFullscreen:(Z)V
+      23: iconst_0
+      24: invokestatic  #719                // Method org/lwjglx/opengl/Display.setResizable:(Z)V
+      27: invokestatic  #722                // Method org/lwjglx/opengl/Display.getDesktopDisplayMode:()Lorg/lwjglx/opengl/DisplayMode;
+      30: astore_0
+      31: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      34: aload_0
+      35: invokevirtual #726                // Method org/lwjglx/opengl/DisplayMode.getWidth:()I
+      38: aload_0
+      39: invokevirtual #731                // Method org/lwjglx/opengl/DisplayMode.getHeight:()I
+      42: invokevirtual #734                // Method zombie/core/Core.init:(II)V
+      45: invokestatic  #737                // Method org/lwjgl/opengl/GL.getCapabilities:()Lorg/lwjgl/opengl/GLCapabilities;
+      48: getfield      #743                // Field org/lwjgl/opengl/GLCapabilities.GL_ATI_meminfo:Z
+      51: ifne          80
+      54: invokestatic  #737                // Method org/lwjgl/opengl/GL.getCapabilities:()Lorg/lwjgl/opengl/GLCapabilities;
+      57: getfield      #748                // Field org/lwjgl/opengl/GLCapabilities.GL_NVX_gpu_memory_info:Z
+      60: ifne          80
+      63: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      66: ldc_w         #751                // String Unable to determine available GPU memory, texture compression defaults to on
+      69: invokevirtual #753                // Method zombie/debug/DebugType.warn:(Ljava/lang/Object;)V
+      72: iconst_1
+      73: dup
+      74: putstatic     #175                // Field zombie/core/textures/TextureID.useCompressionOption:Z
+      77: putstatic     #180                // Field zombie/core/textures/TextureID.useCompression:Z
+      80: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      83: ldc_w         #757                // String user.language
+      86: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+      89: invokedynamic #762,  0            // InvokeDynamic #7:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      94: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      97: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     100: ldc_w         #757                // String user.language
+     103: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+     106: invokevirtual #766                // Method java/lang/String.toUpperCase:()Ljava/lang/String;
+     109: invokevirtual #771                // Method zombie/core/Core.setOptionLanguageName:(Ljava/lang/String;)V
+     112: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     115: invokevirtual #774                // Method zombie/core/Core.saveOptions:()V
+     118: goto          139
+     121: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     124: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     127: invokevirtual #777                // Method zombie/core/Core.getScreenWidth:()I
+     130: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     133: invokevirtual #780                // Method zombie/core/Core.getScreenHeight:()I
+     136: invokevirtual #734                // Method zombie/core/Core.init:(II)V
+     139: getstatic     #643                // Field zombie/core/SpriteRenderer.instance:Lzombie/core/SpriteRenderer;
+     142: invokevirtual #783                // Method zombie/core/SpriteRenderer.create:()V
+     145: return
+
+  public static void InitGameThread();
+    Code:
+       0: invokedynamic #786,  0            // InvokeDynamic #8:uncaughtException:()Ljava/lang/Thread$UncaughtExceptionHandler;
+       5: invokestatic  #790                // Method java/lang/Thread.setDefaultUncaughtExceptionHandler:(Ljava/lang/Thread$UncaughtExceptionHandler;)V
+       8: invokedynamic #796,  0            // InvokeDynamic #9:run:()Ljava/lang/Runnable;
+      13: invokedynamic #797,  0            // InvokeDynamic #10:run:()Ljava/lang/Runnable;
+      18: invokedynamic #798,  0            // InvokeDynamic #11:run:()Ljava/lang/Runnable;
+      23: invokedynamic #799,  0            // InvokeDynamic #12:uncaughtException:()Ljava/lang/Thread$UncaughtExceptionHandler;
+      28: invokestatic  #800                // Method zombie/MainThread.init:(Ljava/lang/Runnable;Ljava/lang/Runnable;Ljava/lang/Runnable;Ljava/lang/Thread$UncaughtExceptionHandler;)Ljava/lang/Thread;
+      31: putstatic     #805                // Field gameThread:Ljava/lang/Thread;
+      34: return
+
+  private static void uncaughtExceptionMainThread(java.lang.Thread, java.lang.Throwable);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokestatic  #809                // Method uncaughtException:(Ljava/lang/Thread;Ljava/lang/Throwable;)V
+       5: invokestatic  #812                // Method onGameThreadExited:()V
+       8: goto          17
+      11: astore_2
+      12: invokestatic  #812                // Method onGameThreadExited:()V
+      15: aload_2
+      16: athrow
+      17: return
+    Exception table:
+       from    to  target type
+           0     5    11   any
+
+  private static void uncaughtGlobalException(java.lang.Thread, java.lang.Throwable);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokestatic  #809                // Method uncaughtException:(Ljava/lang/Thread;Ljava/lang/Throwable;)V
+       5: return
+
+  public static void uncaughtException(java.lang.Thread, java.lang.Throwable);
+    Code:
+       0: ldc_w         #815                // String Unhandled %s thrown by thread %s.
+       3: iconst_2
+       4: anewarray     #4                  // class java/lang/Object
+       7: dup
+       8: iconst_0
+       9: aload_1
+      10: invokevirtual #817                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+      13: invokevirtual #821                // Method java/lang/Class.getName:()Ljava/lang/String;
+      16: aastore
+      17: dup
+      18: iconst_1
+      19: aload_0
+      20: invokevirtual #826                // Method java/lang/Thread.getName:()Ljava/lang/String;
+      23: aastore
+      24: invokestatic  #827                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      27: astore_2
+      28: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      31: aload_2
+      32: invokevirtual #830                // Method zombie/debug/DebugType.error:(Ljava/lang/Object;)V
+      35: aload_1
+      36: aload_2
+      37: invokestatic  #833                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;Ljava/lang/String;)V
+      40: return
+
+  private static void mainThreadStart();
+    Code:
+       0: invokestatic  #836                // Method mainThreadInit:()V
+       3: invokestatic  #839                // Method enter:()V
+       6: invokedynamic #842,  0            // InvokeDynamic #13:run:()Ljava/lang/Runnable;
+      11: invokestatic  #843                // Method zombie/core/opengl/RenderThread.invokeOnRenderContext:(Ljava/lang/Runnable;)V
+      14: iconst_1
+      15: invokestatic  #849                // Method zombie/core/opengl/RenderThread.setWaitForRenderState:(Z)V
+      18: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+      21: putstatic     #852                // Field currentTime:J
+      24: return
+
+  private static void mainThreadStep();
+    Code:
+       0: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+       3: lstore_0
+       4: lload_0
+       5: getstatic     #852                // Field currentTime:J
+       8: lcmp
+       9: ifge          17
+      12: lload_0
+      13: putstatic     #852                // Field currentTime:J
+      16: return
+      17: lload_0
+      18: getstatic     #852                // Field currentTime:J
+      21: lsub
+      22: lstore_2
+      23: lload_0
+      24: putstatic     #852                // Field currentTime:J
+      27: getstatic     #856                // Field zombie/core/PerformanceSettings.instance:Lzombie/core/PerformanceSettings;
+      30: invokevirtual #859                // Method zombie/core/PerformanceSettings.isFramerateUncapped:()Z
+      33: ifeq          42
+      36: invokestatic  #862                // Method frameStep:()V
+      39: goto          81
+      42: getstatic     #865                // Field accumulator:J
+      45: lload_2
+      46: ladd
+      47: putstatic     #865                // Field accumulator:J
+      50: getstatic     #868                // Field zombie/core/math/PZMath.secondsToNanos:J
+      53: invokestatic  #873                // Method zombie/core/PerformanceSettings.getLockFPS:()I
+      56: i2l
+      57: ldiv
+      58: lstore        4
+      60: getstatic     #865                // Field accumulator:J
+      63: lload         4
+      65: lcmp
+      66: iflt          81
+      69: invokestatic  #862                // Method frameStep:()V
+      72: getstatic     #865                // Field accumulator:J
+      75: lload         4
+      77: lrem
+      78: putstatic     #865                // Field accumulator:J
+      81: getstatic     #212                // Field zombie/core/Core.debug:Z
+      84: ifeq          111
+      87: getstatic     #215                // Field zombie/debug/DebugOptions.instance:Lzombie/debug/DebugOptions;
+      90: getfield      #876                // Field zombie/debug/DebugOptions.threadCrashEnabled:Lzombie/debug/BooleanDebugOption;
+      93: invokevirtual #224                // Method zombie/debug/BooleanDebugOption.getValue:()Z
+      96: ifeq          111
+      99: iconst_0
+     100: invokestatic  #879                // Method zombie/debug/DebugOptions.testThreadCrash:(I)V
+     103: invokedynamic #883,  0            // InvokeDynamic #14:run:()Ljava/lang/Runnable;
+     108: invokestatic  #843                // Method zombie/core/opengl/RenderThread.invokeOnRenderContext:(Ljava/lang/Runnable;)V
+     111: return
+
+  private static void mainThreadExit();
+    Code:
+       0: invokestatic  #884                // Method exit:()V
+       3: return
+
+  private static void mainThreadInit();
+    Code:
+       0: ldc_w         #887                // String debug
+       3: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+       6: astore_0
+       7: ldc_w         #888                // String imguidebugviewports
+      10: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+      13: astore_1
+      14: ldc_w         #890                // String imgui
+      17: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+      20: astore_2
+      21: ldc_w         #892                // String nosave
+      24: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+      27: astore_3
+      28: aload_3
+      29: ifnull        39
+      32: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      35: iconst_1
+      36: invokevirtual #894                // Method zombie/core/Core.setNoSave:(Z)V
+      39: aload_0
+      40: ifnull        63
+      43: iconst_1
+      44: putstatic     #212                // Field zombie/core/Core.debug:Z
+      47: aload_1
+      48: ifnull        55
+      51: iconst_1
+      52: putstatic     #897                // Field zombie/core/Core.useViewports:Z
+      55: aload_2
+      56: ifnull        63
+      59: iconst_1
+      60: putstatic     #900                // Field zombie/core/Core.imGui:Z
+      63: getstatic     #903                // Field zombie/core/Core.soundDisabled:Z
+      66: ifne          75
+      69: getstatic     #906                // Field fmod/fmod/FMODManager.instance:Lfmod/fmod/FMODManager;
+      72: invokevirtual #911                // Method fmod/fmod/FMODManager.init:()V
+      75: getstatic     #215                // Field zombie/debug/DebugOptions.instance:Lzombie/debug/DebugOptions;
+      78: invokevirtual #912                // Method zombie/debug/DebugOptions.init:()V
+      81: invokestatic  #913                // Method zombie/GameProfiler.init:()V
+      84: getstatic     #903                // Field zombie/core/Core.soundDisabled:Z
+      87: ifeq          100
+      90: new           #914                // class zombie/DummySoundManager
+      93: dup
+      94: invokespecial #916                // Method zombie/DummySoundManager."<init>":()V
+      97: goto          107
+     100: new           #572                // class zombie/SoundManager
+     103: dup
+     104: invokespecial #917                // Method zombie/SoundManager."<init>":()V
+     107: putstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     110: getstatic     #903                // Field zombie/core/Core.soundDisabled:Z
+     113: ifeq          126
+     116: new           #918                // class zombie/DummyAmbientStreamManager
+     119: dup
+     120: invokespecial #920                // Method zombie/DummyAmbientStreamManager."<init>":()V
+     123: goto          133
+     126: new           #921                // class zombie/AmbientStreamManager
+     129: dup
+     130: invokespecial #923                // Method zombie/AmbientStreamManager."<init>":()V
+     133: putstatic     #924                // Field zombie/AmbientStreamManager.instance:Lzombie/BaseAmbientStreamManager;
+     136: getstatic     #903                // Field zombie/core/Core.soundDisabled:Z
+     139: ifeq          152
+     142: new           #927                // class zombie/audio/DummySoundBank
+     145: dup
+     146: invokespecial #929                // Method zombie/audio/DummySoundBank."<init>":()V
+     149: goto          159
+     152: new           #930                // class fmod/fmod/FMODSoundBank
+     155: dup
+     156: invokespecial #932                // Method fmod/fmod/FMODSoundBank."<init>":()V
+     159: putstatic     #933                // Field zombie/audio/BaseSoundBank.instance:Lzombie/audio/BaseSoundBank;
+     162: getstatic     #563                // Field zombie/core/raknet/VoiceManager.instance:Lzombie/core/raknet/VoiceManager;
+     165: invokevirtual #938                // Method zombie/core/raknet/VoiceManager.loadConfig:()V
+     168: invokestatic  #941                // Method zombie/core/opengl/RenderThread.isRunning:()Z
+     171: ifne          180
+     174: invokestatic  #944                // Method java/lang/Thread.yield:()V
+     177: goto          168
+     180: getstatic     #947                // Field zombie/core/Core.safeModeForced:Z
+     183: ifne          195
+     186: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     189: invokevirtual #950                // Method zombie/core/Core.getOptionTextureCompression:()Z
+     192: ifeq          199
+     195: iconst_1
+     196: goto          200
+     199: iconst_0
+     200: putstatic     #175                // Field zombie/core/textures/TextureID.useCompressionOption:Z
+     203: getstatic     #175                // Field zombie/core/textures/TextureID.useCompressionOption:Z
+     206: putstatic     #180                // Field zombie/core/textures/TextureID.useCompression:Z
+     209: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     212: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     215: invokevirtual #953                // Method zombie/core/Core.getOptionSoundVolume:()I
+     218: i2f
+     219: ldc_w         #956                // float 10.0f
+     222: fdiv
+     223: invokevirtual #957                // Method zombie/BaseSoundManager.setSoundVolume:(F)V
+     226: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     229: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     232: invokevirtual #961                // Method zombie/core/Core.getOptionMusicVolume:()I
+     235: i2f
+     236: ldc_w         #956                // float 10.0f
+     239: fdiv
+     240: invokevirtual #964                // Method zombie/BaseSoundManager.setMusicVolume:(F)V
+     243: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     246: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     249: invokevirtual #967                // Method zombie/core/Core.getOptionAmbientVolume:()I
+     252: i2f
+     253: ldc_w         #956                // float 10.0f
+     256: fdiv
+     257: invokevirtual #970                // Method zombie/BaseSoundManager.setAmbientVolume:(F)V
+     260: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+     263: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     266: invokevirtual #973                // Method zombie/core/Core.getOptionVehicleEngineVolume:()I
+     269: i2f
+     270: ldc_w         #956                // float 10.0f
+     273: fdiv
+     274: invokevirtual #976                // Method zombie/BaseSoundManager.setVehicleEngineVolume:(F)V
+     277: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     280: invokevirtual #979                // Method zombie/ZomboidFileSystem.init:()V
+     283: goto          298
+     286: astore        4
+     288: new           #980                // class java/lang/RuntimeException
+     291: dup
+     292: aload         4
+     294: invokespecial #982                // Method java/lang/RuntimeException."<init>":(Ljava/lang/Throwable;)V
+     297: athrow
+     298: getstatic     #984                // Field zombie/DebugFileWatcher.instance:Lzombie/DebugFileWatcher;
+     301: invokevirtual #989                // Method zombie/DebugFileWatcher.init:()V
+     304: ldc_w         #990                // String server
+     307: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+     310: astore        4
+     312: ldc_w         #992                // String nozombies
+     315: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+     318: astore        5
+     320: aload         5
+     322: ifnull        329
+     325: iconst_1
+     326: putstatic     #994                // Field zombie/iso/IsoWorld.noZombies:Z
+     329: aload         4
+     331: ifnull        349
+     334: aload         4
+     336: ldc_w         #999                // String true
+     339: invokevirtual #1001               // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+     342: ifeq          349
+     345: iconst_1
+     346: putstatic     #1004               // Field zombie/network/GameServer.server:Z
+     349: invokestatic  #1008               // Method renameSaveFolders:()V
+     352: invokestatic  #1011               // Method init:()V
+     355: goto          370
+     358: astore        6
+     360: new           #980                // class java/lang/RuntimeException
+     363: dup
+     364: aload         6
+     366: invokespecial #982                // Method java/lang/RuntimeException."<init>":(Ljava/lang/Throwable;)V
+     369: athrow
+     370: return
+    Exception table:
+       from    to  target type
+         277   283   286   Class java/lang/Exception
+         349   355   358   Class java/lang/Exception
+
+  private static void renameSaveFolders();
+    Code:
+       0: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+       3: invokevirtual #1012               // Method zombie/ZomboidFileSystem.getSaveDir:()Ljava/lang/String;
+       6: astore_0
+       7: new           #20                 // class java/io/File
+      10: dup
+      11: aload_0
+      12: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+      15: astore_1
+      16: aload_1
+      17: invokevirtual #32                 // Method java/io/File.exists:()Z
+      20: ifeq          30
+      23: aload_1
+      24: invokevirtual #1015               // Method java/io/File.isDirectory:()Z
+      27: ifne          31
+      30: return
+      31: new           #20                 // class java/io/File
+      34: dup
+      35: aload_1
+      36: ldc_w         #1018               // String Fighter
+      39: invokespecial #1020               // Method java/io/File."<init>":(Ljava/io/File;Ljava/lang/String;)V
+      42: astore_2
+      43: new           #20                 // class java/io/File
+      46: dup
+      47: aload_1
+      48: ldc_w         #1023               // String Survivor
+      51: invokespecial #1020               // Method java/io/File."<init>":(Ljava/io/File;Ljava/lang/String;)V
+      54: astore_3
+      55: aload_2
+      56: invokevirtual #32                 // Method java/io/File.exists:()Z
+      59: ifeq          83
+      62: aload_2
+      63: invokevirtual #1015               // Method java/io/File.isDirectory:()Z
+      66: ifeq          83
+      69: aload_3
+      70: invokevirtual #32                 // Method java/io/File.exists:()Z
+      73: ifeq          83
+      76: aload_3
+      77: invokevirtual #1015               // Method java/io/File.isDirectory:()Z
+      80: ifne          84
+      83: return
+      84: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      87: ldc_w         #1025               // String RENAMING Saves/Survivor to Saves/Apocalypse
+      90: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      93: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      96: ldc_w         #1027               // String RENAMING Saves/Fighter to Saves/Survivor
+      99: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     102: aload_3
+     103: new           #20                 // class java/io/File
+     106: dup
+     107: aload_1
+     108: ldc_w         #1029               // String Apocalypse
+     111: invokespecial #1020               // Method java/io/File."<init>":(Ljava/io/File;Ljava/lang/String;)V
+     114: invokevirtual #1031               // Method java/io/File.renameTo:(Ljava/io/File;)Z
+     117: pop
+     118: aload_2
+     119: new           #20                 // class java/io/File
+     122: dup
+     123: aload_1
+     124: ldc_w         #1023               // String Survivor
+     127: invokespecial #1020               // Method java/io/File."<init>":(Ljava/io/File;Ljava/lang/String;)V
+     130: invokevirtual #1031               // Method java/io/File.renameTo:(Ljava/io/File;)Z
+     133: pop
+     134: new           #20                 // class java/io/File
+     137: dup
+     138: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     141: invokevirtual #15                 // Method zombie/ZomboidFileSystem.getCacheDir:()Ljava/lang/String;
+     144: getstatic     #19                 // Field java/io/File.separator:Ljava/lang/String;
+     147: invokedynamic #1035,  0           // InvokeDynamic #15:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+     152: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+     155: astore        4
+     157: aload         4
+     159: invokevirtual #32                 // Method java/io/File.exists:()Z
+     162: ifeq          171
+     165: aload         4
+     167: invokevirtual #1036               // Method java/io/File.delete:()Z
+     170: pop
+     171: return
+
+  public static long readLong(java.io.DataInputStream) throws java.io.IOException;
+    Code:
+       0: aload_0
+       1: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+       4: istore_1
+       5: aload_0
+       6: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+       9: istore_2
+      10: aload_0
+      11: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      14: istore_3
+      15: aload_0
+      16: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      19: istore        4
+      21: aload_0
+      22: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      25: istore        5
+      27: aload_0
+      28: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      31: istore        6
+      33: aload_0
+      34: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      37: istore        7
+      39: aload_0
+      40: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      43: istore        8
+      45: iload_1
+      46: iload_2
+      47: ior
+      48: iload_3
+      49: ior
+      50: iload         4
+      52: ior
+      53: iload         5
+      55: ior
+      56: iload         6
+      58: ior
+      59: iload         7
+      61: ior
+      62: iload         8
+      64: ior
+      65: ifge          76
+      68: new           #1044               // class java/io/EOFException
+      71: dup
+      72: invokespecial #1046               // Method java/io/EOFException."<init>":()V
+      75: athrow
+      76: iload_1
+      77: iload_2
+      78: bipush        8
+      80: ishl
+      81: iadd
+      82: iload_3
+      83: bipush        16
+      85: ishl
+      86: iadd
+      87: iload         4
+      89: bipush        24
+      91: ishl
+      92: iadd
+      93: iload         5
+      95: bipush        32
+      97: ishl
+      98: iadd
+      99: iload         6
+     101: bipush        40
+     103: ishl
+     104: iadd
+     105: iload         7
+     107: bipush        48
+     109: ishl
+     110: iadd
+     111: iload         8
+     113: bipush        56
+     115: ishl
+     116: iadd
+     117: i2l
+     118: lreturn
+
+  public static int readInt(java.io.DataInputStream) throws java.io.IOException;
+    Code:
+       0: aload_0
+       1: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+       4: istore_1
+       5: aload_0
+       6: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+       9: istore_2
+      10: aload_0
+      11: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      14: istore_3
+      15: aload_0
+      16: invokevirtual #1039               // Method java/io/DataInputStream.read:()I
+      19: istore        4
+      21: iload_1
+      22: iload_2
+      23: ior
+      24: iload_3
+      25: ior
+      26: iload         4
+      28: ior
+      29: ifge          40
+      32: new           #1044               // class java/io/EOFException
+      35: dup
+      36: invokespecial #1046               // Method java/io/EOFException."<init>":()V
+      39: athrow
+      40: iload_1
+      41: iload_2
+      42: bipush        8
+      44: ishl
+      45: iadd
+      46: iload_3
+      47: bipush        16
+      49: ishl
+      50: iadd
+      51: iload         4
+      53: bipush        24
+      55: ishl
+      56: iadd
+      57: ireturn
+
+  private static void enter();
+    Code:
+       0: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+       3: invokevirtual #1047               // Method zombie/core/Core.getOptionTexture2x:()Z
+       6: ifeq          13
+       9: iconst_2
+      10: goto          14
+      13: iconst_1
+      14: putstatic     #1050               // Field zombie/core/Core.tileScale:I
+      17: invokestatic  #1053               // Method zombie/iso/IsoCamera.init:()V
+      20: getstatic     #180                // Field zombie/core/textures/TextureID.useCompression:Z
+      23: ifeq          30
+      26: iconst_4
+      27: goto          31
+      30: iconst_0
+      31: istore_0
+      32: iload_0
+      33: bipush        64
+      35: ior
+      36: istore_0
+      37: getstatic     #1050               // Field zombie/core/Core.tileScale:I
+      40: iconst_1
+      41: if_icmpne     75
+      44: ldc_w         #1054               // String Tiles1x
+      47: iload_0
+      48: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      51: ldc_w         #1056               // String Overlays1x
+      54: iload_0
+      55: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      58: ldc_w         #1058               // String JumboTrees1x
+      61: iload_0
+      62: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      65: ldc_w         #1060               // String Tiles1x.floor
+      68: iload_0
+      69: bipush        -5
+      71: iand
+      72: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      75: getstatic     #1050               // Field zombie/core/Core.tileScale:I
+      78: iconst_2
+      79: if_icmpne     144
+      82: ldc_w         #1062               // String Tiles2x
+      85: iload_0
+      86: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      89: ldc_w         #1064               // String Overlays2x
+      92: iload_0
+      93: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+      96: ldc_w         #1066               // String JumboTrees2x
+      99: iload_0
+     100: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     103: ldc_w         #1068               // String JumboTreesBigs2x
+     106: iload_0
+     107: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     110: ldc_w         #1070               // String Tiles2x.floor
+     113: iload_0
+     114: bipush        -5
+     116: iand
+     117: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     120: ldc_w         #1072               // String B42ChunkCaching2x
+     123: iload_0
+     124: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     127: ldc_w         #1074               // String B42ChunkCaching2x.floor
+     130: iload_0
+     131: bipush        -5
+     133: iand
+     134: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     137: ldc_w         #1076               // String Clock2x
+     140: iload_0
+     141: invokestatic  #49                 // Method LoadTexturePack:(Ljava/lang/String;I)V
+     144: invokestatic  #67                 // Method setTexturePackLookup:()V
+     147: ldc_w         #1078               // String animated_clock_01_0
+     150: invokestatic  #1080               // Method zombie/core/textures/Texture.getSharedTexture:(Ljava/lang/String;)Lzombie/core/textures/Texture;
+     153: pop
+     154: ldc_w         #1086               // String animated_clock_01_1
+     157: invokestatic  #1080               // Method zombie/core/textures/Texture.getSharedTexture:(Ljava/lang/String;)Lzombie/core/textures/Texture;
+     160: pop
+     161: ldc_w         #1088               // String animated_clock_01_2
+     164: invokestatic  #1080               // Method zombie/core/textures/Texture.getSharedTexture:(Ljava/lang/String;)Lzombie/core/textures/Texture;
+     167: pop
+     168: ldc_w         #1090               // String animated_clock_01_3
+     171: invokestatic  #1080               // Method zombie/core/textures/Texture.getSharedTexture:(Ljava/lang/String;)Lzombie/core/textures/Texture;
+     174: pop
+     175: ldc_w         #1092               // String TileIndieStoneTentFrontLeft
+     178: invokestatic  #1080               // Method zombie/core/textures/Texture.getSharedTexture:(Ljava/lang/String;)Lzombie/core/textures/Texture;
+     181: ifnonnull     195
+     184: new           #980                // class java/lang/RuntimeException
+     187: dup
+     188: ldc_w         #1094               // String Rebuild Tiles.pack with \"1 Include This in .pack\" as individual images not tilesheets
+     191: invokespecial #1096               // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
+     194: athrow
+     195: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     198: getstatic     #1097               // Field zombie/core/textures/Texture.totalTextureID:I
+     201: invokedynamic #1100,  0           // InvokeDynamic #16:makeConcatWithConstants:(I)Ljava/lang/String;
+     206: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     209: getstatic     #1101               // Field s_fpsTracking:Lzombie/FPSTracking;
+     212: invokevirtual #1105               // Method zombie/FPSTracking.init:()V
+     215: ldc_w         #1108               // String UI_Loading_ModelsAnimations
+     218: iconst_0
+     219: anewarray     #4                  // class java/lang/Object
+     222: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     225: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     228: getstatic     #1110               // Field zombie/core/skinnedmodel/ModelManager.instance:Lzombie/core/skinnedmodel/ModelManager;
+     231: invokevirtual #1115               // Method zombie/core/skinnedmodel/ModelManager.create:()V
+     234: invokestatic  #1116               // Method zombie/tileDepth/TileDepthTextureManager.getInstance:()Lzombie/tileDepth/TileDepthTextureManager;
+     237: invokevirtual #1121               // Method zombie/tileDepth/TileDepthTextureManager.init:()V
+     240: getstatic     #1122               // Field zombie/tileDepth/TileDepthMapManager.instance:Lzombie/tileDepth/TileDepthMapManager;
+     243: invokevirtual #1127               // Method zombie/tileDepth/TileDepthMapManager.init:()V
+     246: getstatic     #1128               // Field zombie/tileDepth/TileSeamManager.instance:Lzombie/tileDepth/TileSeamManager;
+     249: invokevirtual #1133               // Method zombie/tileDepth/TileSeamManager.init:()V
+     252: getstatic     #563                // Field zombie/core/raknet/VoiceManager.instance:Lzombie/core/raknet/VoiceManager;
+     255: invokevirtual #1134               // Method zombie/core/raknet/VoiceManager.InitVMClient:()V
+     258: ldc_w         #1137               // String UI_Loading_OnGameBoot
+     261: iconst_0
+     262: anewarray     #4                  // class java/lang/Object
+     265: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     268: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     271: ldc_w         #1139               // String OnGameBoot
+     274: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+     277: iconst_1
+     278: invokestatic  #1143               // Method zombie/ui/UIManager.setShowLuaDebuggerOnError:(Z)V
+     281: getstatic     #212                // Field zombie/core/Core.debug:Z
+     284: ifeq          293
+     287: getstatic     #334                // Field zombie/debug/DebugContext.instance:Lzombie/debug/DebugContext;
+     290: invokevirtual #1146               // Method zombie/debug/DebugContext.init:()V
+     293: return
+
+  private static void frameStep();
+    Code:
+       0: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+       3: lstore_0
+       4: getstatic     #628                // Field zombie/iso/IsoCamera.frameState:Lzombie/iso/IsoCamera$FrameState;
+       7: dup
+       8: getfield      #632                // Field zombie/iso/IsoCamera$FrameState.frameCount:I
+      11: iconst_1
+      12: iadd
+      13: putfield      #632                // Field zombie/iso/IsoCamera$FrameState.frameCount:I
+      16: getstatic     #628                // Field zombie/iso/IsoCamera.frameState:Lzombie/iso/IsoCamera$FrameState;
+      19: invokevirtual #637                // Method zombie/iso/IsoCamera$FrameState.updateUnPausedAccumulator:()V
+      22: getstatic     #1147               // Field zombie/GameWindow$s_performance.frameStep:Lzombie/core/profiling/PerformanceProfileFrameProbe;
+      25: invokevirtual #1150               // Method zombie/core/profiling/PerformanceProfileFrameProbe.profile:()Lzombie/core/profiling/AbstractPerformanceProfileProbe;
+      28: astore_2
+      29: getstatic     #1101               // Field s_fpsTracking:Lzombie/FPSTracking;
+      32: invokevirtual #1153               // Method zombie/FPSTracking.frameStep:()J
+      35: pop2
+      36: getstatic     #1155               // Field zombie/GameWindow$s_performance.logic:Lzombie/core/profiling/PerformanceProfileProbe;
+      39: invokevirtual #694                // Method zombie/core/profiling/PerformanceProfileProbe.profile:()Lzombie/core/profiling/AbstractPerformanceProfileProbe;
+      42: astore_3
+      43: invokestatic  #1158               // Method logic:()V
+      46: aload_3
+      47: ifnull        82
+      50: aload_3
+      51: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+      54: goto          82
+      57: astore        4
+      59: aload_3
+      60: ifnull        79
+      63: aload_3
+      64: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+      67: goto          79
+      70: astore        5
+      72: aload         4
+      74: aload         5
+      76: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+      79: aload         4
+      81: athrow
+      82: invokestatic  #1160               // Method zombie/core/Core.isUseGameViewport:()Z
+      85: ifne          100
+      88: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      91: invokestatic  #1163               // Method zombie/core/opengl/RenderThread.getDisplayWidth:()I
+      94: invokestatic  #1166               // Method zombie/core/opengl/RenderThread.getDisplayHeight:()I
+      97: invokevirtual #1169               // Method zombie/core/Core.setScreenSize:(II)V
+     100: getstatic     #1172               // Field zombie/iso/IsoWorld.instance:Lzombie/iso/IsoWorld;
+     103: invokevirtual #1175               // Method zombie/iso/IsoWorld.FinishAnimation:()V
+     106: invokestatic  #382                // Method zombie/GameProfiler.getInstance:()Lzombie/GameProfiler;
+     109: astore_3
+     110: getstatic     #1004               // Field zombie/network/GameServer.server:Z
+     113: ifne          171
+     116: aload_3
+     117: ldc_w         #1178               // String IsoObjectAnimations.update
+     120: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     123: astore        4
+     125: invokestatic  #1180               // Method zombie/core/skinnedmodel/model/IsoObjectAnimations.getInstance:()Lzombie/core/skinnedmodel/model/IsoObjectAnimations;
+     128: invokevirtual #1185               // Method zombie/core/skinnedmodel/model/IsoObjectAnimations.update:()V
+     131: aload         4
+     133: ifnull        171
+     136: aload         4
+     138: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     141: goto          171
+     144: astore        5
+     146: aload         4
+     148: ifnull        168
+     151: aload         4
+     153: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     156: goto          168
+     159: astore        6
+     161: aload         5
+     163: aload         6
+     165: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     168: aload         5
+     170: athrow
+     171: invokestatic  #640                // Method renderInternal:()V
+     174: getstatic     #1186               // Field doRenderEvent:Z
+     177: ifeq          232
+     180: aload_3
+     181: ldc_w         #1189               // String On Render
+     184: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     187: astore        4
+     189: invokestatic  #1191               // Method onRender:()V
+     192: aload         4
+     194: ifnull        232
+     197: aload         4
+     199: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     202: goto          232
+     205: astore        5
+     207: aload         4
+     209: ifnull        229
+     212: aload         4
+     214: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     217: goto          229
+     220: astore        6
+     222: aload         5
+     224: aload         6
+     226: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     229: aload         5
+     231: athrow
+     232: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     235: invokevirtual #1194               // Method zombie/core/Core.DoFrameReady:()V
+     238: aload_3
+     239: ldc_w         #1197               // String Lighting
+     242: invokevirtual #389                // Method zombie/GameProfiler.profile:(Ljava/lang/String;)Lzombie/GameProfiler$ProfileArea;
+     245: astore        4
+     247: getstatic     #1199               // Field zombie/iso/LightingThread.instance:Lzombie/iso/LightingThread;
+     250: invokevirtual #1204               // Method zombie/iso/LightingThread.update:()V
+     253: aload         4
+     255: ifnull        293
+     258: aload         4
+     260: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     263: goto          293
+     266: astore        5
+     268: aload         4
+     270: ifnull        290
+     273: aload         4
+     275: invokevirtual #396                // Method zombie/GameProfiler$ProfileArea.close:()V
+     278: goto          290
+     281: astore        6
+     283: aload         5
+     285: aload         6
+     287: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     290: aload         5
+     292: athrow
+     293: getstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+     296: getfield      #621                // Field zombie/gameStates/GameStateMachine.current:Lzombie/gameStates/GameState;
+     299: instanceof    #1205               // class zombie/gameStates/GameLoadingState
+     302: ifeq          326
+     305: getstatic     #1207               // Field zombie/gameStates/GameLoadingState.loader:Ljava/lang/Thread;
+     308: ifnull        320
+     311: getstatic     #1207               // Field zombie/gameStates/GameLoadingState.loader:Ljava/lang/Thread;
+     314: invokevirtual #1210               // Method java/lang/Thread.isAlive:()Z
+     317: ifne          329
+     320: invokestatic  #1213               // Method zombie/Lua/LuaEventManager.RunQueuedEvents:()V
+     323: goto          329
+     326: invokestatic  #1213               // Method zombie/Lua/LuaEventManager.RunQueuedEvents:()V
+     329: getstatic     #212                // Field zombie/core/Core.debug:Z
+     332: ifeq          419
+     335: getstatic     #1216               // Field zombie/input/KeybindId.TOGGLE_LUA_DEBUGGER:Lzombie/input/KeybindId;
+     338: invokestatic  #1219               // Method zombie/input/GameKeyboard.isKeyDown:(Lzombie/input/KeybindId;)Z
+     341: ifeq          375
+     344: getstatic     #1222               // Field luaDebuggerKeyDown:Z
+     347: ifne          379
+     350: iconst_1
+     351: invokestatic  #1143               // Method zombie/ui/UIManager.setShowLuaDebuggerOnError:(Z)V
+     354: getstatic     #1225               // Field zombie/Lua/LuaManager.thread:Lse/krka/kahlua/vm/KahluaThread;
+     357: iconst_1
+     358: putfield      #1231               // Field se/krka/kahlua/vm/KahluaThread.step:Z
+     361: getstatic     #1225               // Field zombie/Lua/LuaManager.thread:Lse/krka/kahlua/vm/KahluaThread;
+     364: iconst_1
+     365: putfield      #1236               // Field se/krka/kahlua/vm/KahluaThread.stepInto:Z
+     368: iconst_1
+     369: putstatic     #1222               // Field luaDebuggerKeyDown:Z
+     372: goto          379
+     375: iconst_0
+     376: putstatic     #1222               // Field luaDebuggerKeyDown:Z
+     379: getstatic     #1239               // Field zombie/input/KeybindId.TOGGLE_LUA_CONSOLE:Lzombie/input/KeybindId;
+     382: invokestatic  #606                // Method zombie/input/GameKeyboard.isKeyPressed:(Lzombie/input/KeybindId;)Z
+     385: ifeq          419
+     388: invokestatic  #1242               // Method zombie/ui/UIManager.getDebugConsole:()Lzombie/ui/UIDebugConsole;
+     391: astore        4
+     393: aload         4
+     395: ifnull        419
+     398: aload         4
+     400: aload         4
+     402: invokevirtual #1246               // Method zombie/ui/UIElement.isVisible:()Ljava/lang/Boolean;
+     405: invokevirtual #1252               // Method java/lang/Boolean.booleanValue:()Z
+     408: ifne          415
+     411: iconst_1
+     412: goto          416
+     415: iconst_0
+     416: invokevirtual #1257               // Method zombie/ui/UIElement.setVisible:(Z)V
+     419: aload_2
+     420: ifnull        452
+     423: aload_2
+     424: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+     427: goto          452
+     430: astore_3
+     431: aload_2
+     432: ifnull        450
+     435: aload_2
+     436: invokevirtual #702                // Method zombie/core/profiling/AbstractPerformanceProfileProbe.close:()V
+     439: goto          450
+     442: astore        4
+     444: aload_3
+     445: aload         4
+     447: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     450: aload_3
+     451: athrow
+     452: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+     455: lload_0
+     456: lsub
+     457: putstatic     #1260               // Field updateTime:J
+     460: goto          528
+     463: astore_2
+     464: aload_2
+     465: invokestatic  #1265               // Method zombie/core/opengl/RenderThread.logGLException:(Lorg/lwjglx/opengl/OpenGLException;)V
+     468: invokestatic  #1269               // Method zombie/core/Core.isImGui:()Z
+     471: ifeq          478
+     474: invokestatic  #1272               // Method org/lwjglx/opengl/Display.imguiEndFrame:()Limgui/ImDrawData;
+     477: pop
+     478: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+     481: lload_0
+     482: lsub
+     483: putstatic     #1260               // Field updateTime:J
+     486: goto          528
+     489: astore_2
+     490: aload_2
+     491: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+     494: invokestatic  #1269               // Method zombie/core/Core.isImGui:()Z
+     497: ifeq          504
+     500: invokestatic  #1272               // Method org/lwjglx/opengl/Display.imguiEndFrame:()Limgui/ImDrawData;
+     503: pop
+     504: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+     507: lload_0
+     508: lsub
+     509: putstatic     #1260               // Field updateTime:J
+     512: goto          528
+     515: astore        7
+     517: invokestatic  #663                // Method java/lang/System.nanoTime:()J
+     520: lload_0
+     521: lsub
+     522: putstatic     #1260               // Field updateTime:J
+     525: aload         7
+     527: athrow
+     528: return
+    Exception table:
+       from    to  target type
+          43    46    57   Class java/lang/Throwable
+          63    67    70   Class java/lang/Throwable
+         125   131   144   Class java/lang/Throwable
+         151   156   159   Class java/lang/Throwable
+         189   192   205   Class java/lang/Throwable
+         212   217   220   Class java/lang/Throwable
+         247   253   266   Class java/lang/Throwable
+         273   278   281   Class java/lang/Throwable
+          29   419   430   Class java/lang/Throwable
+         435   439   442   Class java/lang/Throwable
+          22   452   463   Class org/lwjglx/opengl/OpenGLException
+          22   452   489   Class java/lang/Exception
+          22   452   515   any
+         463   478   515   any
+         489   504   515   any
+         515   517   515   any
+
+  public static long getUpdateTime();
+    Code:
+       0: getstatic     #1260               // Field updateTime:J
+       3: lreturn
+
+  private static void onRender();
+    Code:
+       0: ldc_w         #1276               // String OnRenderTick
+       3: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+       6: return
+
+  private static void exit();
+    Code:
+       0: getstatic     #1278               // Field zombie/debug/DebugType.ExitDebug:Lzombie/debug/DebugType;
+       3: ldc_w         #1281               // String GameWindow.exit 1
+       6: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+       9: getstatic     #357                // Field zombie/network/GameClient.client:Z
+      12: ifeq          36
+      15: getstatic     #1283               // Field zombie/iso/WorldStreamer.instance:Lzombie/iso/WorldStreamer;
+      18: invokevirtual #1288               // Method zombie/iso/WorldStreamer.stop:()V
+      21: getstatic     #362                // Field zombie/network/GameClient.instance:Lzombie/network/GameClient;
+      24: ldc_w         #1291               // String exit
+      27: invokevirtual #1292               // Method zombie/network/GameClient.doDisconnect:(Ljava/lang/String;)V
+      30: getstatic     #563                // Field zombie/core/raknet/VoiceManager.instance:Lzombie/core/raknet/VoiceManager;
+      33: invokevirtual #1295               // Method zombie/core/raknet/VoiceManager.DeinitVMClient:()V
+      36: getstatic     #1298               // Field okToSaveOnExit:Z
+      39: ifeq          241
+      42: getstatic     #1283               // Field zombie/iso/WorldStreamer.instance:Lzombie/iso/WorldStreamer;
+      45: invokevirtual #1301               // Method zombie/iso/WorldStreamer.quit:()V
+      48: goto          62
+      51: astore_0
+      52: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      55: aload_0
+      56: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+      59: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+      62: invokestatic  #1304               // Method zombie/savefile/PlayerDB.isAllow:()Z
+      65: ifeq          81
+      68: invokestatic  #1309               // Method zombie/savefile/PlayerDB.getInstance:()Lzombie/savefile/PlayerDB;
+      71: invokevirtual #1312               // Method zombie/savefile/PlayerDB.saveLocalPlayersForce:()V
+      74: invokestatic  #1309               // Method zombie/savefile/PlayerDB.getInstance:()Lzombie/savefile/PlayerDB;
+      77: iconst_0
+      78: putfield      #1315               // Field zombie/savefile/PlayerDB.canSavePlayers:Z
+      81: getstatic     #357                // Field zombie/network/GameClient.client:Z
+      84: ifeq          100
+      87: getstatic     #1318               // Field zombie/network/GameClient.connection:Lzombie/core/raknet/UdpConnection;
+      90: ifnull        100
+      93: getstatic     #1318               // Field zombie/network/GameClient.connection:Lzombie/core/raknet/UdpConnection;
+      96: aconst_null
+      97: invokevirtual #1322               // Method zombie/core/raknet/UdpConnection.setUserName:(Ljava/lang/String;)V
+     100: iconst_1
+     101: invokestatic  #1327               // Method save:(Z)V
+     104: goto          118
+     107: astore_0
+     108: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     111: aload_0
+     112: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     115: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     118: getstatic     #1172               // Field zombie/iso/IsoWorld.instance:Lzombie/iso/IsoWorld;
+     121: getfield      #1330               // Field zombie/iso/IsoWorld.currentCell:Lzombie/iso/IsoCell;
+     124: ifnull        133
+     127: ldc_w         #1334               // String OnPostSave
+     130: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+     133: goto          147
+     136: astore_0
+     137: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     140: aload_0
+     141: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     144: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     147: getstatic     #1172               // Field zombie/iso/IsoWorld.instance:Lzombie/iso/IsoWorld;
+     150: getfield      #1330               // Field zombie/iso/IsoWorld.currentCell:Lzombie/iso/IsoCell;
+     153: ifnull        162
+     156: ldc_w         #1334               // String OnPostSave
+     159: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+     162: goto          176
+     165: astore_0
+     166: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     169: aload_0
+     170: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     173: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     176: getstatic     #1199               // Field zombie/iso/LightingThread.instance:Lzombie/iso/LightingThread;
+     179: invokevirtual #1336               // Method zombie/iso/LightingThread.stop:()V
+     182: getstatic     #520                // Field zombie/MapCollisionData.instance:Lzombie/MapCollisionData;
+     185: invokevirtual #1337               // Method zombie/MapCollisionData.stop:()V
+     188: invokestatic  #1338               // Method zombie/characters/animals/AnimalPopulationManager.getInstance:()Lzombie/characters/animals/AnimalPopulationManager;
+     191: invokevirtual #1343               // Method zombie/characters/animals/AnimalPopulationManager.stop:()V
+     194: getstatic     #1344               // Field zombie/popman/ZombiePopulationManager.instance:Lzombie/popman/ZombiePopulationManager;
+     197: invokevirtual #1349               // Method zombie/popman/ZombiePopulationManager.stop:()V
+     200: getstatic     #1350               // Field zombie/pathfind/nativeCode/PathfindNative.useNativeCode:Z
+     203: ifeq          215
+     206: getstatic     #1355               // Field zombie/pathfind/nativeCode/PathfindNative.instance:Lzombie/pathfind/nativeCode/PathfindNative;
+     209: invokevirtual #1358               // Method zombie/pathfind/nativeCode/PathfindNative.stop:()V
+     212: goto          221
+     215: getstatic     #1359               // Field zombie/pathfind/PolygonalMap2.instance:Lzombie/pathfind/PolygonalMap2;
+     218: invokevirtual #1364               // Method zombie/pathfind/PolygonalMap2.stop:()V
+     221: getstatic     #1365               // Field zombie/ZombieSpawnRecorder.instance:Lzombie/ZombieSpawnRecorder;
+     224: invokevirtual #1370               // Method zombie/ZombieSpawnRecorder.quit:()V
+     227: goto          241
+     230: astore_0
+     231: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     234: aload_0
+     235: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     238: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     241: getstatic     #1278               // Field zombie/debug/DebugType.ExitDebug:Lzombie/debug/DebugType;
+     244: ldc_w         #1371               // String GameWindow.exit 2
+     247: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     250: getstatic     #357                // Field zombie/network/GameClient.client:Z
+     253: ifeq          291
+     256: getstatic     #1283               // Field zombie/iso/WorldStreamer.instance:Lzombie/iso/WorldStreamer;
+     259: invokevirtual #1288               // Method zombie/iso/WorldStreamer.stop:()V
+     262: getstatic     #362                // Field zombie/network/GameClient.instance:Lzombie/network/GameClient;
+     265: ldc_w         #1373               // String exit-saving
+     268: invokevirtual #1292               // Method zombie/network/GameClient.doDisconnect:(Ljava/lang/String;)V
+     271: ldc2_w        #1375               // long 500l
+     274: invokestatic  #1377               // Method java/lang/Thread.sleep:(J)V
+     277: goto          291
+     280: astore_0
+     281: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     284: aload_0
+     285: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+     288: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     291: getstatic     #1278               // Field zombie/debug/DebugType.ExitDebug:Lzombie/debug/DebugType;
+     294: ldc_w         #1383               // String GameWindow.exit 3
+     297: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     300: invokestatic  #1385               // Method zombie/savefile/PlayerDB.isAvailable:()Z
+     303: ifeq          312
+     306: invokestatic  #1309               // Method zombie/savefile/PlayerDB.getInstance:()Lzombie/savefile/PlayerDB;
+     309: invokevirtual #1388               // Method zombie/savefile/PlayerDB.close:()V
+     312: invokestatic  #1389               // Method zombie/savefile/ClientPlayerDB.isAvailable:()Z
+     315: ifeq          324
+     318: invokestatic  #1392               // Method zombie/savefile/ClientPlayerDB.getInstance:()Lzombie/savefile/ClientPlayerDB;
+     321: invokevirtual #1395               // Method zombie/savefile/ClientPlayerDB.close:()V
+     324: getstatic     #1278               // Field zombie/debug/DebugType.ExitDebug:Lzombie/debug/DebugType;
+     327: ldc_w         #1396               // String GameWindow.exit 4
+     330: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     333: getstatic     #362                // Field zombie/network/GameClient.instance:Lzombie/network/GameClient;
+     336: invokevirtual #1398               // Method zombie/network/GameClient.Shutdown:()V
+     339: invokestatic  #1401               // Method zombie/core/znet/SteamUtils.shutdown:()V
+     342: iconst_1
+     343: invokestatic  #1404               // Method zombie/core/logger/ZipLogs.addZipFile:(Z)V
+     346: invokestatic  #1409               // Method zombie/pathfind/nativeCode/PathfindNative.freeMemoryAtExit:()V
+     349: invokestatic  #812                // Method onGameThreadExited:()V
+     352: getstatic     #1278               // Field zombie/debug/DebugType.ExitDebug:Lzombie/debug/DebugType;
+     355: ldc_w         #1412               // String GameWindow.exit 5
+     358: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     361: return
+    Exception table:
+       from    to  target type
+          42    48    51   Class java/lang/Exception
+          81   104   107   Class java/lang/Throwable
+         118   133   136   Class java/lang/Exception
+         147   162   165   Class java/lang/Exception
+         176   227   230   Class java/lang/Exception
+         271   277   280   Class java/lang/InterruptedException
+
+  private static void onGameThreadExited();
+    Code:
+       0: iconst_1
+       1: putstatic     #1414               // Field gameThreadExited:Z
+       4: invokestatic  #1417               // Method zombie/core/opengl/RenderThread.onGameThreadExited:()V
+       7: return
+
+  public static void setTexturePackLookup();
+    Code:
+       0: getstatic     #1418               // Field texturePackTextures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+       3: invokevirtual #1422               // Method zombie/fileSystem/FileSystem$TexturePackTextures.clear:()V
+       6: getstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+       9: invokevirtual #476                // Method java/util/ArrayList.size:()I
+      12: iconst_1
+      13: isub
+      14: istore_0
+      15: iload_0
+      16: iflt          56
+      19: getstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+      22: iload_0
+      23: invokevirtual #479                // Method java/util/ArrayList.get:(I)Ljava/lang/Object;
+      26: checkcast     #1428               // class zombie/GameWindow$TexturePack
+      29: astore_1
+      30: aload_1
+      31: getfield      #1430               // Field zombie/GameWindow$TexturePack.modId:Ljava/lang/String;
+      34: ifnull        40
+      37: goto          50
+      40: getstatic     #1418               // Field texturePackTextures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+      43: aload_1
+      44: getfield      #1433               // Field zombie/GameWindow$TexturePack.textures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+      47: invokevirtual #1436               // Method zombie/fileSystem/FileSystem$TexturePackTextures.putAll:(Ljava/util/Map;)V
+      50: iinc          0, -1
+      53: goto          15
+      56: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+      59: invokevirtual #1440               // Method zombie/ZomboidFileSystem.getModIDs:()Ljava/util/List;
+      62: astore_0
+      63: getstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+      66: invokevirtual #476                // Method java/util/ArrayList.size:()I
+      69: iconst_1
+      70: isub
+      71: istore_1
+      72: iload_1
+      73: iflt          129
+      76: getstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+      79: iload_1
+      80: invokevirtual #479                // Method java/util/ArrayList.get:(I)Ljava/lang/Object;
+      83: checkcast     #1428               // class zombie/GameWindow$TexturePack
+      86: astore_2
+      87: aload_2
+      88: getfield      #1430               // Field zombie/GameWindow$TexturePack.modId:Ljava/lang/String;
+      91: ifnonnull     97
+      94: goto          123
+      97: aload_0
+      98: aload_2
+      99: getfield      #1430               // Field zombie/GameWindow$TexturePack.modId:Ljava/lang/String;
+     102: invokeinterface #1444,  2         // InterfaceMethod java/util/List.contains:(Ljava/lang/Object;)Z
+     107: ifne          113
+     110: goto          123
+     113: getstatic     #1418               // Field texturePackTextures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+     116: aload_2
+     117: getfield      #1433               // Field zombie/GameWindow$TexturePack.textures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+     120: invokevirtual #1436               // Method zombie/fileSystem/FileSystem$TexturePackTextures.putAll:(Ljava/util/Map;)V
+     123: iinc          1, -1
+     126: goto          72
+     129: invokestatic  #1447               // Method zombie/core/textures/Texture.onTexturePacksChanged:()V
+     132: invokestatic  #1450               // Method zombie/core/textures/NinePatchTexture.onTexturePacksChanged:()V
+     135: return
+
+  public static void LoadTexturePack(java.lang.String, int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: aconst_null
+       3: invokestatic  #1453               // Method LoadTexturePack:(Ljava/lang/String;ILjava/lang/String;)V
+       6: return
+
+  public static void LoadTexturePack(java.lang.String, int, java.lang.String);
+    Code:
+       0: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+       3: aload_0
+       4: invokedynamic #1456,  0           // InvokeDynamic #17:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+       9: invokevirtual #294                // Method zombie/debug/DebugType.println:(Ljava/lang/String;)V
+      12: ldc_w         #1457               // String UI_Loading_Texturepack
+      15: iconst_1
+      16: anewarray     #4                  // class java/lang/Object
+      19: dup
+      20: iconst_0
+      21: aload_0
+      22: aastore
+      23: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      26: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+      29: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+      32: aload_0
+      33: invokedynamic #1459,  0           // InvokeDynamic #18:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      38: invokevirtual #1460               // Method zombie/ZomboidFileSystem.getString:(Ljava/lang/String;)Ljava/lang/String;
+      41: astore_3
+      42: new           #1428               // class zombie/GameWindow$TexturePack
+      45: dup
+      46: invokespecial #1463               // Method zombie/GameWindow$TexturePack."<init>":()V
+      49: astore        4
+      51: aload         4
+      53: aload_0
+      54: putfield      #1464               // Field zombie/GameWindow$TexturePack.packName:Ljava/lang/String;
+      57: aload         4
+      59: aload_3
+      60: putfield      #1467               // Field zombie/GameWindow$TexturePack.fileName:Ljava/lang/String;
+      63: aload         4
+      65: aload_2
+      66: putfield      #1430               // Field zombie/GameWindow$TexturePack.modId:Ljava/lang/String;
+      69: getstatic     #591                // Field fileSystem:Lzombie/fileSystem/FileSystem;
+      72: aload_0
+      73: aload         4
+      75: getfield      #1433               // Field zombie/GameWindow$TexturePack.textures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+      78: iload_1
+      79: invokevirtual #1470               // Method zombie/fileSystem/FileSystem.mountTexturePack:(Ljava/lang/String;Lzombie/fileSystem/FileSystem$TexturePackTextures;I)V
+      82: getstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+      85: aload         4
+      87: invokevirtual #241                // Method java/util/ArrayList.add:(Ljava/lang/Object;)Z
+      90: pop
+      91: return
+
+  private static void installRequiredLibrary(java.lang.String, java.lang.String);
+    Code:
+       0: new           #20                 // class java/io/File
+       3: dup
+       4: aload_0
+       5: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+       8: invokevirtual #32                 // Method java/io/File.exists:()Z
+      11: ifeq          102
+      14: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      17: aload_1
+      18: invokedynamic #1474,  0           // InvokeDynamic #19:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      23: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      26: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      29: aload_0
+      30: invokedynamic #1475,  0           // InvokeDynamic #20:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      35: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      38: new           #1476               // class java/lang/ProcessBuilder
+      41: dup
+      42: iconst_3
+      43: anewarray     #767                // class java/lang/String
+      46: dup
+      47: iconst_0
+      48: aload_0
+      49: aastore
+      50: dup
+      51: iconst_1
+      52: ldc_w         #1478               // String /quiet
+      55: aastore
+      56: dup
+      57: iconst_2
+      58: ldc_w         #1480               // String /norestart
+      61: aastore
+      62: invokespecial #1482               // Method java/lang/ProcessBuilder."<init>":([Ljava/lang/String;)V
+      65: astore_2
+      66: aload_2
+      67: invokevirtual #1485               // Method java/lang/ProcessBuilder.start:()Ljava/lang/Process;
+      70: astore_3
+      71: aload_3
+      72: invokevirtual #1489               // Method java/lang/Process.waitFor:()I
+      75: istore        4
+      77: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      80: iload         4
+      82: invokedynamic #1494,  0           // InvokeDynamic #21:makeConcatWithConstants:(I)Ljava/lang/String;
+      87: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      90: return
+      91: astore_3
+      92: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      95: aload_3
+      96: getstatic     #347                // Field zombie/debug/LogSeverity.Error:Lzombie/debug/LogSeverity;
+      99: invokevirtual #353                // Method zombie/debug/DebugType.printException:(Ljava/lang/Throwable;Lzombie/debug/LogSeverity;)V
+     102: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+     105: aload_1
+     106: invokedynamic #1497,  0           // InvokeDynamic #22:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+     111: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+     114: return
+    Exception table:
+       from    to  target type
+          66    90    91   Class java/io/IOException
+          66    90    91   Class java/lang/InterruptedException
+
+  private static void checkRequiredLibraries();
+    Code:
+       0: ldc_w         #1498               // String os.name
+       3: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+       6: ldc_w         #1500               // String Win
+       9: invokevirtual #1502               // Method java/lang/String.startsWith:(Ljava/lang/String;)Z
+      12: ifeq          100
+      15: ldc           #160                // String
+      17: astore_0
+      18: ldc_w         #1506               // String 1
+      21: ldc_w         #1508               // String zomboid.debuglibs.lighting
+      24: invokestatic  #759                // Method java/lang/System.getProperty:(Ljava/lang/String;)Ljava/lang/String;
+      27: invokevirtual #1001               // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      30: ifeq          46
+      33: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      36: ldc_w         #1510               // String ***** Loading debug version of Lighting
+      39: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      42: ldc_w         #1512               // String d
+      45: astore_0
+      46: aload_0
+      47: invokedynamic #1514,  0           // InvokeDynamic #23:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      52: astore_1
+      53: aload_1
+      54: invokestatic  #1515               // Method java/lang/System.loadLibrary:(Ljava/lang/String;)V
+      57: goto          100
+      60: astore_2
+      61: getstatic     #344                // Field zombie/debug/DebugType.General:Lzombie/debug/DebugType;
+      64: aload_1
+      65: invokedynamic #1520,  0           // InvokeDynamic #24:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+      70: invokevirtual #763                // Method zombie/debug/DebugType.debugln:(Ljava/lang/Object;)V
+      73: ldc_w         #1521               // String _CommonRedist\\vcredist\\2010\\vcredist_x64.exe
+      76: ldc_w         #1523               // String the Microsoft Visual C++ 2010 Redistributable.
+      79: invokestatic  #1525               // Method installRequiredLibrary:(Ljava/lang/String;Ljava/lang/String;)V
+      82: ldc_w         #1529               // String _CommonRedist\\vcredist\\2012\\vcredist_x64.exe
+      85: ldc_w         #1531               // String the Microsoft Visual C++ 2012 Redistributable.
+      88: invokestatic  #1525               // Method installRequiredLibrary:(Ljava/lang/String;Ljava/lang/String;)V
+      91: ldc_w         #1533               // String _CommonRedist\\vcredist\\2013\\vcredist_x64.exe
+      94: ldc_w         #1535               // String the Microsoft Visual C++ 2013 Redistributable.
+      97: invokestatic  #1525               // Method installRequiredLibrary:(Ljava/lang/String;Ljava/lang/String;)V
+     100: return
+    Exception table:
+       from    to  target type
+          53    57    60   Class java/lang/UnsatisfiedLinkError
+
+  private static void init() throws java.lang.Exception;
+    Code:
+       0: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+       3: invokevirtual #1537               // Method zombie/core/Core.initGlobalShader:()V
+       6: invokedynamic #1540,  0           // InvokeDynamic #25:run:()Ljava/lang/Runnable;
+      11: invokestatic  #843                // Method zombie/core/opengl/RenderThread.invokeOnRenderContext:(Ljava/lang/Runnable;)V
+      14: invokestatic  #1541               // Method initFonts:()V
+      17: invokestatic  #1544               // Method checkRequiredLibraries:()V
+      20: invokestatic  #1547               // Method zombie/core/znet/SteamUtils.init:()V
+      23: invokestatic  #1548               // Method zombie/core/znet/ServerBrowser.init:()Z
+      26: pop
+      27: invokestatic  #1552               // Method zombie/core/znet/SteamFriends.init:()V
+      30: invokestatic  #1555               // Method zombie/core/znet/SteamWorkshop.init:()V
+      33: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+      36: invokevirtual #1558               // Method zombie/ZomboidFileSystem.resetModFolders:()V
+      39: invokestatic  #1561               // Method zombie/core/raknet/RakNetPeerInterface.init:()V
+      42: invokestatic  #1564               // Method zombie/iso/LightingJNI.init:()V
+      45: invokestatic  #1565               // Method zombie/popman/ZombiePopulationManager.init:()V
+      48: invokestatic  #1566               // Method zombie/util/PZSQLUtils.init:()V
+      51: invokestatic  #1569               // Method zombie/vehicles/Clipper.init:()V
+      54: invokestatic  #1572               // Method zombie/pathfind/nativeCode/PathfindNative.init:()V
+      57: invokestatic  #1573               // Method zombie/worldMap/WorldMapJNI.init:()V
+      60: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+      63: invokevirtual #15                 // Method zombie/ZomboidFileSystem.getCacheDir:()Ljava/lang/String;
+      66: getstatic     #19                 // Field java/io/File.separator:Ljava/lang/String;
+      69: invokedynamic #25,  0             // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      74: astore_0
+      75: new           #20                 // class java/io/File
+      78: dup
+      79: aload_0
+      80: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+      83: astore_1
+      84: aload_1
+      85: invokevirtual #32                 // Method java/io/File.exists:()Z
+      88: ifne          96
+      91: aload_1
+      92: invokevirtual #36                 // Method java/io/File.mkdirs:()Z
+      95: pop
+      96: ldc_w         #1576               // String Loading Mods
+      99: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     102: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     105: ldc_w         #1578               // String 42_00
+     108: invokevirtual #1580               // Method zombie/ZomboidFileSystem.resetDefaultModsForNewRelease:(Ljava/lang/String;)V
+     111: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     114: ldc_w         #1583               // String default
+     117: invokevirtual #1585               // Method zombie/ZomboidFileSystem.loadMods:(Ljava/lang/String;)V
+     120: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     123: invokevirtual #1588               // Method zombie/ZomboidFileSystem.loadModPackFiles:()V
+     126: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     129: invokevirtual #267                // Method zombie/core/Core.isDefaultOptions:()Z
+     132: ifeq          215
+     135: invokestatic  #270                // Method zombie/core/znet/SteamUtils.isSteamModeEnabled:()Z
+     138: ifeq          215
+     141: invokestatic  #275                // Method zombie/core/znet/SteamUtils.isRunningOnSteamDeck:()Z
+     144: ifeq          215
+     147: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     150: iconst_2
+     151: invokevirtual #1591               // Method zombie/core/Core.setOptionFontSize:(I)V
+     154: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     157: iconst_0
+     158: iconst_1
+     159: invokevirtual #1594               // Method zombie/core/Core.setOptionSingleContextMenu:(IZ)V
+     162: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     165: iconst_1
+     166: invokevirtual #1597               // Method zombie/core/Core.setOptionShoulderButtonContainerSwitch:(I)V
+     169: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     172: iconst_0
+     173: iconst_1
+     174: invokevirtual #1600               // Method zombie/core/Core.setAutoZoom:(IZ)V
+     177: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     180: ldc_w         #1603               // String 75;125;150;175;200
+     183: invokevirtual #1605               // Method zombie/core/Core.setOptionZoomLevels2x:(Ljava/lang/String;)V
+     186: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     189: iconst_1
+     190: invokevirtual #1608               // Method zombie/core/Core.setOptionPanCameraWhileAiming:(Z)V
+     193: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     196: iconst_1
+     197: invokevirtual #1611               // Method zombie/core/Core.setOptionPanCameraWhileDriving:(Z)V
+     200: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     203: iconst_1
+     204: invokevirtual #1614               // Method zombie/core/Core.setOptionTextureCompression:(Z)V
+     207: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     210: iconst_0
+     211: iconst_0
+     212: invokevirtual #1617               // Method zombie/core/Core.setOptionVoiceEnable:(ZZ)V
+     215: ldc_w         #1621               // String Loading Translations
+     218: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     221: getstatic     #1623               // Field zombie/core/Languages.instance:Lzombie/core/Languages;
+     224: invokevirtual #1628               // Method zombie/core/Languages.init:()V
+     227: aconst_null
+     228: putstatic     #1629               // Field zombie/core/Translator.language:Lzombie/core/Language;
+     231: invokestatic  #1541               // Method initFonts:()V
+     234: invokestatic  #1633               // Method zombie/core/Translator.loadFiles:()V
+     237: invokestatic  #1636               // Method doEpilepsyWarningText:()V
+     240: invokestatic  #1639               // Method zombie/Lua/LuaManager.init:()V
+     243: invokestatic  #1640               // Method initShared:()V
+     246: ldc_w         #1643               // String UI_Loading_Lua
+     249: iconst_0
+     250: anewarray     #4                  // class java/lang/Object
+     253: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     256: invokestatic  #126                // Method DoLoadingText:(Ljava/lang/String;)V
+     259: invokestatic  #1645               // Method zombie/Lua/LuaManager.LoadDirBase:()V
+     262: invokestatic  #1648               // Method zombie/ZomboidGlobals.Load:()V
+     265: ldc_w         #1651               // String OnLoadSoundBanks
+     268: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+     271: return
+
+  public static void initFonts() throws java.io.FileNotFoundException;
+    Code:
+       0: getstatic     #1653               // Field zombie/ui/TextManager.instance:Lzombie/ui/TextManager;
+       3: invokevirtual #1658               // Method zombie/ui/TextManager.Init:()V
+       6: getstatic     #1653               // Field zombie/ui/TextManager.instance:Lzombie/ui/TextManager;
+       9: invokevirtual #1661               // Method zombie/ui/TextManager.isAnyFontLoading:()Z
+      12: ifeq          34
+      15: getstatic     #591                // Field fileSystem:Lzombie/fileSystem/FileSystem;
+      18: invokevirtual #595                // Method zombie/fileSystem/FileSystem.updateAsyncTransactions:()V
+      21: ldc2_w        #1664               // long 10l
+      24: invokestatic  #1377               // Method java/lang/Thread.sleep:(J)V
+      27: goto          6
+      30: astore_0
+      31: goto          6
+      34: return
+    Exception table:
+       from    to  target type
+          21    27    30   Class java/lang/InterruptedException
+
+  public static void save(boolean) throws java.io.IOException;
+    Code:
+       0: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+       3: invokevirtual #1666               // Method zombie/core/Core.isNoSave:()Z
+       6: ifeq          10
+       9: return
+      10: getstatic     #1172               // Field zombie/iso/IsoWorld.instance:Lzombie/iso/IsoWorld;
+      13: getfield      #1330               // Field zombie/iso/IsoWorld.currentCell:Lzombie/iso/IsoCell;
+      16: ifnull        49
+      19: ldc_w         #1669               // String LastStand
+      22: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      25: invokevirtual #1671               // Method zombie/core/Core.getGameMode:()Ljava/lang/String;
+      28: invokevirtual #1001               // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      31: ifne          49
+      34: ldc_w         #1674               // String Tutorial
+      37: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      40: invokevirtual #1671               // Method zombie/core/Core.getGameMode:()Ljava/lang/String;
+      43: invokevirtual #1001               // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      46: ifeq          50
+      49: return
+      50: getstatic     #1676               // Field zombie/network/GameClient.clientSave:Z
+      53: ifeq          75
+      56: getstatic     #357                // Field zombie/network/GameClient.client:Z
+      59: putstatic     #1676               // Field zombie/network/GameClient.clientSave:Z
+      62: invokestatic  #1679               // Method zombie/inventory/types/MapItem.SaveWorldMap:()V
+      65: invokestatic  #1684               // Method zombie/worldMap/WorldMapVisited.SaveAll:()V
+      68: ldc_w         #1689               // String OnSave
+      71: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+      74: return
+      75: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+      78: ldc_w         #1691               // String map_ver.bin
+      81: invokevirtual #1693               // Method zombie/ZomboidFileSystem.getFileInCurrentSave:(Ljava/lang/String;)Ljava/io/File;
+      84: astore_1
+      85: new           #1697               // class java/io/FileOutputStream
+      88: dup
+      89: aload_1
+      90: invokespecial #1699               // Method java/io/FileOutputStream."<init>":(Ljava/io/File;)V
+      93: astore_2
+      94: new           #1702               // class java/io/DataOutputStream
+      97: dup
+      98: aload_2
+      99: invokespecial #1704               // Method java/io/DataOutputStream."<init>":(Ljava/io/OutputStream;)V
+     102: astore_3
+     103: aload_3
+     104: sipush        249
+     107: invokevirtual #1707               // Method java/io/DataOutputStream.writeInt:(I)V
+     110: aload_3
+     111: getstatic     #1710               // Field zombie/core/Core.gameMap:Ljava/lang/String;
+     114: invokestatic  #1713               // Method WriteString:(Ljava/io/DataOutputStream;Ljava/lang/String;)V
+     117: aload_3
+     118: invokevirtual #1717               // Method java/io/DataOutputStream.close:()V
+     121: goto          145
+     124: astore        4
+     126: aload_3
+     127: invokevirtual #1717               // Method java/io/DataOutputStream.close:()V
+     130: goto          142
+     133: astore        5
+     135: aload         4
+     137: aload         5
+     139: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     142: aload         4
+     144: athrow
+     145: aload_2
+     146: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     149: goto          170
+     152: astore_3
+     153: aload_2
+     154: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     157: goto          168
+     160: astore        4
+     162: aload_3
+     163: aload         4
+     165: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     168: aload_3
+     169: athrow
+     170: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     173: ldc_w         #1719               // String map_sand.bin
+     176: invokevirtual #1693               // Method zombie/ZomboidFileSystem.getFileInCurrentSave:(Ljava/lang/String;)Ljava/io/File;
+     179: astore_1
+     180: new           #1697               // class java/io/FileOutputStream
+     183: dup
+     184: aload_1
+     185: invokespecial #1699               // Method java/io/FileOutputStream."<init>":(Ljava/io/File;)V
+     188: astore_2
+     189: new           #1721               // class java/io/BufferedOutputStream
+     192: dup
+     193: aload_2
+     194: invokespecial #1723               // Method java/io/BufferedOutputStream."<init>":(Ljava/io/OutputStream;)V
+     197: astore_3
+     198: getstatic     #1724               // Field zombie/iso/SliceY.SliceBuffer:Ljava/nio/ByteBuffer;
+     201: invokevirtual #1730               // Method java/nio/ByteBuffer.clear:()Ljava/nio/ByteBuffer;
+     204: pop
+     205: getstatic     #106                // Field zombie/SandboxOptions.instance:Lzombie/SandboxOptions;
+     208: getstatic     #1724               // Field zombie/iso/SliceY.SliceBuffer:Ljava/nio/ByteBuffer;
+     211: invokevirtual #1735               // Method zombie/SandboxOptions.save:(Ljava/nio/ByteBuffer;)V
+     214: aload_3
+     215: getstatic     #1724               // Field zombie/iso/SliceY.SliceBuffer:Ljava/nio/ByteBuffer;
+     218: invokevirtual #1738               // Method java/nio/ByteBuffer.array:()[B
+     221: iconst_0
+     222: getstatic     #1724               // Field zombie/iso/SliceY.SliceBuffer:Ljava/nio/ByteBuffer;
+     225: invokevirtual #1742               // Method java/nio/ByteBuffer.position:()I
+     228: invokevirtual #1745               // Method java/io/BufferedOutputStream.write:([BII)V
+     231: aload_3
+     232: invokevirtual #1749               // Method java/io/BufferedOutputStream.close:()V
+     235: goto          259
+     238: astore        4
+     240: aload_3
+     241: invokevirtual #1749               // Method java/io/BufferedOutputStream.close:()V
+     244: goto          256
+     247: astore        5
+     249: aload         4
+     251: aload         5
+     253: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     256: aload         4
+     258: athrow
+     259: aload_2
+     260: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     263: goto          284
+     266: astore_3
+     267: aload_2
+     268: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     271: goto          282
+     274: astore        4
+     276: aload_3
+     277: aload         4
+     279: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     282: aload_3
+     283: athrow
+     284: getstatic     #1750               // Field zombie/iso/worldgen/WorldGenParams.INSTANCE:Lzombie/iso/worldgen/WorldGenParams;
+     287: invokevirtual #1755               // Method zombie/iso/worldgen/WorldGenParams.save:()V
+     290: invokestatic  #1757               // Method zombie/iso/InstanceTracker.save:()V
+     293: invokestatic  #1760               // Method zombie/iso/MetaTracker.save:()V
+     296: invokestatic  #1763               // Method zombie/statistics/StatisticsManager.getInstance:()Lzombie/statistics/StatisticsManager;
+     299: invokevirtual #1768               // Method zombie/statistics/StatisticsManager.save:()V
+     302: ldc_w         #1689               // String OnSave
+     305: invokestatic  #1141               // Method zombie/Lua/LuaEventManager.triggerEvent:(Ljava/lang/String;)V
+     308: invokestatic  #1769               // Method java/lang/Thread.currentThread:()Ljava/lang/Thread;
+     311: getstatic     #805                // Field gameThread:Ljava/lang/Thread;
+     314: if_acmpne     320
+     317: invokestatic  #1773               // Method zombie/savefile/SavefileThumbnail.create:()V
+     320: goto          328
+     323: astore_1
+     324: aload_1
+     325: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+     328: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+     331: ldc_w         #1776               // String map.bin
+     334: invokevirtual #1693               // Method zombie/ZomboidFileSystem.getFileInCurrentSave:(Ljava/lang/String;)Ljava/io/File;
+     337: astore_1
+     338: new           #1697               // class java/io/FileOutputStream
+     341: dup
+     342: aload_1
+     343: invokespecial #1699               // Method java/io/FileOutputStream."<init>":(Ljava/io/File;)V
+     346: astore_2
+     347: new           #1702               // class java/io/DataOutputStream
+     350: dup
+     351: aload_2
+     352: invokespecial #1704               // Method java/io/DataOutputStream."<init>":(Ljava/io/OutputStream;)V
+     355: astore_3
+     356: getstatic     #1172               // Field zombie/iso/IsoWorld.instance:Lzombie/iso/IsoWorld;
+     359: getfield      #1330               // Field zombie/iso/IsoWorld.currentCell:Lzombie/iso/IsoCell;
+     362: aload_3
+     363: iload_0
+     364: invokevirtual #1778               // Method zombie/iso/IsoCell.save:(Ljava/io/DataOutputStream;Z)V
+     367: aload_2
+     368: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     371: goto          392
+     374: astore_3
+     375: aload_2
+     376: invokevirtual #1718               // Method java/io/FileOutputStream.close:()V
+     379: goto          390
+     382: astore        4
+     384: aload_3
+     385: aload         4
+     387: invokevirtual #401                // Method java/lang/Throwable.addSuppressed:(Ljava/lang/Throwable;)V
+     390: aload_3
+     391: athrow
+     392: goto          400
+     395: astore_2
+     396: aload_2
+     397: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+     400: invokestatic  #1338               // Method zombie/characters/animals/AnimalPopulationManager.getInstance:()Lzombie/characters/animals/AnimalPopulationManager;
+     403: invokevirtual #1783               // Method zombie/characters/animals/AnimalPopulationManager.save:()V
+     406: getstatic     #520                // Field zombie/MapCollisionData.instance:Lzombie/MapCollisionData;
+     409: invokevirtual #1784               // Method zombie/MapCollisionData.save:()V
+     412: getstatic     #1785               // Field loadedAsClient:Z
+     415: ifne          421
+     418: invokestatic  #1788               // Method zombie/globalObjects/SGlobalObjects.save:()V
+     421: goto          429
+     424: astore_2
+     425: aload_2
+     426: invokestatic  #368                // Method zombie/core/logger/ExceptionLogger.logException:(Ljava/lang/Throwable;)V
+     429: invokestatic  #1791               // Method zombie/radio/ZomboidRadio.getInstance:()Lzombie/radio/ZomboidRadio;
+     432: invokevirtual #1796               // Method zombie/radio/ZomboidRadio.Save:()V
+     435: getstatic     #1799               // Field zombie/world/moddata/GlobalModData.instance:Lzombie/world/moddata/GlobalModData;
+     438: invokevirtual #1804               // Method zombie/world/moddata/GlobalModData.save:()V
+     441: invokestatic  #1679               // Method zombie/inventory/types/MapItem.SaveWorldMap:()V
+     444: invokestatic  #1684               // Method zombie/worldMap/WorldMapVisited.SaveAll:()V
+     447: invokestatic  #1805               // Method zombie/iso/FishSchoolManager.getInstance:()Lzombie/iso/FishSchoolManager;
+     450: invokevirtual #1810               // Method zombie/iso/FishSchoolManager.save:()V
+     453: invokestatic  #1811               // Method zombie/entity/GameEntityManager.Save:()V
+     456: getstatic     #357                // Field zombie/network/GameClient.client:Z
+     459: ifne          474
+     462: getstatic     #1004               // Field zombie/network/GameServer.server:Z
+     465: ifne          474
+     468: invokestatic  #1814               // Method zombie/vehicles/VirtualVehicleManager.getInstance:()Lzombie/vehicles/VirtualVehicleManager;
+     471: invokevirtual #1819               // Method zombie/vehicles/VirtualVehicleManager.save:()V
+     474: goto          487
+     477: astore_1
+     478: new           #980                // class java/lang/RuntimeException
+     481: dup
+     482: aload_1
+     483: invokespecial #982                // Method java/lang/RuntimeException."<init>":(Ljava/lang/Throwable;)V
+     486: athrow
+     487: goto          512
+     490: astore_1
+     491: aload_1
+     492: invokevirtual #1820               // Method java/lang/RuntimeException.getCause:()Ljava/lang/Throwable;
+     495: astore_2
+     496: aload_2
+     497: instanceof    #1495               // class java/io/IOException
+     500: ifeq          510
+     503: aload_2
+     504: checkcast     #1495               // class java/io/IOException
+     507: astore_3
+     508: aload_3
+     509: athrow
+     510: aload_1
+     511: athrow
+     512: return
+    Exception table:
+       from    to  target type
+         103   117   124   Class java/lang/Throwable
+         126   130   133   Class java/lang/Throwable
+          94   145   152   Class java/lang/Throwable
+         153   157   160   Class java/lang/Throwable
+         198   231   238   Class java/lang/Throwable
+         240   244   247   Class java/lang/Throwable
+         189   259   266   Class java/lang/Throwable
+         267   271   274   Class java/lang/Throwable
+         308   320   323   Class java/lang/Exception
+         347   367   374   Class java/lang/Throwable
+         375   379   382   Class java/lang/Throwable
+         338   392   395   Class java/lang/Exception
+         406   421   424   Class java/lang/Exception
+         308   474   477   Class java/io/IOException
+         308   487   490   Class java/lang/RuntimeException
+
+  public static java.lang.String getCoopServerHome();
+    Code:
+       0: new           #20                 // class java/io/File
+       3: dup
+       4: getstatic     #9                  // Field zombie/ZomboidFileSystem.instance:Lzombie/ZomboidFileSystem;
+       7: invokevirtual #15                 // Method zombie/ZomboidFileSystem.getCacheDir:()Ljava/lang/String;
+      10: invokespecial #29                 // Method java/io/File."<init>":(Ljava/lang/String;)V
+      13: astore_0
+      14: aload_0
+      15: invokevirtual #1824               // Method java/io/File.getParent:()Ljava/lang/String;
+      18: areturn
+
+  public static void WriteString(java.nio.ByteBuffer, java.lang.String);
+    Code:
+       0: getstatic     #1827               // Field stringUTF:Ljava/lang/ThreadLocal;
+       3: invokevirtual #1831               // Method java/lang/ThreadLocal.get:()Ljava/lang/Object;
+       6: checkcast     #1835               // class zombie/GameWindow$StringUTF
+       9: aload_0
+      10: aload_1
+      11: invokevirtual #1837               // Method zombie/GameWindow$StringUTF.save:(Ljava/nio/ByteBuffer;Ljava/lang/String;)V
+      14: return
+
+  public static void WriteString(java.io.DataOutputStream, java.lang.String) throws java.io.IOException;
+    Code:
+       0: aload_1
+       1: ifnonnull     10
+       4: aload_0
+       5: iconst_0
+       6: invokevirtual #1707               // Method java/io/DataOutputStream.writeInt:(I)V
+       9: return
+      10: aload_0
+      11: aload_1
+      12: invokevirtual #1840               // Method java/lang/String.length:()I
+      15: invokevirtual #1707               // Method java/io/DataOutputStream.writeInt:(I)V
+      18: aload_1
+      19: ifnull        34
+      22: aload_1
+      23: invokevirtual #1840               // Method java/lang/String.length:()I
+      26: iflt          34
+      29: aload_0
+      30: aload_1
+      31: invokevirtual #1843               // Method java/io/DataOutputStream.writeChars:(Ljava/lang/String;)V
+      34: return
+
+  public static java.lang.String ReadString(java.nio.ByteBuffer);
+    Code:
+       0: getstatic     #1827               // Field stringUTF:Ljava/lang/ThreadLocal;
+       3: invokevirtual #1831               // Method java/lang/ThreadLocal.get:()Ljava/lang/Object;
+       6: checkcast     #1835               // class zombie/GameWindow$StringUTF
+       9: aload_0
+      10: invokevirtual #1846               // Method zombie/GameWindow$StringUTF.load:(Ljava/nio/ByteBuffer;)Ljava/lang/String;
+      13: areturn
+
+  public static java.lang.String ReadString(java.io.DataInputStream) throws java.io.IOException;
+    Code:
+       0: aload_0
+       1: invokevirtual #1850               // Method java/io/DataInputStream.readInt:()I
+       4: istore_1
+       5: iload_1
+       6: ifne          12
+       9: ldc           #160                // String
+      11: areturn
+      12: iload_1
+      13: ldc_w         #1853               // int 65536
+      16: if_icmple     30
+      19: new           #980                // class java/lang/RuntimeException
+      22: dup
+      23: ldc_w         #1854               // String GameWindow.ReadString: string is too long, corrupted save?
+      26: invokespecial #1096               // Method java/lang/RuntimeException."<init>":(Ljava/lang/String;)V
+      29: athrow
+      30: new           #1856               // class java/lang/StringBuilder
+      33: dup
+      34: iload_1
+      35: invokespecial #1858               // Method java/lang/StringBuilder."<init>":(I)V
+      38: astore_2
+      39: iconst_0
+      40: istore_3
+      41: iload_3
+      42: iload_1
+      43: if_icmpge     61
+      46: aload_2
+      47: aload_0
+      48: invokevirtual #1860               // Method java/io/DataInputStream.readChar:()C
+      51: invokevirtual #1864               // Method java/lang/StringBuilder.append:(C)Ljava/lang/StringBuilder;
+      54: pop
+      55: iinc          3, 1
+      58: goto          41
+      61: aload_2
+      62: invokevirtual #1868               // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      65: areturn
+
+  public static java.nio.ByteBuffer getEncodedBytesUTF(java.lang.String);
+    Code:
+       0: getstatic     #1827               // Field stringUTF:Ljava/lang/ThreadLocal;
+       3: invokevirtual #1831               // Method java/lang/ThreadLocal.get:()Ljava/lang/Object;
+       6: checkcast     #1835               // class zombie/GameWindow$StringUTF
+       9: aload_0
+      10: invokevirtual #1871               // Method zombie/GameWindow$StringUTF.getEncodedBytes:(Ljava/lang/String;)Ljava/nio/ByteBuffer;
+      13: areturn
+
+  public static void WriteUUID(java.nio.ByteBuffer, java.util.UUID);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokevirtual #1875               // Method java/util/UUID.getMostSignificantBits:()J
+       5: invokevirtual #1880               // Method java/nio/ByteBuffer.putLong:(J)Ljava/nio/ByteBuffer;
+       8: pop
+       9: aload_0
+      10: aload_1
+      11: invokevirtual #1884               // Method java/util/UUID.getLeastSignificantBits:()J
+      14: invokevirtual #1880               // Method java/nio/ByteBuffer.putLong:(J)Ljava/nio/ByteBuffer;
+      17: pop
+      18: return
+
+  public static java.util.UUID ReadUUID(java.nio.ByteBuffer);
+    Code:
+       0: new           #1876               // class java/util/UUID
+       3: dup
+       4: aload_0
+       5: invokevirtual #1887               // Method java/nio/ByteBuffer.getLong:()J
+       8: aload_0
+       9: invokevirtual #1887               // Method java/nio/ByteBuffer.getLong:()J
+      12: invokespecial #1890               // Method java/util/UUID."<init>":(JJ)V
+      15: areturn
+
+  public static void doRenderEvent(boolean);
+    Code:
+       0: iload_0
+       1: putstatic     #1186               // Field doRenderEvent:Z
+       4: return
+
+  public static void DoLoadingText(java.lang.String);
+    Code:
+       0: aload_0
+       1: invokestatic  #1893               // Method zombie/debug/DebugLog.log:(Ljava/lang/String;)V
+       4: return
+
+  public static void doEpilepsyWarningText();
+    Code:
+       0: getstatic     #1653               // Field zombie/ui/TextManager.instance:Lzombie/ui/TextManager;
+       3: getfield      #1898               // Field zombie/ui/TextManager.font:Lzombie/core/fonts/AngelCodeFont;
+       6: ifnonnull     10
+       9: return
+      10: getstatic     #1653               // Field zombie/ui/TextManager.instance:Lzombie/ui/TextManager;
+      13: getstatic     #1902               // Field zombie/ui/UIFont.NewLarge:Lzombie/ui/UIFont;
+      16: invokevirtual #1908               // Method zombie/ui/TextManager.getFontFromEnum:(Lzombie/ui/UIFont;)Lzombie/core/fonts/AngelCodeFont;
+      19: astore_0
+      20: aload_0
+      21: invokevirtual #1912               // Method zombie/core/fonts/AngelCodeFont.getLineHeight:()I
+      24: istore_1
+      25: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      28: invokevirtual #780                // Method zombie/core/Core.getScreenHeight:()I
+      31: i2f
+      32: fconst_2
+      33: fdiv
+      34: ldc_w         #1917               // float 3.5f
+      37: iload_1
+      38: i2f
+      39: fmul
+      40: fsub
+      41: f2i
+      42: istore_2
+      43: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      46: invokevirtual #1918               // Method zombie/core/Core.StartFrame:()V
+      49: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      52: invokevirtual #1921               // Method zombie/core/Core.EndFrame:()V
+      55: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      58: invokevirtual #1924               // Method zombie/core/Core.StartFrameUI:()Z
+      61: pop
+      62: getstatic     #643                // Field zombie/core/SpriteRenderer.instance:Lzombie/core/SpriteRenderer;
+      65: aconst_null
+      66: iconst_0
+      67: iconst_0
+      68: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      71: invokevirtual #777                // Method zombie/core/Core.getScreenWidth:()I
+      74: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+      77: invokevirtual #780                // Method zombie/core/Core.getScreenHeight:()I
+      80: fconst_0
+      81: fconst_0
+      82: fconst_0
+      83: fconst_1
+      84: aconst_null
+      85: invokevirtual #1927               // Method zombie/core/SpriteRenderer.renderi:(Lzombie/core/textures/Texture;IIIIFFFFLjava/util/function/Consumer;)V
+      88: iconst_1
+      89: istore_3
+      90: iload_3
+      91: bipush        8
+      93: if_icmpgt     142
+      96: getstatic     #1653               // Field zombie/ui/TextManager.instance:Lzombie/ui/TextManager;
+      99: aload_0
+     100: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     103: invokevirtual #777                // Method zombie/core/Core.getScreenWidth:()I
+     106: i2f
+     107: fconst_2
+     108: fdiv
+     109: f2d
+     110: iload_2
+     111: i2d
+     112: iload_3
+     113: invokedynamic #1931,  0           // InvokeDynamic #26:makeConcatWithConstants:(I)Ljava/lang/String;
+     118: iconst_0
+     119: anewarray     #4                  // class java/lang/Object
+     122: invokestatic  #120                // Method zombie/core/Translator.getText:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     125: dconst_1
+     126: dconst_1
+     127: dconst_1
+     128: dconst_1
+     129: invokevirtual #1932               // Method zombie/ui/TextManager.DrawStringCentre:(Lzombie/core/fonts/AngelCodeFont;DDLjava/lang/String;DDDD)V
+     132: iload_2
+     133: iload_1
+     134: iadd
+     135: istore_2
+     136: iinc          3, 1
+     139: goto          90
+     142: invokestatic  #264                // Method zombie/core/Core.getInstance:()Lzombie/core/Core;
+     145: invokevirtual #1936               // Method zombie/core/Core.EndFrameUI:()V
+     148: return
+
+  private static void lambda$init$0();
+    Code:
+       0: getstatic     #1939               // Field zombie/core/SceneShaderStore.defaultShaderId:I
+       3: invokestatic  #1944               // Method org/lwjgl/opengl/GL20.glUseProgram:(I)V
+       6: invokestatic  #1949               // Method zombie/core/ShaderHelper.forgetCurrentlyBound:()V
+       9: return
+
+  private static void lambda$mainThreadStep$0();
+    Code:
+       0: iconst_1
+       1: invokestatic  #879                // Method zombie/debug/DebugOptions.testThreadCrash:(I)V
+       4: return
+
+  private static void lambda$mainThreadStart$0();
+    Code:
+       0: iconst_0
+       1: invokestatic  #1944               // Method org/lwjgl/opengl/GL20.glUseProgram:(I)V
+       4: invokestatic  #1949               // Method zombie/core/ShaderHelper.forgetCurrentlyBound:()V
+       7: return
+
+  private static void lambda$logic$0();
+    Code:
+       0: getstatic     #563                // Field zombie/core/raknet/VoiceManager.instance:Lzombie/core/raknet/VoiceManager;
+       3: invokevirtual #568                // Method zombie/core/raknet/VoiceManager.update:()V
+       6: getstatic     #571                // Field zombie/SoundManager.instance:Lzombie/BaseSoundManager;
+       9: invokevirtual #576                // Method zombie/BaseSoundManager.Update:()V
+      12: return
+
+  static {};
+    Code:
+       0: new           #1106               // class zombie/FPSTracking
+       3: dup
+       4: invokespecial #1954               // Method zombie/FPSTracking."<init>":()V
+       7: putstatic     #1101               // Field s_fpsTracking:Lzombie/FPSTracking;
+      10: invokedynamic #1955,  0           // InvokeDynamic #27:get:()Ljava/util/function/Supplier;
+      15: invokestatic  #1958               // Method java/lang/ThreadLocal.withInitial:(Ljava/util/function/Supplier;)Ljava/lang/ThreadLocal;
+      18: putstatic     #1827               // Field stringUTF:Ljava/lang/ThreadLocal;
+      21: new           #260                // class zombie/core/input/Input
+      24: dup
+      25: invokespecial #1962               // Method zombie/core/input/Input."<init>":()V
+      28: putstatic     #255                // Field GameInput:Lzombie/core/input/Input;
+      31: new           #234                // class zombie/gameStates/GameStateMachine
+      34: dup
+      35: invokespecial #1963               // Method zombie/gameStates/GameStateMachine."<init>":()V
+      38: putstatic     #229                // Field states:Lzombie/gameStates/GameStateMachine;
+      41: ldc_w         #1964               // String RC3
+      44: putstatic     #1966               // Field version:Ljava/lang/String;
+      47: invokestatic  #873                // Method zombie/core/PerformanceSettings.getLockFPS:()I
+      50: i2f
+      51: putstatic     #1969               // Field averageFPS:F
+      54: new           #1973               // class zombie/fileSystem/FileSystemImpl
+      57: dup
+      58: invokespecial #1975               // Method zombie/fileSystem/FileSystemImpl."<init>":()V
+      61: putstatic     #591                // Field fileSystem:Lzombie/fileSystem/FileSystem;
+      64: new           #1976               // class zombie/asset/AssetManagers
+      67: dup
+      68: getstatic     #591                // Field fileSystem:Lzombie/fileSystem/FileSystem;
+      71: invokespecial #1978               // Method zombie/asset/AssetManagers."<init>":(Lzombie/fileSystem/FileSystem;)V
+      74: putstatic     #1981               // Field assetManagers:Lzombie/asset/AssetManagers;
+      77: new           #242                // class java/util/ArrayList
+      80: dup
+      81: invokespecial #1985               // Method java/util/ArrayList."<init>":()V
+      84: putstatic     #1425               // Field texturePacks:Ljava/util/ArrayList;
+      87: new           #1423               // class zombie/fileSystem/FileSystem$TexturePackTextures
+      90: dup
+      91: invokespecial #1986               // Method zombie/fileSystem/FileSystem$TexturePackTextures."<init>":()V
+      94: putstatic     #1418               // Field texturePackTextures:Lzombie/fileSystem/FileSystem$TexturePackTextures;
+      97: return
+}

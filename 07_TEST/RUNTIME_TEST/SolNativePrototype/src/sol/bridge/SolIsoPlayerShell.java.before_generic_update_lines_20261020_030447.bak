@@ -1,0 +1,72 @@
+package sol.bridge;
+
+import zombie.characters.IsoGameCharacter;
+import zombie.characters.IsoPlayer;
+import zombie.characters.SurvivorDesc;
+import zombie.iso.IsoCell;
+
+public final class SolIsoPlayerShell extends IsoPlayer {
+    private boolean solPathActive = false;
+
+    public SolIsoPlayerShell(IsoCell cell, SurvivorDesc descriptor, int x, int y, int z, boolean remote) {
+        super(cell, descriptor, x, y, z, remote);
+    }
+
+    @Override
+    public boolean isLocalPlayer() {
+        return false;
+    }
+
+    @Override
+    public void updateLOS() {
+        // Non-local companions must never own or write a local-player LOS channel.
+    }
+
+    @Override
+    public boolean isPlayerMoving() {
+        return solPathActive;
+    }
+
+    @Override
+    public void setMoving(boolean moving) {
+        if (!moving) {
+            solPathActive = false;
+            try { setVariable("bPathfind", false); } catch (RuntimeException ignored) {}
+        }
+        super.setMoving(moving);
+    }
+
+    private void forceSolPathOwner() {
+        solPathActive = true;
+        setVariable("bPathfind", true);
+        super.setMoving(false);
+    }
+
+    @Override
+    public void pathToLocationF(float x, float y, float z) {
+        super.pathToLocationF(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToLocation(int x, int y, int z) {
+        super.pathToLocation(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToCharacter(IsoGameCharacter target) {
+        super.pathToCharacter(target);
+        if (target != null) forceSolPathOwner();
+    }
+
+    @Override
+    public void update() {
+        IsoPlayer local = IsoPlayer.getInstance();
+        try {
+            super.update();
+        } finally {
+            IsoPlayer.setInstance(local);
+        }
+    }
+}

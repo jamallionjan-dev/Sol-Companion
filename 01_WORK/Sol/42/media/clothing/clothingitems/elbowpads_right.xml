@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/SCPPack/m_elbowpads_r_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/SCPPack/f_elbowpads_r_tombfit</m_FemaleModel>
+	<m_GUID>5f3566fb-d3b2-4aee-b531-f920ac4575d6</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>clothes\pads\pad</textureChoices>
+</clothingItem>

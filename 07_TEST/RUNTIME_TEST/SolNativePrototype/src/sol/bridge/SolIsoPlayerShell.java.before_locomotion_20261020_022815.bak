@@ -1,0 +1,31 @@
+package sol.bridge;
+
+import zombie.characters.IsoPlayer;
+import zombie.characters.SurvivorDesc;
+import zombie.iso.IsoCell;
+
+public final class SolIsoPlayerShell extends IsoPlayer {
+    public SolIsoPlayerShell(IsoCell cell, SurvivorDesc descriptor, int x, int y, int z, boolean remote) {
+        super(cell, descriptor, x, y, z, remote);
+    }
+
+    @Override
+    public boolean isLocalPlayer() {
+        return false;
+    }
+
+    @Override
+    public void updateLOS() {
+        // Non-local companions must never own or write a local-player LOS channel.
+    }
+
+    @Override
+    public void update() {
+        IsoPlayer local = IsoPlayer.getInstance();
+        try {
+            super.update();
+        } finally {
+            IsoPlayer.setInstance(local);
+        }
+    }
+}

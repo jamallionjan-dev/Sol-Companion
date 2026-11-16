@@ -1,0 +1,1201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<hairStyles>
+	<female>
+		<name>F_Reaper</name>
+		<model>skinned\hair\F_Reaper</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Reaper" />
+		<alternate category="Group01" style="F_ReaperG1" />
+		<alternate category="Group02" style="F_ReaperG2" />
+		<alternate category="Group03" style="F_ReaperG3" />
+		<alternate category="Group04" style="F_ReaperG4" />
+		<alternate category="Group05" style="F_Reaper" />
+		<alternate category="Group06" style="F_ReaperG1" />
+		<alternate category="Group07" style="F_ReaperG7" />
+		<level>2</level>
+	</female>
+	<female>
+		<name>F_Draven</name>
+		<model>skinned\hair\F_Draven</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Draven" />
+		<alternate category="Group01" style="F_DravenG1" />
+		<alternate category="Group02" style="F_DravenG2" />
+		<alternate category="Group03" style="F_DravenG3" />
+		<alternate category="Group04" style="F_DravenG4" />
+		<alternate category="Group05" style="F_Draven" />
+		<alternate category="Group06" style="F_DravenG1" />
+		<alternate category="Group07" style="F_DravenG7" />
+		<level>2</level>
+	</female>
+	<female>
+		<name>F_GothBob</name>
+		<model>skinned\hair\F_GothBob</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_GothBob" />
+		<alternate category="Group01" style="F_GothBobG1" />
+		<alternate category="Group02" style="F_GothBobG2" />
+		<alternate category="Group03" style="F_GothBobG3" />
+		<alternate category="Group04" style="F_GothBobG4" />
+		<alternate category="Group05" style="F_GothBob" />
+		<alternate category="Group06" style="F_GothBobG1" />
+		<alternate category="Group07" style="F_GothBobG7" />
+		<level>2</level>
+	</female>
+	<female>
+		<name>F_Vamp</name>
+		<model>skinned\hair\F_Vamp</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Vamp" />
+		<alternate category="Group01" style="F_VampG1" />
+		<alternate category="Group02" style="F_VampG2" />
+		<alternate category="Group03" style="F_VampG3" />
+		<alternate category="Group04" style="F_VampG4" />
+		<alternate category="Group05" style="F_Vamp" />
+		<alternate category="Group06" style="F_VampG1" />
+		<alternate category="Group07" style="F_VampG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_GothBobNobun</name>
+		<model>skinned\hair\F_GothBobNobun</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_GothBobNobun" />
+		<alternate category="Group01" style="F_GothBobNobunG1" />
+		<alternate category="Group02" style="F_GothBobNobunG2" />
+		<alternate category="Group03" style="F_GothBobNobunG3" />
+		<alternate category="Group04" style="F_GothBobNobunG4" />
+		<alternate category="Group05" style="F_GothBobNobun" />
+		<alternate category="Group06" style="F_GothBobNobunG1" />
+		<alternate category="Group07" style="F_GothBobNobunG7" />
+		<level>2</level>
+	</female>
+	<female>
+		<name>F_Dollar</name>
+		<model>skinned\hair\F_Dollar</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Dollar" />
+		<alternate category="Group01" style="F_DollarG1" />
+		<alternate category="Group02" style="F_DollarG2" />
+		<alternate category="Group03" style="F_DollarG3" />
+		<alternate category="Group04" style="F_DollarG4" />
+		<alternate category="Group05" style="F_Dollar" />
+		<alternate category="Group06" style="F_DollarG1" />
+		<alternate category="Group07" style="F_DollarG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_SweptFringeLong</name>
+		<model>skinned\hair\F_SweptFringeLong</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_SweptFringeLong" />
+		<alternate category="Group01" style="F_SweptFringeLongG1" />
+		<alternate category="Group02" style="F_SweptFringeLongG2" />
+		<alternate category="Group03" style="F_SweptFringeLongG3" />
+		<alternate category="Group04" style="F_SweptFringeLongG4" />
+		<alternate category="Group05" style="F_SweptFringeLong" />
+		<alternate category="Group06" style="F_SweptFringeLongG1" />
+		<alternate category="Group07" style="F_SweptFringeLongG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_StraightFringeLong</name>
+		<model>skinned\hair\F_StraightFringeLong</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_StraightFringeLong" />
+		<alternate category="Group01" style="F_StraightFringeLongG1" />
+		<alternate category="Group02" style="F_StraightFringeLongG2" />
+		<alternate category="Group03" style="F_StraightFringeLongG3" />
+		<alternate category="Group04" style="F_StraightFringeLongG4" />
+		<alternate category="Group05" style="F_StraightFringeLong" />
+		<alternate category="Group06" style="F_StraightFringeLongG1" />
+		<alternate category="Group07" style="F_StraightFringeLongG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_Formalgoth</name>
+		<model>skinned\hair\F_Formalgoth</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Formalgoth" />
+		<alternate category="Group01" style="F_FormalgothG1" />
+		<alternate category="Group02" style="F_FormalgothG2" />
+		<alternate category="Group03" style="F_FormalgothG3" />
+		<alternate category="Group04" style="F_FormalgothG4" />
+		<alternate category="Group05" style="F_Formalgoth" />
+		<alternate category="Group06" style="F_FormalgothG1" />
+		<alternate category="Group07" style="F_FormalgothG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_Violet</name>
+		<model>skinned\hair\F_Violet</model>
+		<texture>F_Hair_White</texture>
+		<alternate category="default" style="F_Violet" />
+		<alternate category="Group01" style="F_VioletG1" />
+		<alternate category="Group02" style="F_VioletG2" />
+		<alternate category="Group03" style="F_VioletG3" />
+		<alternate category="Group04" style="F_VioletG4" />
+		<alternate category="Group05" style="F_Violet" />
+		<alternate category="Group06" style="F_VioletG1" />
+		<alternate category="Group07" style="F_VioletG7" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>F_ReaperG1</name>
+		<model>skinned/hair/F_ReaperG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_ReaperG2</name>
+		<model>skinned/hair/F_ReaperG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_ReaperG3</name>
+		<model>skinned/hair/F_ReaperG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_ReaperG4</name>
+		<model>skinned/hair/F_ReaperG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_ReaperG7</name>
+		<model>skinned/hair/F_ReaperG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DravenG1</name>
+		<model>skinned/hair/F_DravenG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DravenG2</name>
+		<model>skinned/hair/F_DravenG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DravenG3</name>
+		<model>skinned/hair/F_DravenG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DravenG4</name>
+		<model>skinned/hair/F_DravenG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DravenG7</name>
+		<model>skinned/hair/F_DravenG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DollarG1</name>
+		<model>skinned/hair/F_DollarG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DollarG2</name>
+		<model>skinned/hair/F_DollarG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DollarG3</name>
+		<model>skinned/hair/F_DollarG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DollarG4</name>
+		<model>skinned/hair/F_DollarG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_DollarG7</name>
+		<model>skinned/hair/F_DollarG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobG1</name>
+		<model>skinned/hair/F_GothBobG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobG2</name>
+		<model>skinned/hair/F_GothBobG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobG3</name>
+		<model>skinned/hair/F_GothBobG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobG4</name>
+		<model>skinned/hair/F_GothBobG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobG7</name>
+		<model>skinned/hair/F_GothBobG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobNobunG1</name>
+		<model>skinned/hair/F_GothBobNobunG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobNobunG2</name>
+		<model>skinned/hair/F_GothBobNobunG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobNobunG3</name>
+		<model>skinned/hair/F_GothBobNobunG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobNobunG4</name>
+		<model>skinned/hair/F_GothBobNobunG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_GothBobNobunG7</name>
+		<model>skinned/hair/F_GothBobNobunG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VampG1</name>
+		<model>skinned/hair/F_VampG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VampG2</name>
+		<model>skinned/hair/F_VampG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VampG3</name>
+		<model>skinned/hair/F_VampG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VampG4</name>
+		<model>skinned/hair/F_VampG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VampG7</name>
+		<model>skinned/hair/F_VampG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_SweptFringeLongG1</name>
+		<model>skinned/hair/F_SweptFringeLongG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_SweptFringeLongG2</name>
+		<model>skinned/hair/F_SweptFringeLongG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_SweptFringeLongG3</name>
+		<model>skinned/hair/F_SweptFringeLongG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_SweptFringeLongG4</name>
+		<model>skinned/hair/F_SweptFringeLongG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_SweptFringeLongG7</name>
+		<model>skinned/hair/F_SweptFringeLongG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_StraightFringeLongG1</name>
+		<model>skinned/hair/F_StraightFringeLongG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_StraightFringeLongG2</name>
+		<model>skinned/hair/F_StraightFringeLongG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_StraightFringeLongG3</name>
+		<model>skinned/hair/F_StraightFringeLongG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_StraightFringeLongG4</name>
+		<model>skinned/hair/F_StraightFringeLongG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_StraightFringeLongG7</name>
+		<model>skinned/hair/F_StraightFringeLongG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_FormalgothG1</name>
+		<model>skinned/hair/F_FormalgothG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_FormalgothG2</name>
+		<model>skinned/hair/F_FormalgothG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_FormalgothG3</name>
+		<model>skinned/hair/F_FormalgothG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_FormalgothG4</name>
+		<model>skinned/hair/F_FormalgothG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_FormalgothG7</name>
+		<model>skinned/hair/F_FormalgothG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VioletG1</name>
+		<model>skinned/hair/F_VioletG1</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VioletG2</name>
+		<model>skinned/hair/F_VioletG2</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VioletG3</name>
+		<model>skinned/hair/F_VioletG3</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VioletG4</name>
+		<model>skinned/hair/F_VioletG4</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>F_VioletG7</name>
+		<model>skinned/hair/F_VioletG7</model>
+		<texture>F_Hair_White</texture>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>VSGirl_Demi</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_demi</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="Bald" />
+		<alternate category="Group01" style="VSGirl_Demi" />
+		<alternate category="Group02" style="VSGirl_Demi" />
+		<alternate category="Group04" style="VSGirl_Demi" />
+		<alternate category="Group05" style="VSGirl_Demi" />
+		<level>1</level>
+	</female>
+	<female>
+		<name>VSGirl_Spike</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_spike</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Spike" />
+		<alternate category="Group05" style="VSGirl_Spike" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>Bald</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Hat</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_hat</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_Hat" />
+		<level>1</level>
+		<growReference>false</growReference>
+		<noChoose>true</noChoose>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_CentreParting</trimChoices>
+		<trimChoices>VSGirl_LeftParting</trimChoices>
+		<trimChoices>VSGirl_RightParting</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+		<trimChoices>VSGirl_GreasedBack</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_OverEye</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_overeye</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_OverEye" />
+		<alternate category="Group05" style="VSGirl_OverEye" />
+		<level>2</level>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Bob</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_bob</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_Bob" />
+		<level>2</level>
+		<growReference>false</growReference>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_Rachel</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Bun</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_bun</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_PonyTail" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_Bun" />
+		<alternate category="Group05" style="VSGirl_Bun" />
+		<level>2</level>
+		<attachedHair>true</attachedHair>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Back</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_back</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Back" />
+		<alternate category="Group05" style="VSGirl_Back" />
+		<level>2</level>
+		<attachedHair>true</attachedHair>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_Rachel</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Long</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_long</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_PonyTail" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_Long" />
+		<alternate category="Group05" style="VSGirl_Long" />
+		<level>3</level>
+		<trimChoices>VSGirl_Long2</trimChoices>
+		<trimChoices>VSGirl_Kate</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+		<trimChoices>VSGirl_LongBraids02</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Kate</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_kate</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_Kate" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_Kate" />
+		<alternate category="Group05" style="VSGirl_Kate" />
+		<level>3</level>
+		<trimChoices>VSGirl_Long</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Long2</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_long2</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLong" />
+		<alternate category="Group01" style="VSGirl_HatLong" />
+		<alternate category="Group02" style="VSGirl_HatLong" />
+		<alternate category="Group04" style="VSGirl_Long2" />
+		<alternate category="Group05" style="VSGirl_Long2" />
+		<level>3</level>
+		<growReference>false</growReference>
+		<trimChoices>VSGirl_Long</trimChoices>
+		<trimChoices>VSGirl_Kate</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+		<trimChoices>VSGirl_LongBraids02</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_PonyTail</name>
+		<model>skinned/localplayervsgirl/commonhair/f_hair_ponytail</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_PonyTail" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_PonyTail" />
+		<alternate category="Group05" style="VSGirl_PonyTail" />
+		<level>3</level>
+		<attachedHair>true</attachedHair>
+	</female>
+	<female>
+		<name>VSGirl_Longcurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_longcurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongCurly" />
+		<alternate category="Group01" style="VSGirl_HatLongCurly" />
+		<alternate category="Group02" style="VSGirl_HatLongCurly" />
+		<alternate category="Group04" style="VSGirl_Longcurly" />
+		<alternate category="Group05" style="VSGirl_Longcurly" />
+		<level>3</level>
+		<trimChoices>VSGirl_Long2curly</trimChoices>
+		<trimChoices>VSGirl_KateCurly</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+		<trimChoices>VSGirl_LongBraids02</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Long2curly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_long2curly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongCurly" />
+		<alternate category="Group01" style="VSGirl_HatLongCurly" />
+		<alternate category="Group02" style="VSGirl_HatLongCurly" />
+		<alternate category="Group04" style="VSGirl_Long2curly" />
+		<alternate category="Group05" style="VSGirl_Long2curly" />
+		<level>3</level>
+		<growReference>false</growReference>
+		<trimChoices>VSGirl_Longcurly</trimChoices>
+		<trimChoices>VSGirl_KateCurly</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+		<trimChoices>VSGirl_LongBraids02</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_BobCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_bobcurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatCurly" />
+		<alternate category="Group01" style="VSGirl_HatCurly" />
+		<alternate category="Group02" style="VSGirl_HatCurly" />
+		<alternate category="Group04" style="VSGirl_HatCurly" />
+		<alternate category="Group05" style="VSGirl_HatCurly" />
+		<level>2</level>
+		<growReference>false</growReference>
+		<trimChoices>VSGirl_OverEyeCurly</trimChoices>
+		<trimChoices>RachelCurly</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_BunCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_buncurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_PonyTail" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_Bun" />
+		<alternate category="Group05" style="VSGirl_Bun" />
+		<level>2</level>
+		<attachedHair>true</attachedHair>
+		<trimChoices>VSGirl_OverEyeCurly</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_HatCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_hatcurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatCurly" />
+		<alternate category="Group01" style="VSGirl_HatCurly" />
+		<alternate category="Group02" style="VSGirl_HatCurly" />
+		<alternate category="Group04" style="VSGirl_HatCurly" />
+		<alternate category="Group05" style="VSGirl_HatCurly" />
+		<level>1</level>
+		<growReference>false</growReference>
+		<noChoose>true</noChoose>
+		<trimChoices>VSGirl_Fresh</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_KateCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_katecurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTail" />
+		<alternate category="Group01" style="VSGirl_KateCurly" />
+		<alternate category="Group02" style="VSGirl_PonyTail" />
+		<alternate category="Group04" style="VSGirl_KateCurly" />
+		<alternate category="Group05" style="VSGirl_KateCurly" />
+		<level>3</level>
+		<trimChoices>VSGirl_Longcurly</trimChoices>
+		<trimChoices>VSGirl_LongBraids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_OverEyeCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_overeyecurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatCurly" />
+		<alternate category="Group01" style="VSGirl_HatCurly" />
+		<alternate category="Group02" style="VSGirl_HatCurly" />
+		<alternate category="Group04" style="VSGirl_HatCurly" />
+		<alternate category="Group05" style="VSGirl_OverEyeCurly" />
+		<level>2</level>
+		<trimChoices>VSGirl_HatCurly</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Rachel</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_rachel</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_Rachel" />
+		<level>2</level>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_CentreParting</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_partingcentre</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_CentreParting" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_LeftParting</trimChoices>
+		<trimChoices>VSGirl_RightParting</trimChoices>
+		<trimChoices>VSGirl_GreasedBack</trimChoices>
+		<trimChoices>VSGirl_Cornrows</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_CentrePartingLong</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_partingcentrelong</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_CentrePartingLong" />
+		<level>2</level>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_LeftParting</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_partingleft</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_LeftParting" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_RightParting</trimChoices>
+		<trimChoices>VSGirl_CentreParting</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_RightParting</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_partingright</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_RightParting" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_LeftParting</trimChoices>
+		<trimChoices>VSGirl_CentreParting</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_TopCurls</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_topmop</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatCurly" />
+		<alternate category="Group01" style="VSGirl_HatCurly" />
+		<alternate category="Group02" style="VSGirl_HatCurly" />
+		<alternate category="Group04" style="VSGirl_HatCurly" />
+		<alternate category="Group05" style="VSGirl_TopCurls" />
+		<level>1</level>
+		<trimChoices>VSGirl_HatCurly</trimChoices>
+		<trimChoices>VSGirl_Fresh</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Grungey</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_grungey</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_Grungey" />
+		<level>2</level>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_GrungeyParted</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_grungeyparting</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_GrungeyParted" />
+		<level>2</level>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_Rachel</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Cornrows</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_cornrows</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Cornrows" />
+		<alternate category="Group01" style="VSGirl_Cornrows" />
+		<alternate category="Group02" style="VSGirl_Cornrows" />
+		<alternate category="Group04" style="VSGirl_Cornrows" />
+		<alternate category="Group05" style="VSGirl_Cornrows" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_Hat</trimChoices>
+		<trimChoices>VSGirl_LeftParting</trimChoices>
+		<trimChoices>VSGirl_CentreParting</trimChoices>
+		<trimChoices>VSGirl_RightParting</trimChoices>
+		<trimChoices>VSGirl_TopCurls</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+		<trimChoices>VSGirl_Fresh</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+		<trimChoices>VSGirl_GreasedBack</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_MohawkFan</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_mohawkfan</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_MohawkFan" />
+		<level>2</level>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_MohawkShort</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_mohawkshort</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_MohawkShort" />
+		<alternate category="Group01" style="VSGirl_MohawkShort" />
+		<alternate category="Group02" style="VSGirl_MohawkShort" />
+		<alternate category="Group04" style="VSGirl_MohawkShort" />
+		<alternate category="Group05" style="VSGirl_MohawkShort" />
+		<level>1</level>
+	</female>
+	<female>
+		<name>VSGirl_MohawkSpike</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_mohawkspike</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_MohawkSpike" />
+		<level>2</level>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_LibertySpikes</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_libertyspikes</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Hat" />
+		<alternate category="Group05" style="VSGirl_LibertySpikes" />
+		<level>2</level>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_MohawkFlat</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_mohawkflat</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="Bald" />
+		<alternate category="Group01" style="VSGirl_MohawkShort" />
+		<alternate category="Group02" style="VSGirl_MohawkShort" />
+		<alternate category="Group04" style="VSGirl_MohawkFlat" />
+		<alternate category="Group05" style="VSGirl_MohawkFlat" />
+		<level>1</level>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Rachel</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_FlatTop</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_flattop</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="Bald" />
+		<alternate category="Group01" style="VSGirl_Demi" />
+		<alternate category="Group02" style="VSGirl_Demi" />
+		<alternate category="Group04" style="VSGirl_FlatTop" />
+		<alternate category="Group05" style="VSGirl_FlatTop" />
+		<level>1</level>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_Demi</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Buffont</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_buffont</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Buffont" />
+		<alternate category="Group05" style="VSGirl_Buffont" />
+		<level>2</level>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_GreasedBack</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_greasedback</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_GreasedBack" />
+		<alternate category="Group05" style="VSGirl_GreasedBack" />
+		<level>1</level>
+		<trimChoices>VSGirl_Demi</trimChoices>
+		<trimChoices>VSGirl_Spike</trimChoices>
+		<trimChoices>VSGirl_Hat</trimChoices>
+		<trimChoices>VSGirl_CentreParting</trimChoices>
+		<trimChoices>VSGirl_LeftParting</trimChoices>
+		<trimChoices>VSGirl_RightParting</trimChoices>
+		<trimChoices>VSGirl_Cornrows</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+		<trimChoices>VSGirl_FlatTop</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Fresh</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_fresh</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Fresh" />
+		<alternate category="Group05" style="VSGirl_Fresh" />
+		<level>1</level>
+		<trimChoices>VSGirl_TopCurls</trimChoices>
+		<trimChoices>VSGirl_HatCurly</trimChoices>
+		<trimChoices>VSGirl_MohawkShort</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Grungey02</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_grungey02</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_Grungey02" />
+		<alternate category="Group05" style="VSGirl_Grungey02" />
+		<level>2</level>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_GrungeyBehindEars</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_grungeybehindear</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_GrungeyBehindEars" />
+		<alternate category="Group05" style="VSGirl_GrungeyBehindEars" />
+		<level>2</level>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_Grungey</trimChoices>
+		<trimChoices>VSGirl_GrungeyParted</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_Braids</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_OverLeftEye</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_overeyeleft</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_Hat" />
+		<alternate category="Group01" style="VSGirl_Hat" />
+		<alternate category="Group02" style="VSGirl_Hat" />
+		<alternate category="Group04" style="VSGirl_OverLeftEye" />
+		<alternate category="Group05" style="VSGirl_OverLeftEye" />
+		<level>2</level>
+		<trimChoices>VSGirl_OverEye</trimChoices>
+		<trimChoices>VSGirl_Bob</trimChoices>
+		<trimChoices>VSGirl_OverLeftEye</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_LongBraids</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_longbraid</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongBraided" />
+		<alternate category="Group01" style="VSGirl_HatLongBraided" />
+		<alternate category="Group02" style="VSGirl_HatLongBraided" />
+		<alternate category="Group04" style="VSGirl_LongBraids" />
+		<alternate category="Group05" style="VSGirl_LongBraids" />
+		<level>3</level>
+		<trimChoices>VSGirl_Long2</trimChoices>
+		<trimChoices>VSGirl_Long</trimChoices>
+		<trimChoices>VSGirl_Kate</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_LongBraids02</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_longbraid02</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongBraided" />
+		<alternate category="Group01" style="VSGirl_HatLongBraided" />
+		<alternate category="Group02" style="VSGirl_HatLongBraided" />
+		<alternate category="Group04" style="VSGirl_LongBraids02" />
+		<alternate category="Group05" style="VSGirl_LongBraids02" />
+		<level>3</level>
+		<trimChoices>VSGirl_Long2</trimChoices>
+		<trimChoices>VSGirl_Long</trimChoices>
+		<trimChoices>VSGirl_Kate</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_Braids</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_braided01</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group01" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group02" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group04" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group05" style="VSGirl_Braids" />
+		<level>2</level>
+		<trimChoices>VSGirl_CentrePartingLong</trimChoices>
+		<trimChoices>VSGirl_Grungey02</trimChoices>
+		<trimChoices>VSGirl_GrungeyBehindEars</trimChoices>
+		<trimChoices>VSGirl_MohawkFan</trimChoices>
+		<trimChoices>VSGirl_MohawkSpike</trimChoices>
+		<trimChoices>VSGirl_LibertySpikes</trimChoices>
+		<trimChoices>VSGirl_Buffont</trimChoices>
+		<trimChoices>VSGirl_GreasedBack</trimChoices>
+	</female>
+	<female>
+		<name>VSGirl_PonyTailBraids</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_ponytailbraided</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group01" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group02" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group04" style="VSGirl_PonyTailBraids" />
+		<alternate category="Group05" style="VSGirl_PonyTailBraids" />
+		<level>3</level>
+	</female>
+	<female>
+		<name>VSGirl_HatLong</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_hatlong</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLong" />
+		<alternate category="Group01" style="VSGirl_HatLong" />
+		<alternate category="Group02" style="VSGirl_HatLong" />
+		<alternate category="Group04" style="VSGirl_HatLong" />
+		<alternate category="Group05" style="VSGirl_HatLong" />
+		<level>0</level>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>VSGirl_HatLongCurly</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_hatlongcurly</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongCurly" />
+		<alternate category="Group01" style="VSGirl_HatLongCurly" />
+		<alternate category="Group02" style="VSGirl_HatLongCurly" />
+		<alternate category="Group04" style="VSGirl_HatLongCurly" />
+		<alternate category="Group05" style="VSGirl_HatLongCurly" />
+		<level>0</level>
+		<noChoose>true</noChoose>
+	</female>
+	<female>
+		<name>VSGirl_HatLongBraided</name>
+		<model>skinned/localplayervsgirl/commonhair/kate_hair_hatlongbraided</model>
+		<texture>LocalPlayerVSGirl/RemadeHair/White</texture>
+		<alternate category="default" style="VSGirl_HatLongBraided" />
+		<alternate category="Group01" style="VSGirl_HatLongBraided" />
+		<alternate category="Group02" style="VSGirl_HatLongBraided" />
+		<alternate category="Group04" style="VSGirl_HatLongBraided" />
+		<alternate category="Group05" style="VSGirl_HatLongBraided" />
+		<level>0</level>
+		<noChoose>true</noChoose>
+	</female>
+</hairStyles>

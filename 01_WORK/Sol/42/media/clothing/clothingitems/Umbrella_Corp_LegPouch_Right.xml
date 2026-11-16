@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/Umbrella/accessory/M_Umbrella_Corp_LegPouch_Right_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/Umbrella/accessory/F_Umbrella_Corp_LegPouch_Right_tombfit</m_FemaleModel>
+	<m_GUID>a0d4ebc0-45b8-43ae-8135-0c9065b1ddb1</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_MasksFolder />
+	<textureChoices>Clothes\Military\BulletproofVests\Umbrella_Corp_Pouches_Packs_Holsters</textureChoices>
+</clothingItem>

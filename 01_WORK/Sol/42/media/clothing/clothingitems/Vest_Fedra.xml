@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/TLOU/vest/M_FedraVest_M_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/TLOU/vest/F_FedraVest_F_tombfit</m_FemaleModel>
+	<m_GUID>037255ab-c8ad-4d13-bebb-4b79dc93387c</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_HatCategory />
+	<m_MasksFolder>media/textures/Clothes/Hat/Masks</m_MasksFolder>
+	<textureChoices>clothes\FedraClothing\FedraVest</textureChoices>
+</clothingItem>

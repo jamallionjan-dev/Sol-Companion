@@ -1,0 +1,3384 @@
+-- SPDX-License-Identifier: MIT
+
+SurvivorCompanion = SurvivorCompanion or {}
+local SC = SurvivorCompanion
+if not SC.GameplayUtil and type(require) == "function" then pcall(require, "SCGameplayUtil") end
+if not SC.Positioning and type(require) == "function" then pcall(require, "SCPositioning") end
+
+SC.Decision = SC.Decision or {}
+local Decision = SC.Decision
+local states = setmetatable({}, { __mode = "k" })
+local lastGroupThreatWarningAt = -math.huge
+-- The last sitting zombie any companion called out, so the party names it once.
+local lastSittingCallout
+local workReservations = {}
+local targetedWorkKinds = { barricade = true, remove_barricade = true, dismantle = true }
+
+Decision.SafetyTier = Decision.SafetyTier or {
+    IDLE = "idle",
+    ROUTINE = "routine",
+    TACTICAL = "tactical",
+    SURVIVAL = "survival",
+}
+local safetyRank = {
+    [Decision.SafetyTier.IDLE] = 1,
+    [Decision.SafetyTier.ROUTINE] = 2,
+    [Decision.SafetyTier.TACTICAL] = 3,
+    [Decision.SafetyTier.SURVIVAL] = 4,
+}
+local idleDecisionKinds = {
+    downtime = true, conversation = true, mental_episode = true,
+    grief_response = true, purposeful_idle = true, joy_response = true,
+    social_participant = true, ritual = true,
+}
+local tacticalDecisionKinds = {
+    combat = true, retreat = true, medical = true, tactical = true,
+    alert = true, infection_crisis = true,
+}
+-- Orders that give a companion its own task to carry on with while combat
+-- has nothing it may engage.
+local ownTaskOrders = {
+    stay = true, guard = true, base_duty = true,
+    work = true, move_to = true, check_room = true, interact = true,
+}
+
+local function safetyTierFor(kind, emergency, detail)
+    if emergency == true then return Decision.SafetyTier.SURVIVAL end
+    -- Quiet-time wound care is a chore: if it cannot start, the companion
+    -- simply carries on following or working.
+    if kind == "medical" and type(detail) == "table" and detail.mode == "wound_care" then
+        return Decision.SafetyTier.ROUTINE
+    end
+    if tacticalDecisionKinds[kind] then return Decision.SafetyTier.TACTICAL end
+    if kind == "faction" and type(detail) == "table"
+        and (detail.mode == "hostile" or detail.mode == "bandit_human") then
+        return Decision.SafetyTier.SURVIVAL
+    end
+    if idleDecisionKinds[kind] then return Decision.SafetyTier.IDLE end
+    return Decision.SafetyTier.ROUTINE
+end
+
+local function U()
+    return SC.GameplayUtil
+end
+
+local function stateFor(actor, runtime)
+    local utility = U()
+    local rootRuntime = utility.actorState(actor, runtime)
+    rootRuntime.decision = rootRuntime.decision or {}
+    states[actor] = rootRuntime.decision
+    return rootRuntime.decision, rootRuntime
+end
+
+local function commandsFor(actor)
+    if SC.Commands and (type(SC.Commands.effective) == "function"
+        or type(SC.Commands.peek) == "function") then
+        local reader = type(SC.Commands.effective) == "function"
+            and SC.Commands.effective or SC.Commands.peek
+        local ok, value = pcall(reader, actor)
+        if ok and type(value) == "table" then
+            if SC.ExpeditionPrototype and SC.ExpeditionPrototype.isMember(actor) then
+                local missionOrder = {}
+                for key, entry in pairs(value) do missionOrder[key] = entry end
+                if type(SC.ExpeditionPrototype.effectiveDoctrineFor) == "function" then
+                    missionOrder = SC.ExpeditionPrototype.effectiveDoctrineFor(
+                        actor, missionOrder)
+                end
+                local follower = SC.ExpeditionPrototype.isFollower(actor)
+                local expedition = SC.ExpeditionPrototype.current()
+                local searching = SC.ExpeditionPrototype.testSearchFor(actor)
+                    and expedition and expedition.scout
+                    and expedition.scout.phase == "searching"
+                local regroup = follower and expedition
+                    and expedition.cohesionHold ~= nil
+                missionOrder.order = regroup and "regroup"
+                    or follower and not searching and "follow" or "stay"
+                if follower then
+                    missionOrder.followDistance =
+                        SC.ExpeditionPrototype.followDistanceFor(actor)
+                            or missionOrder.followDistance
+                    missionOrder.expeditionRoad =
+                        SC.ExpeditionPrototype.roadFormationFor(actor)
+                end
+                missionOrder.expeditionCohesionHold = regroup == true
+                missionOrder.anchor = nil
+                missionOrder.scavenge = SC.ExpeditionPrototype.testSearchFor(actor)
+                missionOrder.scavengeTargetContainer =
+                    SC.ExpeditionPrototype.testSearchTargetFor(actor)
+                missionOrder.scavengeRequestedCategory =
+                    SC.ExpeditionPrototype.testSearchCategoryFor(actor)
+                missionOrder.scavengeMissionId =
+                    SC.ExpeditionPrototype.testSearchMissionIdFor(actor)
+                missionOrder.scavengeSite =
+                    SC.ExpeditionPrototype.searchSiteFor(actor)
+                missionOrder.scavengeSiteRadius =
+                    SC.ExpeditionPrototype.searchSiteRadiusFor(actor)
+                missionOrder.tacticalTarget = nil
+                missionOrder.pendingInteraction = nil
+                local waypoint = SC.ExpeditionPrototype.testWaypointFor(actor)
+                local phase = expedition and expedition.scout
+                    and expedition.scout.phase or nil
+                -- A route briefly has no staged waypoint while its leader
+                -- replans or waits for the tail. Keep the squad travelling so
+                -- followers do not start indoor downtime in that gap.
+                missionOrder.expeditionMoving =
+                    SC.ExpeditionPrototype.testWaypointActiveFor(actor)
+                    or phase == "outbound" or phase == "inbound"
+                    or phase == "searching" or phase == "observing"
+                    or phase == "awaiting_player"
+                if waypoint ~= nil then
+                    missionOrder.order = "move_to"
+                    missionOrder.moveMode = "walk"
+                    missionOrder.tacticalTarget = waypoint
+                    missionOrder.doorBashAsLastResort = true
+                end
+                if type(SC.ExpeditionPrototype.supportActiveFor) == "function"
+                    and SC.ExpeditionPrototype.supportActiveFor(actor) then
+                    missionOrder.scavenge = false
+                    missionOrder.expeditionMoving = true
+                    missionOrder.combatMode = "defensive"
+                    local support = SC.ExpeditionPrototype.supportTargetFor(actor)
+                    if support and U().distance(actor, support) > 2.5 then
+                        missionOrder.order = "move_to"
+                        missionOrder.moveMode = "run"
+                        missionOrder.tacticalTarget = support
+                    else
+                        missionOrder.order = "stay"
+                        missionOrder.tacticalTarget = nil
+                    end
+                end
+                return missionOrder
+            end
+            return value
+        end
+    end
+    return {
+        recruited = false,
+        order = "wander",
+        followDistance = U().config("followDistance") or 3,
+        moveMode = "walk",
+        scavenge = false,
+        combatMode = "defensive",
+        combatDoctrine = "close_defense",
+        rideWithPlayer = true,
+    }
+end
+
+local function commandMoveMode(commands, player)
+    local requested = commands and commands.moveMode or "walk"
+    if SC.Positioning and type(SC.Positioning.resolveMoveMode) == "function" then
+        return SC.Positioning.resolveMoveMode(requested, player)
+    end
+    return requested == "copy" and "walk" or requested
+end
+
+local function medicalAssessment(actor, runtime, maxAgeMs)
+    local medical = SC.Medical
+    local assess = medical and (medical.assessCached or medical.assess)
+    if type(assess) == "function" then
+        local ok, assessment = pcall(assess, actor, runtime, maxAgeMs)
+        if ok and type(assessment) == "table" then return assessment end
+    end
+    return {
+        health = U().nativeHealth(actor), alive = not U().isDead(actor),
+        critical = false, needsBandage = false, downed = false,
+    }
+end
+
+local function actionableMedical(actor, assessment, allowRecovery)
+    if SC.Medical and type(SC.Medical.hasActionableNeed) == "function" then
+        return SC.Medical.hasActionableNeed(actor, assessment, allowRecovery)
+    end
+    return assessment and (allowRecovery == true and assessment.downed == true
+        or assessment.needsBandage == true or (tonumber(assessment.bleedingCount) or 0) > 0
+        or assessment.critical == true and (assessment.needsBandageChange == true
+            or (tonumber(assessment.dirtyBandages) or 0) > 0))
+end
+
+local function rescueNeed(actor, player, snapshot, avoidPlayer)
+    local performance = SC.Performance
+    local started = performance and type(performance.preciseNowMs) == "function"
+        and performance.preciseNowMs() or nil
+    local candidates = {}
+    local function livingPatient(patient, assessment)
+        if SC.Medical and type(SC.Medical.isLivingPatient) == "function" then
+            return SC.Medical.isLivingPatient(patient, assessment)
+        end
+        return assessment and assessment.alive ~= false and not U().isDead(patient)
+            and (tonumber(assessment.health) or U().nativeHealth(patient)) > 0
+            and assessment.terminalKnox ~= true
+    end
+    local assess = SC.Medical and (SC.Medical.assessCached or SC.Medical.assess)
+    if player and not avoidPlayer and type(assess) == "function"
+        and (not SC.Medical or type(SC.Medical.sameCareGroup) ~= "function"
+            or SC.Medical.sameCareGroup(actor, player)) then
+        local ok, assessment = pcall(assess, player, nil, 500)
+        if ok and assessment and livingPatient(player, assessment)
+            and (actionableMedical(player, assessment, false)
+                or (tonumber(assessment.openWounds) or 0) > 0)
+            and not (SC.Medical.playerSelfCareActive
+                and SC.Medical.playerSelfCareActive(player)) then
+            local splintCount = assessment.needsSplint
+                and SC.Medical.hasSplint and SC.Medical.hasSplint(actor)
+                and (tonumber(assessment.unsplintedFractures) or 1) or 0
+            local treatable = (tonumber(assessment.bleedingCount) or 0) > 0
+                or splintCount > 0
+                or (tonumber(assessment.openWounds) or 0) > 0
+                or assessment.critical and assessment.needsBandageChange
+            local playerScore = treatable and ((assessment.critical and 35 or 0)
+                + (assessment.bleedingCount or 0) * 22
+                + (assessment.openWounds or 0) * 14
+                + (assessment.downed and 45 or 0)
+                + splintCount * 28) or 0
+            if playerScore > 0 then
+                candidates[#candidates + 1] = { score = playerScore, target = player }
+            end
+        end
+    end
+    if snapshot and type(snapshot.allies) == "table" then
+        for _, ally in ipairs(snapshot.allies) do
+            local stillAllied = true
+            if ally.relationship ~= nil and SC.Factions
+                and type(SC.Factions.areAlliesBetween) == "function" then
+                local ok, value = pcall(SC.Factions.areAlliesBetween,
+                    actor, ally.actor, player)
+                stillAllied = ok and value == true
+            end
+            if stillAllied and (not SC.Medical
+                or type(SC.Medical.sameCareGroup) ~= "function"
+                or SC.Medical.sameCareGroup(actor, ally.actor)) then
+                local assessment = medicalAssessment(ally.actor, nil, 500)
+                local splintCount = assessment.needsSplint
+                    and SC.Medical and SC.Medical.hasSplint
+                    and SC.Medical.hasSplint(actor)
+                    and (tonumber(assessment.unsplintedFractures) or 1) or 0
+                local treatable = (tonumber(assessment.bleedingCount) or 0) > 0
+                    or splintCount > 0
+                    or (tonumber(assessment.openWounds) or 0) > 0
+                    or assessment.critical and assessment.needsBandageChange
+                local allyScore = treatable and ((assessment.critical and 25 or 0)
+                    + (assessment.bleedingCount or 0) * 18
+                    + (assessment.openWounds or 0) * 12
+                    + (assessment.downed and 40 or 0)
+                    + splintCount * 25) or 0
+                if livingPatient(ally.actor, assessment)
+                    and (actionableMedical(ally.actor, assessment, false)
+                        or (tonumber(assessment.openWounds) or 0) > 0)
+                    and allyScore > 0 then
+                    candidates[#candidates + 1] = { score = allyScore, target = ally.actor }
+                end
+            end
+        end
+    end
+    if started and type(performance.record) == "function" then
+        performance.record("decision.rescue", nil,
+            math.max(0, performance.preciseNowMs() - started))
+    end
+    -- A casualty is not an actionable rescue for a helper with no dressing or
+    -- splint. Otherwise medical wins repeatedly and treat() can only refuse it.
+    -- The most urgent patient this helper can actually treat wins: a critical
+    -- player who needs a splint it lacks must not hide a bleeding ally it can
+    -- dress. Ties keep the player first, then the snapshot's ally order.
+    for index, candidate in ipairs(candidates) do candidate.order = index end
+    table.sort(candidates, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        return a.order < b.order
+    end)
+    local canTreat = SC.Medical and type(SC.Medical.canTreatPatient) == "function"
+        and SC.Medical.canTreatPatient or nil
+    for _, candidate in ipairs(candidates) do
+        if canTreat == nil or canTreat(actor, candidate.target) == true then
+            return candidate.score, candidate.target
+        end
+    end
+    return 0, nil
+end
+
+-- A noise nobody here made, loud enough and recent enough to be worth a word.
+-- One remark per companion per cooldown, and the nearest such noise wins, so a
+-- street full of alarms does not become a street full of commentary.
+local function noisyEventFor(actor, snapshot, state, current)
+    if type(snapshot) ~= "table" or type(snapshot.sounds) ~= "table" then return nil end
+    if SC.Senses == nil or type(SC.Senses.noiseTopic) ~= "function" then return nil end
+    local memory = tonumber((U().config("noiseRemarkMemoryMs"))) or 4000
+    local best, bestDistanceSq, bestTopic
+    for _, sound in ipairs(snapshot.sounds) do
+        local topic = SC.Senses.noiseTopic(sound.kind)
+        if topic ~= nil and sound.source ~= actor
+            and (tonumber(sound.ageMs) or math.huge) <= memory then
+            local distanceSq = tonumber(sound.distanceSq) or math.huge
+            if best == nil or distanceSq < bestDistanceSq then
+                best, bestDistanceSq, bestTopic = sound, distanceSq, topic
+            end
+        end
+    end
+    if best == nil then return nil end
+    local soundTime = tonumber(best.time) or (current - (tonumber(best.ageMs) or 0))
+    if soundTime <= (tonumber(state.lastNoiseRemarkFor) or -math.huge) then return nil end
+    return best, bestTopic, soundTime
+end
+
+-- Optional speech, so it waits for anything that actually matters.
+function Decision.remarkOnNoise(actor, snapshot, state, current)
+    if type(state) ~= "table" then return false, "no_state" end
+    if (tonumber(snapshot and snapshot.immediateCount) or 0) > 0 then
+        return false, "busy_fighting"
+    end
+    local cooldown = tonumber((U().config("noiseRemarkCooldownMs"))) or 45000
+    if current < (tonumber(state.nextNoiseRemarkAt) or 0) then return false, "noise_remark_cooldown" end
+    local sound, topic, soundTime = noisyEventFor(actor, snapshot, state, current)
+    if sound == nil then return false, "no_noise_worth_remarking" end
+    if SC.Dialogue == nil or type(SC.Dialogue.say) ~= "function" then
+        return false, "speech_unavailable"
+    end
+    local spoken = SC.Dialogue.say(actor, topic, nil, nil, { snapshot = snapshot })
+    if spoken ~= true then return false, "noise_remark_declined" end
+    state.lastNoiseRemarkFor = soundTime
+    state.nextNoiseRemarkAt = current + cooldown
+    return true, topic
+end
+
+local function recentSharedAlert(actor, snapshot, state, current)
+    if type(snapshot) ~= "table" or type(snapshot.sounds) ~= "table" then return nil end
+    local newest
+    for _, sound in ipairs(snapshot.sounds) do
+        local soundTime = tonumber(sound.time) or (current - (tonumber(sound.ageMs) or 0))
+        if sound.kind == "companion_alert" and sound.source ~= actor
+            and current - soundTime <= (U().config("sharedAlertMemoryMs") or 5000)
+            and soundTime > (state.lastHandledAlertTime or -math.huge)
+            and (not newest or soundTime > (tonumber(newest.time) or -math.huge)) then
+            newest = sound
+        end
+    end
+    return newest
+end
+
+-- Followers keep formation for a moment after the leader stops. Idle
+-- downtime, opportunistic scavenging and voluntary idle moods wait until the
+-- leader has stood still (no movement input, no position change) for
+-- followSettleMs, plus a stable per-companion share of followSettleStaggerMs
+-- so a group does not break formation in one beat.
+local leaderStillness = setmetatable({}, { __mode = "k" })
+
+local function leaderSettled(actor, player, current)
+    if player == nil or current == nil then return false end
+    local utility = U()
+    local record = leaderStillness[player]
+    if not record then
+        record = {}
+        leaderStillness[player] = record
+    end
+    local x, y, z = utility.position(player)
+    local moving, movingOk = utility.call(player, "isMoving")
+    local shifted = x ~= nil and record.x ~= nil
+        and ((x - record.x) * (x - record.x) + (y - record.y) * (y - record.y) > 0.04
+            or math.floor(z or 0) ~= math.floor(record.z or 0))
+    if x == nil or (movingOk and moving == true) or shifted then
+        record.since = nil
+    elseif record.since == nil then
+        record.since = current
+    end
+    record.x, record.y, record.z = x, y, z
+    if record.since == nil then return false end
+    local settle = tonumber((utility.config("followSettleMs"))) or 2500
+    local stagger = math.floor(math.max(0, tonumber((utility.config("followSettleStaggerMs"))) or 1500))
+    if stagger > 0 then
+        settle = settle + math.abs(tonumber((utility.stableHash(
+            tostring(utility.idOf(actor)) .. ":follow-settle"))) or 0) % stagger
+    end
+    return current - record.since >= settle
+end
+
+-- True for a short window after this companion's combat pass found no target
+-- it may engage (every visible zombie out of reach or not credible for the
+-- doctrine).
+local function combatRecentlyTargetless(actor, current)
+    local combat = SC.Combat
+    if type(combat) ~= "table" or type(combat.peek) ~= "function" or current == nil then
+        return false
+    end
+    local ok, record = pcall(combat.peek, actor)
+    local at = ok and type(record) == "table" and tonumber(record.noCredibleAt) or nil
+    return at ~= nil and current >= at
+        and current - at < (tonumber((U().config("combatNoTargetFollowMs"))) or 1500)
+end
+
+-- Every threat in view is one combat just judged it may not engage, and
+-- nothing is close, attacking, human or surrounding (SCCombat owns this).
+local function onlyUnreachableThreats(actor, snapshot, current)
+    local combat = SC.Combat
+    if type(combat) ~= "table" or type(combat.onlyUnreachableThreats) ~= "function" then
+        return false
+    end
+    local ok, result = pcall(combat.onlyUnreachableThreats, actor, snapshot, current)
+    return ok and result == true
+end
+
+local function evaluate(actor, player, snapshot, commands, assessment, needs, state, current)
+    local candidates = {}
+    local downtimeAdded = false
+    local function add(kind, score, emergency, detail)
+        -- Sol: Living Fellows keeps only the instincts (fight, flee, heal,
+        -- follow, the player's own move orders). Its own choices - routines,
+        -- idles, base work, scavenging, social scenes - are not candidates;
+        -- Sol Mind or the order window decides those.
+        do
+            local A = rawget(_G, "SolAuthority")
+            if type(A) == "table" and type(A.allowsDecision) == "function" then
+                local okA, allowed = pcall(A.allowsDecision, actor, kind, detail)
+                if okA and allowed == false then return end
+            end
+        end
+        if emergency ~= true then
+            if SC.Personality and type(SC.Personality.adjustDecision) == "function" then
+                score = score + SC.Personality.adjustDecision(commands.personalityProfile,
+                    { kind = kind, score = score }, {
+                        rescue = type(detail) == "table" and detail.rescue == true,
+                        indoors = type(snapshot) == "table" and snapshot.indoors == true,
+                    })
+            end
+            if SC.Objectives and type(SC.Objectives.decisionBonus) == "function" then
+                score = score + SC.Objectives.decisionBonus(commands.objectives, kind)
+            end
+            if SC.Autonomy and type(SC.Autonomy.decisionBonus) == "function" then
+                score = score + SC.Autonomy.decisionBonus(actor, kind)
+            end
+        end
+        -- Stable decision identity (review 2.4): `kind` is the category used for
+        -- interrupt/cancel policy; `key` distinguishes candidates that share a kind
+        -- but are different decisions (e.g. self- vs rescue-medicine, or rescuing
+        -- different subjects), so hysteresis and fallback act on the exact decision.
+        local mode = type(detail) == "table" and detail.mode or nil
+        local targetId = type(detail) == "table" and detail.targetId or nil
+        local key = kind
+        if mode ~= nil then key = key .. ":" .. tostring(mode) end
+        if targetId ~= nil then key = key .. ":" .. tostring(targetId) end
+        candidates[#candidates + 1] = {
+            kind = kind,
+            key = key,
+            score = score,
+            emergency = emergency == true,
+            safetyTier = safetyTierFor(kind, emergency, detail),
+            detail = detail,
+        }
+        candidates[#candidates].safetyRank = safetyRank[candidates[#candidates].safetyTier]
+        if kind == "downtime" then downtimeAdded = true end
+    end
+    -- Untreated bleeding: no chores until the wound is dressed.
+    local bleeding = (tonumber(assessment.bleedingCount) or 0) > 0
+    local selfMedicalNeed = actionableMedical(actor, assessment, true)
+    local selfCareBlocked = selfMedicalNeed and SC.Medical
+        and type(SC.Medical.selfCareBlocker) == "function"
+        and SC.Medical.selfCareBlocker(actor) or nil
+    if SC.Medical and type(SC.Medical.isReceivingCare) == "function"
+        and SC.Medical.isReceivingCare(actor, current) then
+        -- The player is bandaging this companion: hold still for it.
+        add("medical", 150, true, { mode = "receiving_care" })
+    end
+    if selfMedicalNeed and (assessment.downed == true or selfCareBlocked == nil)
+        and (assessment.needsSplint ~= true
+            or (tonumber(assessment.bleedingCount) or 0) > 0
+            or assessment.critical and assessment.needsBandageChange
+            or SC.Medical and SC.Medical.hasSplint
+                and SC.Medical.hasSplint(actor))
+        and (not SC.Medical or type(SC.Medical.canTreatNow) ~= "function"
+            or SC.Medical.canTreatNow(actor, snapshot)) then
+        if assessment.downed or (assessment.health > 0
+            and assessment.health <= (U().config("downedHealth") or 18)) then
+            add("medical", 140, true)
+        else
+            add("medical", 96 + (assessment.bleedingCount or 0) * 8,
+                (tonumber(assessment.bleedingCount) or 0) > 0)
+        end
+    end
+    -- A bleeding companion that cannot dress the wound itself stays with the
+    -- leader and asks for a bandage. When self-care fails the decision falls
+    -- back to this instead of scavenging or washing while it bleeds out.
+    if bleeding and commands.recruited and player
+        and selfCareBlocked ~= nil
+        and selfCareBlocked ~= "patient_already_treated" then
+        add("follow", 90, false, { mode = "seek_care" })
+    end
+    local care = type(commands.care) == "table" and commands.care or {}
+    local avoidsPlayer = (tonumber(care.playerStrikes) or 0) >= 2
+        or care.playerCeasefire == true or care.playerHostile == true
+    if (snapshot.immediateCount or 0) == 0
+        and (not SC.Medical or type(SC.Medical.canRescueNow) ~= "function"
+            or SC.Medical.canRescueNow(actor, snapshot)) then
+        local rescue, rescueTarget = rescueNeed(actor, player, snapshot, avoidsPlayer)
+        if rescue > 0 then
+            -- Rescue medicine is a distinct decision identity from self-medicine (and
+            -- from rescuing a different subject): carry the mode/target so hysteresis
+            -- and fallback treat "patch myself", "patch the player" and "patch ally X"
+            -- as separate candidates that can fall back to one another (review 2.4).
+            add("medical", 64 + rescue, rescue >= 40, {
+                rescue = true,
+                mode = "rescue",
+                targetId = rescueTarget and U().idOf(rescueTarget) or nil,
+            })
+        end
+    end
+
+    local threatCount = snapshot.threatCount or #(snapshot.threats or {})
+    local immediate = snapshot.immediateCount or #(snapshot.immediateAttackers or {})
+    -- After a second player hit, give the companion room even if its current
+    -- order is to work or stay. Immediate danger and urgent care still win.
+    if commands.recruited and player and (tonumber(care.playerStrikes) or 0) >= 2
+        and care.playerHostile ~= true and threatCount == 0 and immediate == 0
+        and (snapshot.humanThreat == nil)
+        and U().sameFloor(actor, player) and U().distance(actor, player) < 7 then
+        add("retreat", 125, true, { mode = "player_avoid" })
+    end
+    if threatCount == 0 and SC.Positioning
+        and type(SC.Positioning.activeConversation) == "function"
+        and SC.Positioning.activeConversation(actor) then
+        -- A direct player request must outlast routine scavenging, logistics,
+        -- and formation work while retaining emergency survival priority.
+        add("conversation", 94, false)
+    end
+    -- Quiet-time wound care: dress a wound that stopped bleeding before anyone
+    -- covered it, or change a soiled dressing, once nothing is around and a
+    -- follower's leader has stopped. Offered only when there is something to
+    -- dress it with, so a companion without supplies never stands waiting.
+    local careDue = (tonumber(assessment.openWounds) or 0) > 0
+        or (tonumber(assessment.dirtyBandages) or 0) > 0
+    if careDue and not bleeding and threatCount == 0 and immediate == 0
+        and snapshot.humanThreat == nil
+        and (commands.order ~= "follow" or leaderSettled(actor, player, current))
+        and SC.Medical and type(SC.Medical.canReplaceDirtyBandage) == "function"
+        and SC.Medical.canReplaceDirtyBandage(actor) == true then
+        add("medical", 60, false, { mode = "wound_care" })
+    end
+    if SC.InfectionCrisis and type(SC.InfectionCrisis.intentFor) == "function" then
+        local crisis = SC.InfectionCrisis.intentFor(actor, player, snapshot)
+        if crisis and crisis.priority and crisis.priority > 0 then
+            add("infection_crisis", crisis.priority, false, crisis)
+        end
+    end
+    if type(needs) == "table" and (needs.active or needs.hungry or needs.thirsty
+        or needs.peeDue)
+        and threatCount == 0 then
+        local pressure = math.max(needs.hunger or 0, needs.thirst or 0)
+        local priority = needs.active and 112 or (62 + pressure * 42)
+        if needs.peeDue then priority = math.max(priority, needs.peeOverdue and 86 or 68) end
+        add("needs", priority, needs.emergency)
+    end
+    local humanThreat = type(snapshot) == "table" and snapshot.humanThreat or nil
+    if threatCount > 0 or humanThreat then
+        local combatScore = 72 + immediate * 17
+            + Decision._engagementPressure(snapshot) * 5
+        local doctrine = commands.combatDoctrine
+            or (commands.combatMode == "aggressive" and "weapons_free")
+            or (commands.combatMode == "passive" and "stealth")
+            or "close_defense"
+        if doctrine == "weapons_free" then combatScore = combatScore + 14 end
+        if doctrine == "stealth" and immediate == 0
+            and (snapshot.player and snapshot.player.danger or 0) == 0 then
+            combatScore = 30
+        elseif doctrine == "close_defense" and immediate == 0
+            and (tonumber(snapshot.closeThreatCount) or 0) == 0
+            and (snapshot.player and snapshot.player.immediateThreats or 0) == 0 then
+            combatScore = 28
+        end
+        if humanThreat and threatCount == 0 then
+            combatScore = humanThreat.visible == true and 106 or 84
+        end
+        -- Critical health still makes real danger urgent, even when there is no
+        -- wound medicine can treat. Combat retains its health-aware retreat logic.
+        if assessment.critical then combatScore = math.max(combatScore, 112) end
+        -- A follower whose last combat pass found nothing it may engage keeps
+        -- moving with its leader, and a companion with its own task (stay,
+        -- guard, base duty, work) carries on with it. Combat re-checks on a
+        -- short cadence, and anything close, immediate or human wins at once.
+        local ownTask = ownTaskOrders[commands.order] == true
+        if commands.recruited
+            and (commands.order == "follow" or commands.order == "regroup" or ownTask)
+            and immediate == 0 and not humanThreat and snapshot.encircled ~= true
+            and not assessment.critical
+            and (tonumber(snapshot.closeThreatCount) or 0) == 0
+            and (snapshot.player and snapshot.player.immediateThreats or 0) == 0
+            and combatRecentlyTargetless(actor, current) then
+            combatScore = math.min(combatScore, ownTask and 20 or 28)
+        end
+        add("combat", combatScore,
+            assessment.critical or immediate > 0 or snapshot.encircled
+                or humanThreat and humanThreat.visible == true,
+            threatCount == 0 and humanThreat and {
+                mode = "human_hostile",
+                targetId = humanThreat.id,
+                humanThreat = humanThreat,
+            } or nil)
+        -- Critical health alone made this an emergency: nothing is close,
+        -- attacking, human or surrounding the companion.
+        local added = candidates[#candidates]
+        if added and added.kind == "combat" then
+            added.criticalOnly = assessment.critical == true and immediate == 0
+                and snapshot.encircled ~= true
+                and not (humanThreat and humanThreat.visible == true)
+                and (tonumber(snapshot.closeThreatCount) or 0) == 0
+                and (snapshot.player and snapshot.player.immediateThreats or 0) == 0
+        end
+    end
+
+    if commands.recruited and commands.temporaryStay ~= true
+        and SC.Autonomy and type(SC.Autonomy.intentFor) == "function" then
+        local okay, intent = pcall(SC.Autonomy.intentFor, actor, player, snapshot, commands)
+        -- A follower's voluntary idle moments (joy, restless or supply idles,
+        -- ordinary rituals) also wait for the leader to settle. Episodes, grief
+        -- and urgent ritual recovery are never held back.
+        local voluntary = okay and type(intent) == "table"
+            and (intent.kind == "joy_response" or intent.kind == "purposeful_idle"
+                or (intent.kind == "ritual" and (tonumber(intent.priority) or 0) < 84))
+        if okay and type(intent) == "table" and tonumber(intent.priority)
+            and not (voluntary and bleeding)
+            and not (voluntary and commands.expeditionMoving)
+            and not (voluntary and commands.order == "follow"
+                and not leaderSettled(actor, player, current)) then
+            add(intent.kind, tonumber(intent.priority), false, intent)
+        end
+    end
+
+    local factionIntent
+    if not commands.recruited and SC.FactionBehavior
+        and type(SC.FactionBehavior.intentFor) == "function" then
+        local ok, value = pcall(SC.FactionBehavior.intentFor, actor, player, snapshot)
+        if ok and type(value) == "table" and tonumber(value.priority) then
+            factionIntent = value
+        end
+    end
+
+    -- A resident's carried planks and nails are household construction stock.
+    -- Generic companion logistics sees that weight as overload and otherwise
+    -- preempts the faction policy forever, repeatedly trying to pack/deposit the
+    -- exact materials the resident needs for barricade jobs.
+    if threatCount == 0 and factionIntent == nil and not bleeding
+        and SC.Logistics and type(SC.Logistics.status) == "function" then
+        local ok, load = pcall(SC.Logistics.status, actor)
+        -- Bag, clothing and packing chores wait for a following leader to
+        -- settle, like idle work; being overloaded does not.
+        if ok and load and load.shouldManage and commands.temporaryStay ~= true
+            and (load.overloaded or load.giftPending == true
+            or load.weaponReady == true
+            or not (commands.recruited and commands.order == "follow")
+            or leaderSettled(actor, player, current)) then
+            -- Overload beats routine follow/work, but never urgent medicine,
+            -- needs, retreat, or combat survival.
+            add("logistics", load.overloaded and 92
+                or (load.giftPending or load.weaponReady) and 82 or 74, false, load)
+        end
+    end
+
+    if factionIntent then
+        add("faction", tonumber(factionIntent.priority),
+            factionIntent.mode == "hostile" or factionIntent.mode == "bandit_human"
+                or factionIntent.mode == "pyromaniac_stay",
+            factionIntent)
+    end
+
+    if factionIntent then
+        -- Faction residents use their territorial policy and can never fall
+        -- through to the generic recruitable encounter state.
+    elseif not commands.recruited then
+        add("encounter", threatCount > 0 and 84 or 48, threatCount > 0)
+    else
+        local alert = threatCount == 0 and recentSharedAlert(actor, snapshot, state, current) or nil
+        if alert then
+            local closeRadius = U().config("sharedAlertCloseRadius") or 8
+            local distanceSq = tonumber(alert.distanceSq) or U().distanceSq(actor, alert)
+            add("alert", distanceSq <= closeRadius * closeRadius and 66 or 45, false, alert)
+        end
+        -- Retreat runs from something; with nothing in view the order
+        -- regroups on the leader instead of freezing without a direction.
+        local retreatFrom = threatCount > 0 or immediate > 0 or humanThreat ~= nil
+        if commands.order == "retreat" and retreatFrom then add("retreat", 122, true)
+        elseif commands.order == "retreat" or commands.order == "regroup" then
+            add("follow", 82, false)
+        elseif commands.order == "follow" then
+            local close = player and U().distance(actor, player)
+                <= math.max(3, (commands.followDistance or 3) + 1.5)
+            local passengerReading = threatCount == 0 and not bleeding
+                and SC.Downtime and type(SC.Downtime.canReadOnTrip) == "function"
+                and SC.Downtime.canReadOnTrip(actor, player)
+            -- Indoor downtime only once the leader has settled: a follower
+            -- still stepping into its slot keeps formation.
+            if passengerReading then
+                add("downtime", 85, false)
+                add("follow", 22, false)
+            elseif commands.expeditionMoving then
+                add("follow", 82, false)
+            elseif close and snapshot.indoors == true and not bleeding
+                and leaderSettled(actor, player, current) then
+                add("downtime", 52, false)
+                add("follow", 22, false)
+            else
+                add("follow", 48, false)
+            end
+        elseif commands.order == "stay" or commands.order == "guard" then
+            local anchor = type(commands.anchor) == "table" and U().loadedSquare(commands.anchor) or nil
+            local allowed = commands.order == "guard" and (U().config("guardRadius") or 5) or 0.7
+            local outside = anchor and U().distance(actor, anchor) > allowed
+            local patrolDue = commands.order == "guard" and (
+                state.guardPatrolTarget ~= nil or current >= (state.guardPatrolDue or 0))
+            if outside or patrolDue then add("tactical", 56, false) end
+            if not bleeding and not commands.expeditionMoving then
+                add("downtime", 30, false)
+            end
+        elseif commands.order == "move_to" or commands.order == "check_room"
+            or commands.order == "interact" or commands.order == "work" then
+            -- A player's explicit Move Here command is authoritative, including
+            -- when Sol is in combat or another emergency. Give it a distinct key
+            -- so selection can bypass routine autonomy and safety arbitration.
+            local movingToPlayerOrder = commands.order == "move_to"
+            local score = movingToPlayerOrder and 1000
+                or commands.order == "work" and 62 or 56
+            add("tactical", score, movingToPlayerOrder,
+                movingToPlayerOrder and { mode = "player_move" } or nil)
+        elseif commands.order == "base_duty" then
+            if not bleeding then add("base_work", 58, false) end
+            -- Sol, on a standing order: washing and sleep ahead of waiting for farm work, after treating and feeding herself
+            if not bleeding and type(SolAuthority) == "table" and type(SolAuthority.restWanted) == "function"
+                and SolAuthority.restWanted(actor) then
+                add("downtime", 72, false)
+            end
+        end
+        if threatCount == 0 and not bleeding
+            and SC.ExpeditionPrototype
+            and type(SC.ExpeditionPrototype.fishingRequestFor) == "function" then
+            local request = SC.ExpeditionPrototype.fishingRequestFor(actor)
+            if request then add("fishing", 86, false, request) end
+        end
+        -- A companion with its own task (an expedition leader searching its
+        -- site) keeps looting while combat has just judged every zombie in
+        -- view out of reach. Encounter still refuses under attack or pressure.
+        local lootBesideUnreachable = ownTaskOrders[commands.order] == true
+            and onlyUnreachableThreats(actor, snapshot, current)
+        if commands.scavenge and (threatCount == 0 or lootBesideUnreachable)
+            and not bleeding
+            and commands.order ~= "regroup"
+            and commands.order ~= "retreat" then
+            local scavengeScore = 32
+            local ongoing
+            if SC.Encounter and type(SC.Encounter.peek) == "function" then
+                local ok, value = pcall(SC.Encounter.peek, actor)
+                if ok and type(value) == "table" then ongoing = value end
+            end
+            if ongoing and (ongoing.task or ongoing.selectionJob or ongoing.containerSearch) then
+                -- Once a bounded search/loot transaction has begun, let it reach
+                -- its visual/verified conclusion unless a real need or danger wins.
+                scavengeScore = 76
+            elseif commands.order == "follow" and player then
+                local close = U().distance(actor, player)
+                    <= math.max(3, (commands.followDistance or 3) + 1.5)
+                if close and leaderSettled(actor, player, current) then
+                    -- Opportunistic looting beats a no-op formation hold once the
+                    -- leader has settled, but never pulls a follower off a moving
+                    -- or just-stopped leader.
+                    scavengeScore = 58
+                end
+            elseif commands.order == "stay" or commands.order == "guard" then
+                scavengeScore = 40
+            end
+            add("scavenge", scavengeScore, false)
+        end
+        if threatCount == 0 and not downtimeAdded and not bleeding
+            and not commands.expeditionMoving
+            and (commands.order ~= "follow" or snapshot.indoors == true) then
+            add("downtime", 10, false)
+        end
+    end
+    U().sortByScoreDescending(candidates)
+    return candidates
+end
+
+-- Read-only test seam (review 2.4): expose the scored candidate list so tests can
+-- assert decision identity (`key`) without driving the whole update/delegate path.
+function Decision._evaluateForTests(actor, player, snapshot, commands, assessment,
+        needs, state, current)
+    return evaluate(actor, player, snapshot, commands, assessment, needs,
+        state or {}, current or 0)
+end
+
+local function selectWithHysteresis(state, candidates, now)
+    local best = candidates[1]
+    if not best then return nil end
+    -- An explicit player Move Here order is a direct command, not an autonomy
+    -- suggestion: select it before any safety, combat, or routine candidate.
+    for _, candidate in ipairs(candidates) do
+        if candidate.kind == "tactical" and type(candidate.detail) == "table"
+            and candidate.detail.mode == "player_move" then
+            return candidate
+        end
+    end
+    for _, candidate in ipairs(candidates) do
+        if candidate.emergency then return candidate end
+    end
+    -- Personality, inspiration, and goal bonuses can lift a routine chore
+    -- above the fixed Talk score. A pending player request takes that routine
+    -- slot until it answers or times out, while tactical/survival work wins.
+    if (best.safetyRank or 0) <= safetyRank[Decision.SafetyTier.ROUTINE] then
+        for _, candidate in ipairs(candidates) do
+            if candidate.kind == "conversation" then return candidate end
+        end
+    end
+    if state.currentKey and now < (state.minimumUntil or 0) then
+        local currentCandidate
+        for _, candidate in ipairs(candidates) do
+            if candidate.key == state.currentKey then currentCandidate = candidate break end
+        end
+        if currentCandidate and (currentCandidate.safetyRank or 0) >= (best.safetyRank or 0)
+            and best.score < currentCandidate.score + (U().config("decisionHysteresis") or 8) then
+            return currentCandidate
+        end
+    end
+    return best
+end
+Decision._selectWithHysteresisForTests = selectWithHysteresis
+
+-- Sol: a driver (or a car Sol Mind told her to stay in) is not emptied by the
+-- follow/exit policy because the player stepped out. Only an explicit order does.
+local function solKeepsSeat(actor, vehicle)
+    local A = rawget(_G, "SolAuthority")
+    if type(A) ~= "table" or type(A.keepsSeat) ~= "function" then return false, nil end
+    local ok, keep, why = pcall(A.keepsSeat, actor, vehicle)
+    if ok and keep == true then return true, why end
+    if type(A.ownsCarFlow) == "function" then
+        local okF, owns, whyF = pcall(A.ownsCarFlow, actor)
+        if okF and owns == true then return true, whyF end
+    end
+    return false, nil
+end
+
+local function enforceVehicleExitPolicy(actor, player, commands)
+    local utility = U()
+    local actorVehicle, actorVehicleOk = utility.call(actor, "getVehicle")
+    if not actorVehicleOk or actorVehicle == nil then return nil end
+    if SC.ExpeditionCar and SC.ExpeditionCar.ownsSeat(actor, actorVehicle) then
+        return true, "expedition_car_seat"
+    end
+    do
+        local keep, why = solKeepsSeat(actor, actorVehicle)
+        if keep then return true, why end
+    end
+    local playerVehicle, playerVehicleOk = utility.call(player, "getVehicle")
+    local mustExit = commands.rideWithPlayer == false
+        or not playerVehicleOk or playerVehicle == nil or playerVehicle ~= actorVehicle
+    if not mustExit then return nil end
+    if not SC.Vehicle or type(SC.Vehicle.isStationary) ~= "function" then
+        return false, "vehicle_adapter_unavailable"
+    end
+    local stopped, stopReason = SC.Vehicle.isStationary(actorVehicle)
+    if stopped ~= true then
+        return true, stopReason == "vehicle is moving"
+            and "waiting_for_safe_exit" or "vehicle_speed_unavailable"
+    end
+    if type(SC.Vehicle.cancelTransaction) == "function" then
+        SC.Vehicle.cancelTransaction(actor, "vehicle_exit_policy_changed")
+    end
+    if not utility.move(actor, "walk", {
+        action = "exit_vehicle",
+        vehicle = actorVehicle,
+        policyDisabled = commands.rideWithPlayer == false,
+        followPlayer = playerVehicle ~= actorVehicle,
+        transactional = true,
+        restoreByDoor = true,
+    }) then return false, "policy_exit_vehicle_rejected" end
+    return true, "exiting_vehicle"
+end
+
+local function doFollow(actor, player, rootRuntime, commands, snapshot)
+    local utility = U()
+    if not player or not utility.isValidActor(player) then return false, "player_unavailable" end
+    local playerVehicle, playerVehicleOk = utility.call(player, "getVehicle")
+    local actorVehicle, actorVehicleOk = utility.call(actor, "getVehicle")
+    if playerVehicleOk and playerVehicle and actorVehicleOk and actorVehicle == playerVehicle then
+        if commands.rideWithPlayer ~= false then return true, "riding_with_player" end
+        if not SC.Vehicle or type(SC.Vehicle.isStationary) ~= "function" then
+            return false, "vehicle_adapter_unavailable"
+        end
+        local stopped, stopReason = SC.Vehicle.isStationary(actorVehicle)
+        if stopped ~= true then
+            return true, stopReason == "vehicle is moving"
+                and "waiting_for_safe_exit" or "vehicle_speed_unavailable"
+        end
+        if not utility.move(actor, "walk", {
+            action = "exit_vehicle",
+            vehicle = actorVehicle,
+            policyDisabled = true,
+            transactional = true,
+            restoreByDoor = true,
+        }) then return false, "policy_exit_vehicle_rejected" end
+        return true, "exiting_vehicle"
+    elseif playerVehicleOk and playerVehicle and actorVehicleOk and actorVehicle ~= nil then
+        do
+            local keep, why = solKeepsSeat(actor, actorVehicle)
+            if keep then return true, why end
+        end
+        if not SC.Vehicle or type(SC.Vehicle.isStationary) ~= "function" then
+            return false, "vehicle_adapter_unavailable"
+        end
+        local stopped, stopReason = SC.Vehicle.isStationary(actorVehicle)
+        if stopped ~= true then
+            return true, stopReason == "vehicle is moving"
+                and "waiting_for_safe_exit" or "vehicle_speed_unavailable"
+        end
+        if not utility.move(actor, "walk", {
+            action = "exit_vehicle",
+            vehicle = actorVehicle,
+            followPlayer = true,
+            transactional = true,
+            restoreByDoor = true,
+        }) then return false, "wrong_vehicle_exit_rejected" end
+        return true, "exiting_wrong_vehicle"
+    elseif playerVehicleOk and playerVehicle then
+        do
+            local A = rawget(_G, "SolAuthority")
+            if type(A) == "table" and type(A.ownsCarFlow) == "function" then
+                local okA, owns, why = pcall(A.ownsCarFlow, actor)
+                if okA and owns == true then return true, why end
+            end
+            if type(A) == "table" and type(A.heldOut) == "function" then
+                local okH, held, heldWhy = pcall(A.heldOut, actor, player)
+                if okH and held == true then
+                    if not utility.stop(actor) then return false, "ordered_out_stop_rejected" end
+                    return true, heldWhy
+                end
+            end
+        end
+        if not SC.Vehicle or type(SC.Vehicle.preflightBoard) ~= "function"
+            or type(SC.Vehicle.boardingSquares) ~= "function"
+            or type(SC.Vehicle.beginBoarding) ~= "function"
+            or type(SC.Vehicle.isStationary) ~= "function"
+            or type(SC.Vehicle.assignmentFor) ~= "function" then
+            return false, "vehicle_adapter_unavailable"
+        end
+        if commands.rideWithPlayer == false then
+            if type(SC.Vehicle.cancelTransaction) == "function" then
+                SC.Vehicle.cancelTransaction(actor, "ride_with_player_disabled")
+            end
+            if not utility.stop(actor) then return false, "vehicle_opt_out_stop_rejected" end
+            return true, "ride_with_player_disabled"
+        end
+        -- Sol takes the wheel: when the player rides in a stopped vehicle and
+        -- the driver's seat is empty, she boards seat zero through the driving
+        -- path instead of queueing for a passenger seat. Any refusal falls
+        -- through to the normal passenger manifest below.
+        if type(SC.Vehicle.boardDriver) == "function"
+            and type(SC.Vehicle.preflightDriver) == "function" then
+            local driverKnown, currentDriver = utility.call(playerVehicle, "getDriver")
+            if driverKnown and currentDriver == nil then
+                local driverStopped = SC.Vehicle.isStationary(playerVehicle)
+                if driverStopped ~= true then
+                    if not utility.stop(actor) then return false, "driver_wait_stop_rejected" end
+                    return true, "waiting_for_vehicle_to_stop"
+                end
+                local driverTx = SC.Vehicle.boardDriver(actor, playerVehicle,
+                    { followPlayer = true })
+                if driverTx ~= nil then
+                    local driverPrep = SC.Vehicle.preflightDriver(actor, playerVehicle)
+                    if driverPrep ~= nil then
+                        if not utility.stop(actor) then
+                            return false, "driver_boarding_stop_rejected"
+                        end
+                        if utility.move(actor, "walk", {
+                            action = "board_vehicle",
+                            vehicle = playerVehicle,
+                            seat = 0,
+                            preflight = driverPrep,
+                            followPlayer = true,
+                            transactional = true,
+                            allowVirtualSeat = false,
+                            driverSeat = true,
+                            supervisorToken = driverTx.supervisorToken,
+                        }) then
+                            if type(SolFixLook) == "table" then
+                                SolFixLook.diag("drive", "boarding the driver seat")
+                            end
+                            return true, "boarding_driver_seat"
+                        end
+                        SC.Vehicle.failTransaction(actor, "board_driver_dispatch_rejected")
+                    elseif type(SC.Vehicle.cancelTransaction) == "function" then
+                        SC.Vehicle.cancelTransaction(actor, "driver_preflight_unavailable")
+                    end
+                end
+            end
+        end
+        local assignment, assignmentReason = SC.Vehicle.assignmentFor(
+            actor, playerVehicle, player)
+        if assignment == nil then
+            if type(SC.Vehicle.cancelTransaction) == "function" then
+                SC.Vehicle.cancelTransaction(actor, assignmentReason or "vehicle_assignment_lost")
+            end
+            if assignmentReason == "vehicle_capacity_wait"
+                or assignmentReason == "vehicle_entry_seat_wait" then
+                if not utility.stop(actor) then return false, "vehicle_capacity_wait_stop_rejected" end
+                return true, assignmentReason
+            end
+            return false, "vehicle_manifest_rejected:" .. tostring(assignmentReason)
+        end
+        local stopped, stopReason = SC.Vehicle.isStationary(playerVehicle)
+        if stopped ~= true then
+            if type(SC.Vehicle.cancelTransaction) == "function" then
+                SC.Vehicle.cancelTransaction(actor, "vehicle_moving_before_board")
+            end
+            if not utility.stop(actor) then return false, "vehicle_wait_stop_rejected" end
+            return true, stopReason == "vehicle is moving"
+                and "waiting_for_vehicle_to_stop" or "vehicle_speed_unavailable"
+        end
+        local transaction, transactionReason = SC.Vehicle.beginBoarding(
+            actor, playerVehicle, assignment.seat, { followPlayer = true })
+        if transaction == nil then
+            return false, "vehicle_transaction_rejected:" .. tostring(transactionReason)
+        end
+        local prepared, prepareReason = SC.Vehicle.preflightBoard(
+            actor, playerVehicle, assignment.seat)
+        if prepared ~= nil then
+            if not utility.stop(actor) then return false, "vehicle_boarding_stop_rejected" end
+            if not utility.move(actor, "walk", {
+                action = "board_vehicle",
+                vehicle = playerVehicle,
+                seat = prepared.seat,
+                preflight = prepared,
+                followPlayer = true,
+                transactional = true,
+                allowVirtualSeat = false,
+                supervisorToken = transaction.supervisorToken,
+            }) then
+                SC.Vehicle.failTransaction(actor, "board_vehicle_dispatch_rejected")
+                return false, "board_vehicle_rejected"
+            end
+            return true, "boarding_vehicle"
+        end
+        if prepareReason ~= "companion is not at the passenger door" then
+            SC.Vehicle.failTransaction(actor, "vehicle_board_preflight_failed", {
+                reason = prepareReason,
+            })
+            return false, "board_vehicle_rejected:" .. tostring(prepareReason)
+        end
+        local targets, seat, targetReason = SC.Vehicle.boardingSquares(
+            actor, playerVehicle, assignment.seat)
+        if targets == nil then
+            SC.Vehicle.failTransaction(actor, "vehicle_boarding_square_failed", {
+                reason = targetReason,
+            })
+            return false, "vehicle_approach_rejected:" .. tostring(targetReason)
+        end
+        if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+            SC.Vehicle.failTransaction(actor, "vehicle_navigation_unavailable")
+            return false, "navigation_unavailable"
+        end
+        local distance = utility.distance(actor, targets[1])
+        local accepted, reason = SC.Navigation.requestAny(actor, targets,
+            distance > 8 and "run" or "walk", {
+            action = "approach_vehicle",
+            vehicle = playerVehicle,
+            seat = seat,
+            player = player,
+            snapshot = snapshot,
+            desiredDistance = 0,
+            arrivalDistance = 0.15,
+            urgent = false,
+            continuousApproach = true,
+            movementPriority = 30,
+            supervisorToken = transaction.supervisorToken,
+        })
+        if accepted ~= true then
+            SC.Vehicle.failTransaction(actor, "vehicle_approach_failed", { reason = reason })
+        end
+        return accepted, reason
+    elseif actorVehicleOk and actorVehicle and (not playerVehicleOk or not playerVehicle) then
+        do
+            local keep, why = solKeepsSeat(actor, actorVehicle)
+            if keep then return true, why end
+        end
+        if not SC.Vehicle or type(SC.Vehicle.isStationary) ~= "function" then
+            return false, "vehicle_adapter_unavailable"
+        end
+        local stopped, stopReason = SC.Vehicle.isStationary(actorVehicle)
+        if stopped ~= true then
+            return true, stopReason == "vehicle is moving"
+                and "waiting_for_safe_exit" or "vehicle_speed_unavailable"
+        end
+        if not utility.move(actor, "walk", {
+            action = "exit_vehicle",
+            vehicle = actorVehicle,
+            followPlayer = true,
+            transactional = true,
+            restoreByDoor = true,
+        }) then return false, "exit_vehicle_rejected" end
+        return true, "exiting_vehicle"
+    end
+    if SC.Vehicle and type(SC.Vehicle.cancelTransaction) == "function" then
+        SC.Vehicle.cancelTransaction(actor, "player_not_in_vehicle")
+    end
+    if not SC.Positioning or type(SC.Positioning.formationTarget) ~= "function" then
+        return false, "positioning_unavailable"
+    end
+    local target, formation = SC.Positioning.formationTarget(actor, player, commands, snapshot)
+    if not target then return false, "no_formation_target" end
+    local leaderDistance = utility.distance(actor, player)
+    local desired = commands.followDistance or 3
+    if commands.order ~= "regroup" and SC.Positioning.shouldHold(actor, target) then
+        -- A formation hold ends the previous follow route. Stopping the native
+        -- actor alone leaves its Lua lease active (and its status stuck at
+        -- native_path/moving) until another request services that lease.
+        if SC.Navigation and type(SC.Navigation.peek) == "function"
+            and type(SC.Navigation.cancel) == "function" then
+            local navigation = SC.Navigation.peek(actor)
+            if navigation and (navigation.goalAction == "follow_formation"
+                    or navigation.goalAction == "regroup") then
+                SC.Navigation.cancel(actor, "holding_formation")
+            end
+        end
+        -- Stop first: the regular stop adapter deliberately clears tactical
+        -- posture. Copy the player's posture only after locomotion has stopped
+        -- so a crouched companion stays crouched instead of flickering upright.
+        if not utility.stop(actor) then return false, "formation_stop_rejected" end
+        local aware, awarenessReason
+        if type(SC.Positioning.updateHoldAwareness) == "function" then
+            aware, awarenessReason = SC.Positioning.updateHoldAwareness(
+                actor, player, snapshot)
+        end
+        if type(SC.Positioning.syncCopiedPosture) == "function" then
+            local synced, syncReason = SC.Positioning.syncCopiedPosture(
+                actor, player, commands.moveMode)
+            if synced == false then return false, syncReason end
+        end
+        if aware ~= nil then return aware == true, awarenessReason end
+        return true, "holding_formation"
+    end
+    local mode, posture = SC.Positioning.followMode(
+        commands.moveMode or "copy", commands.stress, leaderDistance, player, desired,
+        actor, commands.commandSerial)
+    if not SC.Navigation or type(SC.Navigation.request) ~= "function" then return false, "navigation_unavailable" end
+    return SC.Navigation.request(actor, target, mode, {
+        action = commands.order == "regroup" and "regroup" or "follow_formation",
+        player = player,
+        snapshot = snapshot,
+        followRecovery = true,
+        preferVerifiedPath = commands.expeditionCohesionHold == true,
+        -- A team member separated by a locked door may need the same
+        -- certified last-resort breach as the travelling leader. Navigation
+        -- still searches ordinary doors and windows first.
+        doorBashAsLastResort = commands.expeditionMoving == true,
+        desiredDistance = desired,
+        -- Catch-up speed is selected by Positioning.followMode. Navigation's
+        -- urgent flag is reserved for a genuine far-behind regroup because it
+        -- intentionally relaxes hazard, room-entry and reservation policy.
+        urgent = leaderDistance >= (utility.config("followFarDistance") or 18),
+        movementPriority = 20,
+        stressPosture = posture,
+        formationMode = formation and formation.mode or nil,
+        trailRevision = formation and formation.trailRevision or nil,
+        followTrack = formation and formation.followTrack or nil,
+        interceptPosition = formation and formation.interceptPosition or nil,
+        portalKey = formation and formation.portalKey or nil,
+        portal = formation and formation.portal or nil,
+        columnIndex = formation and formation.columnIndex or nil,
+        cqbRole = formation and formation.cqbRole or nil,
+        fireteamSize = formation and formation.fireteamSize or nil,
+        cohortKey = formation and formation.cohortKey or nil,
+        groupParticipants = formation and formation.participants or nil,
+    })
+end
+
+-- Test seam for the complete follow/vehicle policy path.  Keeping this on the
+-- controller (rather than testing Vehicle.board in isolation) catches the
+-- regression where a valid manifest was built but Decision never dispatched
+-- entry, or never dispatched exit after the player left the car.
+Decision._doFollowForTests = doFollow
+
+local function anchorSquare(commands)
+    if type(commands.anchor) ~= "table" then return nil end
+    return U().loadedSquare(commands.anchor)
+end
+
+local function switchToStay(actor, player)
+    if not SC.Commands or type(SC.Commands.issue) ~= "function" then
+        return false, "stay_transition_commands_unavailable"
+    end
+    local called, accepted, reason = pcall(
+        SC.Commands.issue,
+        U().idOf(actor),
+        "stay",
+        nil,
+        player
+    )
+    if not called then return false, "stay_transition_error" end
+    if accepted ~= true then
+        return false, "stay_transition_rejected:" .. tostring(reason or "unknown")
+    end
+    return true, "stay"
+end
+
+local function reportRoomCheck(actor, target, snapshot)
+    local targetRoom, targetRoomOk = U().call(target, "getRoom")
+    local actorSquare = U().squareOf(actor)
+    local actorRoom, actorRoomOk = U().call(actorSquare, "getRoom")
+    local contacts = 0
+    if targetRoomOk and targetRoom ~= nil then
+        for _, threat in ipairs(snapshot and snapshot.threats or {}) do
+            local threatSquare = threat.square or U().squareOf(threat.actor)
+            local threatRoom, threatRoomOk = U().call(threatSquare, "getRoom")
+            if threatRoomOk and threatRoom == targetRoom and threat.visible == true
+                and threat.obstructed ~= true then contacts = contacts + 1 end
+        end
+    end
+    local topic, key, fallback
+    local current = U().nowMs()
+    local snapshotAge = snapshot and tonumber(snapshot.time)
+        and current - tonumber(snapshot.time) or math.huge
+    local coverageFresh = snapshotAge >= 0
+        and snapshotAge <= (U().config("roomCheckCoverageMaxAgeMs") or 750)
+    local originSquare = snapshot and type(snapshot.origin) == "table"
+        and (snapshot.origin.square or U().loadedSquare(snapshot.origin)) or nil
+    local coverageHere = U().squareKey(originSquare) ~= nil
+        and U().squareKey(originSquare) == U().squareKey(actorSquare)
+    local coverageComplete = snapshot and snapshot.scanComplete == true
+        and snapshot.scanDiscoveryComplete == true
+        and snapshot.scanVisualComplete == true
+    if contacts == 1 then
+        topic, key, fallback = "tactical.room_one", "IGUI_SC_Room_One", "Contact - one infected."
+    elseif contacts > 1 then
+        topic, key, fallback = "tactical.room_multiple", "IGUI_SC_Room_Multiple", "Multiple contacts."
+    elseif targetRoomOk and targetRoom ~= nil and actorRoomOk and actorRoom == targetRoom
+        and coverageComplete and coverageFresh and coverageHere
+        and (tonumber(snapshot.heardThreatCount) or 0) == 0 then
+        topic, key, fallback = "tactical.room_clear", "IGUI_SC_Room_Clear", "Room clear."
+    else
+        topic, key, fallback = "tactical.room_uncertain", "IGUI_SC_Room_Uncertain", "Can't verify the whole room."
+    end
+    local line = U().text(key, fallback)
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        SC.Dialogue.say(actor, topic, nil, nil, { fallback = line, recentLimit = 2 })
+    else
+        U().say(actor, line)
+    end
+    return contacts
+end
+
+Decision._reportRoomCheckForTests = reportRoomCheck
+
+local function finishRoomCheck(actor, player)
+    if not SC.Commands or type(SC.Commands.issue) ~= "function" then
+        return false, "room_check_finish_commands_unavailable"
+    end
+    local called, accepted, reason = pcall(SC.Commands.issue, U().idOf(actor),
+        "finish_room_check", nil, player)
+    if not called then return false, "room_check_finish_error" end
+    if accepted ~= true then
+        return false, "room_check_finish_rejected:" .. tostring(reason or "unknown")
+    end
+    return true, reason or "room_check_complete"
+end
+
+local function finishInteraction(actor, player)
+    if not SC.Commands or type(SC.Commands.issue) ~= "function" then
+        return false, "interaction_finish_commands_unavailable"
+    end
+    local called, accepted, reason = pcall(SC.Commands.issue, U().idOf(actor),
+        "finish_interaction", nil, player)
+    if not called then return false, "interaction_finish_error" end
+    if accepted ~= true then
+        return false, "interaction_finish_rejected:" .. tostring(reason or "unknown")
+    end
+    return true, reason or "interaction_complete"
+end
+
+local function navigationArrived(actor, target, status)
+    if status == "arrived" then return true end
+    local actorKey = U().squareKey(U().squareOf(actor))
+    local targetKey = U().squareKey(U().loadedSquare(target))
+    return actorKey ~= nil and actorKey == targetKey
+end
+
+local function resolveWorkObject(commands)
+    local utility = U()
+    local target = type(commands.workTarget) == "table" and commands.workTarget or nil
+    if not target or targetedWorkKinds[target.kind] ~= true
+        or type(target.objectId) ~= "string" then
+        return nil, nil, "invalid_work_target"
+    end
+    local square = utility.loadedSquare(target)
+    if not square then return nil, nil, "work_target_not_loaded" end
+    if not SC.BaseLife or type(SC.BaseLife.resolveObject) ~= "function" then
+        return nil, square, "work_identity_resolver_unavailable"
+    end
+    local object, identityReason = SC.BaseLife.resolveObject(target)
+    if not object then
+        return nil, square, "work_target_changed:" .. tostring(identityReason or "identity_mismatch")
+    end
+    if target.kind == "barricade" or target.kind == "remove_barricade" then
+        if not utility.hasMethod(object, "getBarricadeForCharacter") then
+            return nil, square, "work_target_changed"
+        end
+    elseif target.kind == "dismantle" then
+        local isThumpable = false
+        if type(instanceof) == "function" then
+            local called, value = pcall(instanceof, object, "IsoThumpable")
+            isThumpable = called and value == true
+        end
+        local dismantlable, dismantlableOk = utility.call(object, "isDismantable")
+        if not isThumpable or not dismantlableOk or dismantlable ~= true then
+            return nil, square, "work_target_changed"
+        end
+    end
+    local currentIndex, indexOk = utility.call(object, "getObjectIndex")
+    if not indexOk or tonumber(currentIndex) == nil or tonumber(currentIndex) < 0 then
+        return nil, square, "work_target_changed:invalid_object_index"
+    end
+    target.objectIndex = math.floor(tonumber(currentIndex))
+    target.object = object
+    return object, square, nil
+end
+
+Decision._resolveWorkObjectForTests = resolveWorkObject
+
+local function barricadePlanks(object, actor)
+    local barricade, ok = U().call(object, "getBarricadeForCharacter", actor)
+    if not ok or not barricade then return 0 end
+    local count, countOk = U().call(barricade, "getNumPlanks")
+    if countOk and type(count) == "number" then return count end
+    return 0
+end
+
+local function selectedBarricade(object, actor, target)
+    local method = type(target) == "table" and target.barricadeSide == "same"
+        and "getBarricadeOnSameSquare"
+        or type(target) == "table" and target.barricadeSide == "opposite"
+            and "getBarricadeOnOppositeSquare" or nil
+    if method then
+        local barricade, ok = U().call(object, method)
+        if ok then return barricade end
+    end
+    local barricade, ok = U().call(object, "getBarricadeForCharacter", actor)
+    return ok and barricade or nil
+end
+
+local function selectedBarricadePlanks(object, actor, target)
+    local barricade = selectedBarricade(object, actor, target)
+    if not barricade then return nil end
+    local count, countOk = U().call(barricade, "getNumPlanks")
+    return countOk and math.max(0, math.floor(tonumber(count) or 0)) or 0
+end
+
+local function workKey(commands)
+    local target = type(commands) == "table" and commands.workTarget or nil
+    if type(target) ~= "table" or type(target.objectId) ~= "string" then return nil end
+    return "work:" .. target.objectId
+end
+
+local function releaseWorkReservation(actor, state)
+    local key = state and state.workReservationKey or nil
+    local reservation = key and workReservations[key] or nil
+    if reservation and reservation.actor == actor then workReservations[key] = nil end
+    if state then state.workReservationKey = nil end
+end
+
+local function reserveWork(actor, commands, state, current)
+    local key = workKey(commands)
+    if not key then return false, "invalid_work_reservation" end
+    if state.workReservationKey and state.workReservationKey ~= key then
+        releaseWorkReservation(actor, state)
+    end
+    local reservation = workReservations[key]
+    if reservation and reservation.actor ~= actor and reservation.expires > current then
+        return false, "work_reserved_by_companion"
+    end
+    workReservations[key] = {
+        actor = actor,
+        expires = current + (U().config("workReservationMs") or 45000),
+    }
+    state.workReservationKey = key
+    return true, "work_reserved"
+end
+
+local function cancelWork(actor, state, reason)
+    local cancelled, cancelReason = true, nil
+    if SC.NativeActions and type(SC.NativeActions.cancelWork) == "function" then
+        local called
+        called, cancelled, cancelReason = pcall(SC.NativeActions.cancelWork, actor, reason)
+        if not called then cancelled, cancelReason = false, cancelled end
+    end
+    if cancelled ~= true then return false, "work_cancel_failed:" .. tostring(cancelReason) end
+    state.workAction = nil
+    state.workAssignedAt = nil
+    state.workApproachSide = nil
+    state.workSideKey = nil
+    state.workSideBusyAt = nil
+    if SC.Encounter and type(SC.Encounter.cancelPlayerSupply) == "function" then
+        SC.Encounter.cancelPlayerSupply(actor)
+    end
+    releaseWorkReservation(actor, state)
+    return true, reason or "work_cancelled"
+end
+
+local function finishWork(actor, player, state, reason)
+    if SC.NativeActions and type(SC.NativeActions.finishWork) == "function" then
+        local called, finished, finishReason = pcall(SC.NativeActions.finishWork, actor)
+        if not called or finished ~= true then
+            return false, "work_cleanup_failed:" .. tostring(finishReason or finished)
+        end
+    end
+    state.workAction = nil
+    state.workAssignedAt = nil
+    state.workApproachSide = nil
+    state.workSideKey = nil
+    state.workSideBusyAt = nil
+    if SC.Encounter and type(SC.Encounter.cancelPlayerSupply) == "function" then
+        SC.Encounter.cancelPlayerSupply(actor)
+    end
+    releaseWorkReservation(actor, state)
+    if not SC.Commands or type(SC.Commands.issue) ~= "function" then
+        return false, "work_finish_commands_unavailable"
+    end
+    local called, accepted, commandReason = pcall(
+        SC.Commands.issue, U().idOf(actor), "finish_work", { reason = reason }, player)
+    if not called or accepted ~= true then
+        return false, "work_finish_failed:" .. tostring(commandReason or accepted)
+    end
+    return true, reason or "work_finished"
+end
+
+local function reportWorkFailure(actor, player, reason, snapshot)
+    local lowered = string.lower(tostring(reason or ""))
+    if SC.Dialogue and type(SC.Dialogue.missingToolKind) == "function"
+        and type(SC.Dialogue.requestMissingTool) == "function" then
+        local tool = SC.Dialogue.missingToolKind(reason)
+        if tool then
+            SC.Dialogue.requestMissingTool(actor, player, tool, snapshot)
+            return
+        end
+    end
+    local key, fallback, topic = "IGUI_SC_Work_Cannot", "I can't do that safely.", "work.cannot"
+    if string.find(lowered, "hammer", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedHammer", "I need an unbroken hammer.", "work.hammer"
+    elseif string.find(lowered, "plank", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedPlank", "I need a plank.", "work.plank"
+    elseif string.find(lowered, "nail", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedNails", "I need two nails.", "work.nails"
+    elseif string.find(lowered, "saw", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedSaw", "I need an unbroken saw.", "work.saw"
+    elseif string.find(lowered, "screwdriver", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedScrewdriver", "I need an unbroken screwdriver.", "work.screwdriver"
+    elseif string.find(lowered, "blowtorch", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedBlowTorch", "I need a fueled blowtorch.", "work.blowtorch"
+    elseif string.find(lowered, "remove", 1, true)
+        or string.find(lowered, "pry", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_NeedPryTool", "I need a tool that can remove barricades.", "work.pry"
+    elseif string.find(lowered, "timed action", 1, true)
+        or string.find(lowered, "already", 1, true) then
+        key, fallback, topic = "IGUI_SC_Work_Busy", "I need to finish what I'm doing first.", "work.busy"
+    end
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        SC.Dialogue.say(actor, topic, nil, nil, { fallback = U().text(key, fallback) })
+    else
+        U().say(actor, U().text(key, fallback))
+    end
+end
+
+local function doWork(actor, player, commands, snapshot, state)
+    local utility = U()
+    local current = utility.nowMs()
+    state.workAssignedAt = state.workAssignedAt or current
+    if not (type(commands.workTarget) == "table"
+            and commands.workTarget.kind == "barricade" and state.workAction)
+        and current - state.workAssignedAt > (utility.config("workApproachTimeoutMs") or 60000) then
+        return finishWork(actor, player, state, "work_timeout")
+    end
+    local object, targetSquare, targetReason = resolveWorkObject(commands)
+    if not object then return finishWork(actor, player, state, targetReason) end
+    local reserved, reservationReason = reserveWork(actor, commands, state, current)
+    if not reserved then
+        if not utility.stop(actor) then return false, "work_wait_stop_rejected" end
+        return true, reservationReason
+    end
+    local interactionSquare, sideReason
+    if commands.workTarget.kind == "barricade"
+        or commands.workTarget.kind == "remove_barricade" then
+        if not SC.Navigation or type(SC.Navigation.barricadeWorkSquare) ~= "function" then
+            return finishWork(actor, player, state, "work_navigation_unavailable")
+        end
+        local sideKey = workKey(commands)
+        if state.workSideKey ~= sideKey then
+            state.workSideKey, state.workApproachSide = sideKey, nil
+        end
+        local requestedSide = commands.workTarget.barricadeSide
+            or state.workApproachSide
+        interactionSquare, sideReason = SC.Navigation.barricadeWorkSquare(
+            actor, object, targetSquare, requestedSide, {
+                workCampOnly = commands.workTarget.baseJobId ~= nil,
+                workReach = commands.workTarget.baseJobId ~= nil,
+            })
+        if not interactionSquare and state.workApproachSide
+            and commands.workTarget.barricadeSide == nil then
+            state.workApproachSide = nil
+            interactionSquare, sideReason = SC.Navigation.barricadeWorkSquare(
+                actor, object, targetSquare, nil, {
+                    workCampOnly = commands.workTarget.baseJobId ~= nil,
+                    workReach = commands.workTarget.baseJobId ~= nil,
+                })
+        end
+        if interactionSquare and commands.workTarget.barricadeSide == nil then
+            state.workApproachSide = utility.sameSquare(interactionSquare, targetSquare)
+                and "same" or "opposite"
+        end
+    else
+        interactionSquare = targetSquare
+    end
+    if not interactionSquare then
+        if sideReason == "work_side_busy" then
+            state.workSideBusyAt = state.workSideBusyAt or current
+            if current - state.workSideBusyAt < 8000 then
+                if not utility.stop(actor) then return false, "work_wait_stop_rejected" end
+                return true, "work_side_busy"
+            end
+        end
+        return finishWork(actor, player, state, sideReason or "work_side_unloaded")
+    end
+    state.workSideBusyAt = nil
+    local wrongRemovalSide = (commands.workTarget.kind == "remove_barricade"
+        or commands.workTarget.kind == "barricade")
+        and utility.squareKey(utility.squareOf(actor)) ~= utility.squareKey(interactionSquare)
+    if utility.distance(actor, object) > 1.75 or wrongRemovalSide then
+        if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+            return finishWork(actor, player, state, "work_navigation_unavailable")
+        end
+        return SC.Navigation.request(actor, interactionSquare, commandMoveMode(commands, player), {
+            action = "approach_interaction",
+            targetSquare = interactionSquare,
+            object = object,
+            snapshot = snapshot,
+            workCampOnly = commands.workTarget.baseJobId ~= nil,
+            workReach = commands.workTarget.baseJobId ~= nil,
+        })
+    end
+
+    -- ISBarricadeAction closes an open door when the build action starts.
+    -- Closing it here can trap the worker in a loop: supply gathering or other
+    -- residents reopen the door before the timed action is queued.
+    if commands.workTarget.kind == "remove_barricade" then
+        local currentPlanks = selectedBarricadePlanks(object, actor, commands.workTarget)
+        if currentPlanks == nil then
+            return finishWork(actor, player, state, "barricade_removed")
+        end
+        local work = state.workAction
+        if work then
+            if SC.NativeActions and type(SC.NativeActions.isWorkActive) == "function"
+                and SC.NativeActions.isWorkActive(actor) then
+                return true, "removing_barricade"
+            end
+            local elapsed = utility.nowMs() - (work.startedAt or 0)
+            if elapsed <= 500 then return true, "remove_barricade_starting" end
+            if currentPlanks < (work.initialPlanks or currentPlanks) then
+                local cleaned, cleanupReason = SC.NativeActions.finishWork(actor)
+                if cleaned ~= true then return false, cleanupReason end
+                state.workAction = nil
+                return true, "remove_barricade_continuing"
+            end
+            local cancelled, cancelReason = cancelWork(actor, state, "remove_barricade_interrupted")
+            if not cancelled then return false, cancelReason end
+            return finishWork(actor, player, state, "remove_barricade_interrupted")
+        end
+        local accepted, rejectionReason = utility.move(actor, "walk", {
+            action = "remove_barricade",
+            object = object,
+            targetSquare = interactionSquare,
+            transactional = true,
+        })
+        if not accepted then
+            reportWorkFailure(actor, player, rejectionReason, snapshot)
+            return finishWork(actor, player, state, "remove_barricade_rejected")
+        end
+        state.workAction = {
+            startedAt = utility.nowMs(),
+            initialPlanks = currentPlanks,
+            objectIndex = commands.workTarget.objectIndex,
+        }
+        return true, "remove_barricade_started"
+    elseif commands.workTarget.kind == "dismantle" then
+        local work = state.workAction
+        if work then
+            if SC.NativeActions and type(SC.NativeActions.isWorkActive) == "function"
+                and SC.NativeActions.isWorkActive(actor) then
+                return true, "dismantling"
+            end
+            local elapsed = utility.nowMs() - (work.startedAt or 0)
+            if elapsed <= 500 then return true, "dismantle_starting" end
+            local cancelled, cancelReason = cancelWork(actor, state, "dismantle_interrupted")
+            if not cancelled then return false, cancelReason end
+            return finishWork(actor, player, state, "dismantle_interrupted")
+        end
+        local accepted, rejectionReason = utility.move(actor, "walk", {
+            action = "dismantle",
+            object = object,
+            targetSquare = targetSquare,
+            transactional = true,
+        })
+        if not accepted then
+            reportWorkFailure(actor, player, rejectionReason, snapshot)
+            return finishWork(actor, player, state, "dismantle_rejected")
+        end
+        state.workAction = {
+            startedAt = utility.nowMs(),
+            objectIndex = commands.workTarget.objectIndex,
+        }
+        return true, "dismantle_started"
+    end
+
+    local currentPlanks = selectedBarricadePlanks(object, actor, commands.workTarget) or 0
+    local baseBarricade = commands.workTarget.baseJobId ~= nil
+    local selected = selectedBarricade(object, actor, commands.workTarget)
+    local canAdd = selected and select(1, utility.call(selected, "canAddPlank"))
+    if baseBarricade and selected and canAdd == false then
+        if SC.NativeActions and type(SC.NativeActions.isWorkActive) == "function"
+            and SC.NativeActions.isWorkActive(actor) then
+            return true, "barricade_finishing"
+        end
+        return finishWork(actor, player, state, "barricade_completed")
+    end
+    local work = state.workAction
+    if work then
+        if currentPlanks > (work.initialPlanks or 0) then
+            if SC.NativeActions and type(SC.NativeActions.isWorkActive) == "function"
+                and SC.NativeActions.isWorkActive(actor) then
+                return true, "barricade_finishing"
+            end
+            if baseBarricade then
+                local cleaned, cleanupReason = SC.NativeActions.finishWork(actor)
+                if cleaned ~= true then return false, cleanupReason end
+                state.workAction = nil
+                state.workAssignedAt = utility.nowMs()
+                return true, "barricade_continuing"
+            end
+            return finishWork(actor, player, state, "barricade_completed")
+        end
+        local nativeActions, actionsOk = utility.call(actor, "getCharacterActions")
+        local elapsed = utility.nowMs() - (work.startedAt or 0)
+        if actionsOk and utility.listSize(nativeActions) > 0 and elapsed <= 30000 then
+            return true, "barricading"
+        end
+        if elapsed <= 500 then return true, "barricade_starting" end
+        local cancelled, cancelReason = cancelWork(actor, state, "barricade_interrupted")
+        if not cancelled then return false, cancelReason end
+        return finishWork(actor, player, state, "barricade_interrupted")
+    end
+
+    -- The baseline is persisted with the one-shot order. If the world already
+    -- contains the requested extra plank after a save/load (or another worker
+    -- completed the same queued job), finish the role transition without
+    -- applying the construction twice.
+    local initialPlanks = math.max(0,
+        math.floor(tonumber(commands.workTarget.initialPlanks) or 0))
+    if not baseBarricade and currentPlanks > initialPlanks then
+        return finishWork(actor, player, state, "barricade_already_completed")
+    end
+
+    if SC.Logistics and type(SC.Logistics.prepareBuild) == "function" then
+        local ready, handled, supplyReason = SC.Logistics.prepareBuild(
+            actor, targetSquare, snapshot, commandMoveMode(commands, player))
+        if not ready then
+            if handled then return true, supplyReason or "gathering_build_supplies" end
+            reportWorkFailure(actor, player, supplyReason, snapshot)
+            return finishWork(actor, player, state, "build_supplies_unavailable")
+        end
+    end
+
+    local accepted, rejectionReason = utility.move(actor, "walk", {
+        action = "barricade",
+        object = object,
+        targetSquare = targetSquare,
+        transactional = true,
+    })
+    if not accepted then
+        reportWorkFailure(actor, player, rejectionReason, snapshot)
+        return finishWork(actor, player, state, "barricade_rejected")
+    end
+    state.workAction = {
+        startedAt = utility.nowMs(),
+        initialPlanks = currentPlanks,
+        objectIndex = commands.workTarget.objectIndex,
+    }
+    state.workAssignedAt = state.workAction.startedAt
+    return true, "barricade_started"
+end
+
+local function doTactical(actor, player, rootRuntime, commands, snapshot, state)
+    local utility = U()
+    if commands.order == "work" then
+        return doWork(actor, player, commands, snapshot, state)
+    end
+    if commands.order == "stay" or commands.order == "guard" then
+        local anchor = anchorSquare(commands) or utility.squareOf(actor)
+        local allowed = commands.order == "guard" and (utility.config("guardRadius") or 5) or 0.7
+        if utility.distance(actor, anchor) > allowed then
+            state.guardPatrolTarget = nil
+            if SC.Navigation and type(SC.Navigation.request) == "function" then
+                return SC.Navigation.request(actor, anchor, commandMoveMode(commands, player), {
+                    action = "return_to_" .. commands.order,
+                    snapshot = snapshot,
+                })
+            end
+            return false, "navigation_unavailable"
+        end
+        if commands.order == "guard" then
+            local current = utility.nowMs()
+            local patrolTarget = state.guardPatrolTarget
+                and utility.loadedSquare(state.guardPatrolTarget) or nil
+            if patrolTarget and SC.Navigation
+                and type(SC.Navigation.standingSquareClear) == "function"
+                and not SC.Navigation.standingSquareClear(actor, patrolTarget) then
+                patrolTarget, state.guardPatrolTarget = nil, nil
+            end
+            if patrolTarget and utility.distance(actor, patrolTarget) <= 0.8 then
+                state.guardPatrolTarget = nil
+                state.guardPatrolDue = current + (utility.config("guardPatrolIntervalMs") or 30000)
+                if not utility.stop(actor) then return false, "guard_patrol_stop_rejected" end
+                return true, "guard_patrol_complete"
+            end
+            if not patrolTarget and current >= (state.guardPatrolDue or 0) then
+                local ax, ay, az = utility.position(anchor)
+                local radius = math.max(2, math.min(4, math.floor(allowed)))
+                local offsets = {
+                    { radius, 0 }, { 0, radius }, { -radius, 0 }, { 0, -radius },
+                    { radius - 1, radius - 1 }, { 1 - radius, radius - 1 },
+                    { 1 - radius, 1 - radius }, { radius - 1, 1 - radius },
+                }
+                local start = ((state.guardPatrolIndex or utility.stableHash(utility.idOf(actor)))
+                    % #offsets) + 1
+                for step = 0, #offsets - 1 do
+                    local offset = offsets[((start + step - 1) % #offsets) + 1]
+                    local candidate = utility.gridSquare(ax + offset[1], ay + offset[2], az)
+                    if candidate and SC.Navigation
+                        and type(SC.Navigation.standingSquareClear) == "function"
+                        and SC.Navigation.standingSquareClear(actor, candidate) then
+                        patrolTarget = candidate
+                        state.guardPatrolTarget = {
+                            x = select(1, utility.position(candidate)),
+                            y = select(2, utility.position(candidate)),
+                            z = select(3, utility.position(candidate)),
+                        }
+                        state.guardPatrolIndex = start + step
+                        break
+                    end
+                end
+                if not patrolTarget then
+                    state.guardPatrolDue = current + (utility.config("guardPatrolIntervalMs") or 30000)
+                    if not utility.stop(actor) then return false, "guard_patrol_stop_rejected" end
+                    return true, "guard_holding"
+                end
+            end
+            if patrolTarget then
+                if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+                    return false, "navigation_unavailable"
+                end
+                return SC.Navigation.request(actor, patrolTarget, "walk", {
+                    action = "guard_patrol",
+                    targetSquare = patrolTarget,
+                    snapshot = snapshot,
+                })
+            end
+        end
+        if not utility.stop(actor) then return false, "tactical_stop_rejected" end
+        return true, commands.order
+    end
+
+    local tactical = commands.tacticalTarget
+    local target = tactical and utility.loadedSquare(tactical)
+    if commands.order == "move_to" and target then
+        if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+            return false, "navigation_unavailable"
+        end
+        local ok, status = SC.Navigation.request(actor, target, commandMoveMode(commands, player), {
+            action = "ordered_move", snapshot = snapshot,
+            urgent = true, emergency = true, survivalCritical = true,
+            doorBashAsLastResort = commands.doorBashAsLastResort == true,
+            -- A direct player order must not yield movement to other actors.
+            movementPriority = 100,
+        })
+        if ok and navigationArrived(actor, target, status) then
+            if SC.ExpeditionPrototype
+                and SC.ExpeditionPrototype.testWaypointFor(actor) then
+                SC.ExpeditionPrototype.noteTestWaypointArrived(actor)
+            else
+                local transitioned, transitionReason = switchToStay(actor, player)
+                if not transitioned then return false, transitionReason end
+            end
+        end
+        return ok, status
+    end
+    if commands.order == "check_room" and target then
+        local _, _, actorZ = utility.position(actor)
+        local _, _, targetZ = utility.position(target)
+        if math.floor(actorZ or 0) ~= math.floor(targetZ or 0) then return false, "room_check_floor_changed" end
+        if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+            return false, "navigation_unavailable"
+        end
+        local ok, status = SC.Navigation.request(actor, target, "sneak", {
+            action = "check_room", snapshot = snapshot, orderedFloor = math.floor(targetZ or 0),
+        })
+        if ok and navigationArrived(actor, target, status) then
+            if not state.roomCheckAt then
+                if not utility.move(actor, "walk", {
+                    action = "room_sweep",
+                    targetSquare = target,
+                    stableFacing = true,
+                    orderedFloor = targetZ,
+                }) then return false, "room_sweep_rejected" end
+                state.roomCheckAt = utility.nowMs()
+                state.roomCheckReported = nil
+            elseif utility.nowMs() - state.roomCheckAt >= 1500 then
+                -- The completion command can fail transiently (for example while
+                -- persistence is unavailable). Report once, then retain the
+                -- tactical order for a later transition attempt without repeating
+                -- the same speech every decision pass.
+                if state.roomCheckReported ~= true then
+                    reportRoomCheck(actor, target, snapshot)
+                    state.roomCheckReported = true
+                end
+                local transitioned, transitionReason = finishRoomCheck(actor, player)
+                if not transitioned then return false, transitionReason end
+                state.roomCheckAt = nil
+                state.roomCheckReported = nil
+            end
+        end
+        return ok, status
+    end
+    if commands.order == "interact" and commands.pendingInteraction then
+        if not SC.Navigation then return false, "navigation_unavailable" end
+        local pending = commands.pendingInteraction
+        local current = utility.nowMs()
+        local timedOut = current - (tonumber(pending.startedAt) or current)
+            >= (utility.config("interactionOrderTimeoutMs") or 60000)
+        local objectSquare = utility.squareOf(pending.object)
+        if timedOut or not objectSquare then
+            local transitioned, transitionReason = finishInteraction(actor, player)
+            if not transitioned then return false, transitionReason end
+            return false, timedOut and "interaction_timeout" or "interaction_target_removed"
+        end
+        if utility.distance(actor, pending.object) <= 1.75 then
+            if type(SC.Navigation.interact) ~= "function" then return false, "navigation_unavailable" end
+            local accepted, status = SC.Navigation.interact(actor, pending.object, pending.action)
+            local open, openOk = utility.call(pending.object, "IsOpen")
+            if not openOk then open, openOk = utility.call(pending.object, "isOpen") end
+            local desiredOpen = pending.action == "open_door"
+            local verified = openOk and open == desiredOpen
+            local terminalSuccess = accepted == true
+                and (status == "done" or status == "already_set" or verified)
+            local terminalFailure = accepted ~= true and (status == "invalid_target"
+                or status == "locked_door" or status == "obstructed_door"
+                or status == "door_open_failed" or status == "door_close_failed"
+                or status == "action_rejected" or status == "unsupported_door_action")
+            if terminalSuccess or terminalFailure then
+                local transitioned, transitionReason = finishInteraction(actor, player)
+                if not transitioned then return false, transitionReason end
+            end
+            return accepted, status
+        end
+        if type(SC.Navigation.request) ~= "function" then return false, "navigation_unavailable" end
+        return SC.Navigation.request(actor, objectSquare,
+            commandMoveMode(commands, player), {
+            action = "approach_interaction", snapshot = snapshot,
+        })
+    end
+    return false, "no_tactical_target"
+end
+
+Decision._doTacticalForTests = doTactical
+
+local function doRetreat(actor, player, snapshot, commands)
+    if SC.Combat and type(SC.Combat.sharedRetreatTarget) == "function"
+        and type(SC.Navigation) == "table" and type(SC.Navigation.request) == "function" then
+        local shared, plan = SC.Combat.sharedRetreatTarget(actor, player, snapshot)
+        if shared then
+            return SC.Navigation.request(actor, shared, "jog", {
+                action = "ordered_retreat", snapshot = snapshot, urgent = true,
+                escapeSpeedOverride = true, sharedRetreat = plan,
+            })
+        end
+    end
+    if SC.Navigation and type(SC.Navigation.retreatTarget) == "function"
+        and type(SC.Navigation.request) == "function" then
+        local remembered, plan = SC.Navigation.retreatTarget(actor, snapshot)
+        if remembered then
+            return SC.Navigation.request(actor, remembered, "jog", {
+                action = "ordered_retreat", snapshot = snapshot, urgent = true,
+                escapeSpeedOverride = true, retreatPlan = plan,
+            })
+        end
+    end
+    local escape = snapshot.escapeSquares and snapshot.escapeSquares[1]
+    if escape and SC.Navigation and type(SC.Navigation.request) == "function" then
+        return SC.Navigation.request(actor, escape.square, "jog", {
+            action = "ordered_retreat", snapshot = snapshot, urgent = true,
+            escapeSpeedOverride = true,
+        })
+    end
+    if escape then
+        local accepted = U().move(actor, "jog", {
+            action = "ordered_retreat", targetSquare = escape.square,
+            enginePath = true, snapshot = snapshot,
+            urgent = true, escapeSpeedOverride = true,
+        })
+        return accepted == true, accepted and "retreating" or "retreat_rejected"
+    end
+    local immediate = snapshot.immediateAttackers and snapshot.immediateAttackers[1] or nil
+    local known = immediate or (snapshot.threats and snapshot.threats[1])
+    local threat = type(known) == "table" and known.actor or known
+    if threat == nil then return false, "retreat_direction_unavailable" end
+    local accepted = U().move(actor, "jog", {
+        action = "ordered_retreat", awayFrom = threat,
+        urgent = true, escapeSpeedOverride = true,
+    })
+    return accepted == true, accepted and "retreating" or "retreat_rejected"
+end
+
+local function doPlayerAvoid(actor, player, snapshot)
+    if not player or not SC.Navigation
+        or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "player_avoid_unavailable"
+    end
+    local ax, ay, az = U().position(actor)
+    local px, py = U().position(player)
+    if not ax or not px then return false, "player_avoid_position_unavailable" end
+    local dx, dy = ax - px, ay - py
+    local length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.25 then dx, dy, length = 1, 0, 1 end
+    local forwardX, forwardY = dx / length, dy / length
+    local candidates = {}
+    for _, depth in ipairs({ 5, 4, 3 }) do
+        for _, flank in ipairs({ 0, 2, -2 }) do
+            local square = U().gridSquare(ax + forwardX * depth - forwardY * flank,
+                ay + forwardY * depth + forwardX * flank, az)
+            if square and U().isSquareFree(square)
+                and U().distance(square, player) > length + 1 then
+                candidates[#candidates + 1] = square
+            end
+        end
+    end
+    if #candidates == 0 then return false, "player_avoid_no_space" end
+    return SC.Navigation.requestAny(actor, candidates, "walk", {
+        action = "ordered_move", snapshot = snapshot,
+        playerAvoidance = true, arrivalDistance = 0.85,
+    })
+end
+
+local function doSharedAlert(actor, candidate, state)
+    local alert = candidate and candidate.detail or nil
+    if type(alert) ~= "table" or type(alert.x) ~= "number" or type(alert.y) ~= "number" then
+        return false, "invalid_shared_alert"
+    end
+    local accepted = U().move(actor, "walk", {
+        action = "face_alert",
+        targetPosition = { x = alert.x, y = alert.y, z = tonumber(alert.z) or 0 },
+        stableFacing = true,
+        sharedAlert = true,
+    })
+    if accepted ~= true then return false, "shared_alert_facing_rejected" end
+    state.lastHandledAlertTime = tonumber(alert.time)
+        or (U().nowMs() - (tonumber(alert.ageMs) or 0))
+    return true, "shared_threat_alert"
+end
+
+local function callSubsystem(name, actor, callback)
+    local safe, handled, reason = U().safeSubsystem(name, actor, callback)
+    if not safe then return false, reason end
+    return handled == true, reason
+end
+
+local function profiledDecisionPhase(name, actor, callback, ...)
+    local performance = SC.Performance
+    if not performance or type(performance.preciseNowMs) ~= "function"
+        or type(performance.record) ~= "function" then return callback(...) end
+    local tracing = type(performance.isTracing) == "function"
+        and performance.isTracing() == true
+    local key = "decision." .. tostring(name)
+    local token = tracing and performance.beginScope(key) or nil
+    local started = performance.preciseNowMs()
+    local values = SC.Call.pack(pcall(callback, ...))
+    if token then performance.endScope(token) end
+    local elapsed = math.max(0, performance.preciseNowMs() - started)
+    performance.record(key, tracing and U().idOf(actor) or nil, elapsed)
+    if name == "delegate" then
+        local candidate = select(1, ...)
+        local kind = type(candidate) == "table" and candidate.kind or nil
+        if type(kind) == "string" then
+            performance.record(key .. "." .. kind, nil, elapsed)
+        end
+    end
+    if values[1] ~= true then error(values[2], 0) end
+    return SC.Call.unpack(values, 2, values.n)
+end
+
+local function delegate(candidate, actor, player, rootRuntime, commands, snapshot, state)
+    if candidate.kind == "mental_episode" or candidate.kind == "grief_response"
+        or candidate.kind == "purposeful_idle"
+        or candidate.kind == "joy_response" or candidate.kind == "social_participant"
+        or candidate.kind == "ritual" then
+        if not SC.Autonomy or type(SC.Autonomy.update) ~= "function" then
+            return false, "autonomy_unavailable"
+        end
+        return callSubsystem("autonomy", actor, function()
+            return SC.Autonomy.update(actor, player, rootRuntime, candidate.detail)
+        end)
+    elseif candidate.kind == "medical" then
+        if not SC.Medical or type(SC.Medical.update) ~= "function" then return false, "medical_unavailable" end
+        return callSubsystem("medical", actor, function() return SC.Medical.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "combat" then
+        if type(candidate.detail) == "table" and candidate.detail.humanThreat
+            and SC.FactionBehavior
+            and type(SC.FactionBehavior.updateHumanCombat) == "function" then
+            return callSubsystem("human-combat", actor, function()
+                return SC.FactionBehavior.updateHumanCombat(actor, player, rootRuntime,
+                    candidate.detail.humanThreat)
+            end)
+        end
+        if not SC.Combat or type(SC.Combat.update) ~= "function" then return false, "combat_unavailable" end
+        return callSubsystem("combat", actor, function() return SC.Combat.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "encounter" then
+        if not SC.Encounter or type(SC.Encounter.update) ~= "function" then return false, "encounter_unavailable" end
+        return callSubsystem("encounter", actor, function() return SC.Encounter.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "scavenge" then
+        if not SC.Encounter or type(SC.Encounter.update) ~= "function" then return false, "encounter_unavailable" end
+        return callSubsystem("encounter", actor, function() return SC.Encounter.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "logistics" then
+        if not SC.Logistics or type(SC.Logistics.update) ~= "function" then
+            return false, "logistics_unavailable"
+        end
+        return callSubsystem("logistics", actor, function()
+            return SC.Logistics.update(actor, player, rootRuntime)
+        end)
+    elseif candidate.kind == "downtime" then
+        if not SC.Downtime or type(SC.Downtime.update) ~= "function" then return false, "downtime_unavailable" end
+        return callSubsystem("downtime", actor, function() return SC.Downtime.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "needs" then
+        if not SC.Needs or type(SC.Needs.update) ~= "function" then return false, "needs_unavailable" end
+        return callSubsystem("needs", actor, function() return SC.Needs.update(actor, player, rootRuntime) end)
+    elseif candidate.kind == "base_work" then
+        if not SC.BaseWork or type(SC.BaseWork.update) ~= "function" then
+            return false, "base_work_unavailable"
+        end
+        return callSubsystem("base-work", actor, function()
+            return SC.BaseWork.update(actor, player, rootRuntime)
+        end)
+    elseif candidate.kind == "fishing" then
+        if not SC.Fishing or type(SC.Fishing.update) ~= "function" then
+            return false, "fishing_unavailable"
+        end
+        return callSubsystem("fishing", actor, function()
+            return SC.Fishing.update(actor, "expedition", candidate.detail,
+                player, rootRuntime.snapshot)
+        end)
+    elseif candidate.kind == "infection_crisis" then
+        if not SC.InfectionCrisis or type(SC.InfectionCrisis.updateActor) ~= "function" then
+            return false, "infection_crisis_unavailable"
+        end
+        return callSubsystem("infection-crisis", actor, function()
+            return SC.InfectionCrisis.updateActor(actor, player)
+        end)
+    elseif candidate.kind == "faction" then
+        if not SC.FactionBehavior or type(SC.FactionBehavior.update) ~= "function" then
+            return false, "faction_behavior_unavailable"
+        end
+        return callSubsystem("faction", actor, function()
+            return SC.FactionBehavior.update(actor, player, rootRuntime, candidate.detail)
+        end)
+    elseif candidate.kind == "follow" then
+        if type(candidate.detail) == "table" and candidate.detail.mode == "seek_care"
+            and SC.Medical and type(SC.Medical.requestHelp) == "function" then
+            pcall(SC.Medical.requestHelp, actor, player)
+        end
+        return callSubsystem("navigation", actor, function() return doFollow(actor, player, rootRuntime, commands, snapshot) end)
+    elseif candidate.kind == "tactical" then
+        return callSubsystem("navigation", actor, function() return doTactical(actor, player, rootRuntime, commands, snapshot, state) end)
+    elseif candidate.kind == "retreat" then
+        return callSubsystem("navigation", actor, function()
+            if type(candidate.detail) == "table"
+                and candidate.detail.mode == "player_avoid" then
+                return doPlayerAvoid(actor, player, snapshot)
+            end
+            return doRetreat(actor, player, snapshot, commands)
+        end)
+    elseif candidate.kind == "alert" then
+        return callSubsystem("navigation", actor, function() return doSharedAlert(actor, candidate, state) end)
+    elseif candidate.kind == "conversation" then
+        if not SC.Positioning or type(SC.Positioning.updateConversation) ~= "function" then
+            return false, "positioning_unavailable"
+        end
+        return callSubsystem("positioning", actor, function()
+            return SC.Positioning.updateConversation(actor, snapshot)
+        end)
+    end
+    return false, "unknown_decision"
+end
+
+Decision._delegateForTests = delegate
+
+-- A failed high-safety candidate must never expose the actor to a routine
+-- fallback in the same decision pass. If another action already owns the
+-- actor, waiting is deliberately side-effect free; otherwise stop translation
+-- and keep a visible threat faced while fresh senses choose the next action.
+-- The supervisor refuses `begin` for two unrelated reasons: the actor is really
+-- unavailable, or queued urgent survival work was just dispatched and the caller
+-- must stand down for a cycle.  The second is not a failure -- the companion is
+-- already acting on something more important -- so it must not descend the
+-- fallback ladder (which would stack a second owner on top of the urgent) or
+-- record a safety hold (which would report a stall that never happened).
+local function deferredToUrgentWork(reason)
+    local supervisor = SC.ActionSupervisor
+    if type(supervisor) ~= "table"
+        or type(supervisor.containsDeferredStatus) ~= "function" then return false end
+    local ok, deferred = pcall(supervisor.containsDeferredStatus, reason)
+    return ok and deferred == true
+end
+
+Decision._deferredToUrgentWorkForTests = deferredToUrgentWork
+
+local function guardedSafetyHold(actor, snapshot, selected)
+    local supervisor = SC.ActionSupervisor
+    if type(supervisor) == "table" and type(supervisor.current) == "function" then
+        local ok, owner = pcall(supervisor.current, actor)
+        if ok and owner ~= nil then
+            return true, "safety_wait_owner:" .. tostring(owner.owner or "action")
+        end
+    end
+    local native = SC.NativeActions
+    if type(native) == "table" and type(native.activityStatus) == "function" then
+        local ok, phase, owner, action = pcall(native.activityStatus, actor)
+        if ok and (phase == "active" or phase == "result_pending") then
+            return true, "safety_wait_native:" .. tostring(owner or "native")
+                .. ":" .. tostring(action or "activity")
+        end
+    end
+    if U().stop(actor) ~= true then return false, "safety_hold_stop_rejected" end
+    local record = type(snapshot) == "table"
+        and ((snapshot.immediateAttackers or {})[1] or (snapshot.threats or {})[1]) or nil
+    local target = type(record) == "table" and (record.actor or record.target) or record
+    if target ~= nil then
+        -- Failure to raise/focus a weapon does not invalidate the stationary
+        -- safety hold; stopping translation is the important invariant.
+        U().move(actor, "walk", {
+            action = "ready_weapon", facingTarget = target,
+            target = target, stableFacing = true, survivalCritical = true,
+        })
+    end
+    return true, "safety_guarded_hold:" .. tostring(selected and selected.kind or "unknown")
+end
+
+Decision._guardedSafetyHoldForTests = guardedSafetyHold
+
+-- A tactical hold that combat cannot resolve (for example a zombie visible
+-- behind a tall fence that only a large horde can break) must not strand a
+-- follower. Once no threat is immediate and the hold has lasted the leash time
+-- while the leader walks away, rejoin the leader instead of guarding forever.
+-- Survival holds, immediate attackers, encirclement and hostile humans keep the
+-- stationary hold unchanged. Consecutive hold ticks form one episode; a gap of
+-- more than 1.5 s (another decision acted) starts a new one.
+function Decision._safetyLeashCandidate(actor, player, snapshot, selected, candidates,
+        commands, state, current)
+    local utility = U()
+    if state.safetyHoldSince == nil
+        or current - (tonumber(state.safetyHoldLastAt) or -math.huge) > 1500 then
+        state.safetyHoldSince = current
+    end
+    state.safetyHoldLastAt = current
+    local rank = selected and (selected.safetyRank or safetyRank[selected.safetyTier]) or nil
+    if rank ~= safetyRank[Decision.SafetyTier.TACTICAL] then return nil end
+    if commands.order ~= "follow" and commands.order ~= "regroup" then return nil end
+    if type(snapshot) ~= "table" or snapshot.encircled == true or snapshot.humanThreat ~= nil
+        or (tonumber(snapshot.immediateCount) or #(snapshot.immediateAttackers or {})) > 0 then
+        return nil
+    end
+    if current - state.safetyHoldSince
+        < (utility.config("decisionSafetyHoldLeashMs") or 4000) then return nil end
+    local leash = (tonumber(commands.followDistance) or utility.config("followDistance") or 3)
+        + (utility.config("decisionSafetyHoldLeashDistance") or 4)
+    local leaderDistance = player and tonumber((utility.distance(actor, player))) or nil
+    if leaderDistance == nil or leaderDistance <= leash then return nil end
+    for _, candidate in ipairs(candidates or {}) do
+        if candidate.kind == "follow" then return candidate end
+    end
+    return nil
+end
+
+-- Combat that found nothing it may engage (a far or unreachable zombie, a
+-- doctrine that holds fire at that range) is not a failed defense. A
+-- follower keeps moving with its leader, and a companion on stay, guard or
+-- base duty goes back to its own work instead of aiming for minutes at a
+-- zombie behind the fence that it will never fight. Survival combat,
+-- immediate attackers, encirclement and hostile humans keep the stationary
+-- hold. A badly wounded companion whose only emergency is its own health
+-- still follows: alone in an aiming hold is the worse place to be.
+local dutyFallbackRanks = { base_work = 4, tactical = 3, scavenge = 2, downtime = 1 }
+function Decision._targetlessFollowCandidate(selected, failure, snapshot, candidates, commands)
+    if failure ~= "no_credible_target" or type(selected) ~= "table"
+        or selected.kind ~= "combat"
+        or (selected.emergency == true and selected.criticalOnly ~= true) then
+        return nil
+    end
+    if type(snapshot) ~= "table" or snapshot.encircled == true or snapshot.humanThreat ~= nil
+        or (tonumber(snapshot.immediateCount) or #(snapshot.immediateAttackers or {})) > 0 then
+        return nil
+    end
+    local order = commands.order
+    if order == "follow" or order == "regroup" then
+        for _, candidate in ipairs(candidates or {}) do
+            if candidate.kind == "follow" then return candidate end
+        end
+        return nil
+    end
+    if not ownTaskOrders[order] then return nil end
+    local best, bestRank
+    for _, candidate in ipairs(candidates or {}) do
+        local rank = dutyFallbackRanks[candidate.kind]
+        if rank and (bestRank == nil or rank > bestRank) then best, bestRank = candidate, rank end
+    end
+    return best
+end
+
+-- A road leader can have several close contacts in its sense snapshot yet no
+-- attackable zombie in Combat's fresh target list (for example through a
+-- wall). In that case let Navigation attempt the already ordered loaded leg
+-- instead of standing still until the expedition stall counter expires.
+function Decision._unscoredExpeditionMoveCandidate(selected, failure,
+        candidates, commands)
+    if type(selected) ~= "table" or selected.kind ~= "combat"
+        or (failure ~= "no_threat" and failure ~= "no_credible_target")
+        or type(commands) ~= "table"
+        or type(commands.expeditionTravelCombat) ~= "table"
+        or commands.order ~= "move_to"
+        or commands.tacticalTarget == nil then return nil end
+    for _, candidate in ipairs(candidates or {}) do
+        if candidate.kind == "tactical" then return candidate end
+    end
+    return nil
+end
+
+-- Bounded evidence for an otherwise silent stationary hold: which decision
+-- failed, why, how close the danger and the leader are, and for how long.
+function Decision._noteSafetyHold(actor, player, snapshot, kind, failure, state, current, outcome,
+        order)
+    local utility = U()
+    -- The threat list is in scan order, not distance order, so the first entry
+    -- is whichever square the sweep reached first. Reporting it as "nearest"
+    -- made a hold look correct that was not: a companion being bitten by two
+    -- zombies was recorded with the closest threat 24 tiles away, because that
+    -- was simply the first one found. Measure the minimum.
+    local nearest
+    for _, threat in ipairs(type(snapshot) == "table" and snapshot.threats or {}) do
+        local distance = tonumber(type(threat) == "table" and threat.distance) or nil
+        if distance == nil then
+            local squared = tonumber(type(threat) == "table" and threat.distanceSq) or nil
+            distance = squared ~= nil and squared >= 0 and math.sqrt(squared) or nil
+        end
+        if distance ~= nil and (nearest == nil or distance < nearest) then nearest = distance end
+    end
+    local leader = player and tonumber((utility.distance(actor, player))) or nil
+    utility.diagnostic("safety-hold", actor,
+        "kind=" .. tostring(kind or "unknown")
+            .. " failure=" .. tostring(failure or "none")
+            .. " outcome=" .. tostring(outcome or "held")
+            .. " threats=" .. tostring(type(snapshot) == "table"
+                and tonumber(snapshot.threatCount) or 0)
+            .. " immediate=" .. tostring(type(snapshot) == "table"
+                and tonumber(snapshot.immediateCount) or 0)
+            .. " nearest=" .. (nearest and string.format("%.1f", nearest) or "none")
+            .. " leader=" .. (leader and string.format("%.1f", leader) or "none")
+            .. " heldMs=" .. tostring(math.floor(current
+                - (tonumber(state.safetyHoldSince) or current)))
+            .. " order=" .. tostring(order or "unknown"))
+end
+
+local function candidateInterval(candidate)
+    if candidate.kind == "combat" then
+        return candidate.emergency
+            and (U().config("combatReflexIntervalMs") or 50)
+            or (U().config("combatDecisionIntervalMs") or 100)
+    elseif candidate.kind == "medical" then
+        return candidate.emergency and 100 or 250
+    elseif candidate.kind == "retreat" then
+        return 100
+    elseif candidate.kind == "follow" or candidate.kind == "tactical"
+        or candidate.kind == "conversation" then
+        return U().config("followIntervalMs") or 167
+    elseif candidate.kind == "alert" then
+        return 167
+    elseif candidate.kind == "mental_episode" or candidate.kind == "grief_response"
+        or candidate.kind == "social_participant" then
+        return 167
+    elseif candidate.kind == "purposeful_idle" or candidate.kind == "joy_response" then
+        return 250
+    elseif candidate.kind == "ritual" then
+        return 250
+    elseif candidate.kind == "needs" then
+        return 250
+    elseif candidate.kind == "base_work" then
+        return 250
+    elseif candidate.kind == "fishing" then
+        return 250
+    elseif candidate.kind == "logistics" then
+        return U().config("logisticsUpdateIntervalMs") or 750
+    elseif candidate.kind == "infection_crisis" then
+        return U().config("infectionCrisisIntervalMs") or 500
+    elseif candidate.kind == "faction" then
+        return 250
+    elseif candidate.kind == "downtime" then
+        return U().config("downtimeIntervalMs") or 1500
+    elseif candidate.kind == "encounter" or candidate.kind == "scavenge" then
+        return U().config("encounterIntervalMs") or 1000
+    end
+    return 250
+end
+
+local retainedApproachKinds = {
+    logistics = true, infection_crisis = true, encounter = true,
+    scavenge = true, downtime = true, needs = true,
+    base_work = true, fishing = true, faction = true, purposeful_idle = true,
+    joy_response = true, ritual = true,
+}
+
+local function candidateDue(actor, candidate, current)
+    return U().isDue(actor, "decision_" .. candidate.kind, candidateInterval(candidate), current)
+end
+
+-- speechOnly: the companion is busy with an owned activity or a pause, so the
+-- silent hand signal (which moves and holds it) is not available. When that
+-- signal would have been the right warning, a busy companion stays quiet
+-- instead of shouting, leaving the episode for when it is free.
+local function warnAboutThreat(actor, snapshot, commands, state, current, speechOnly)
+    local count = tonumber(snapshot.threatCount) or #(snapshot.threats or {})
+    if count <= 0 then
+        if state.threatClearAt == nil then state.threatClearAt = current end
+        if current - state.threatClearAt
+            >= (U().config("threatWarningClearMs") or 7000) then
+            state.lastWarnedThreat = nil
+            state.lastThreatBand = nil
+            state.lastThreatBandRank = nil
+        end
+        return
+    end
+    state.threatClearAt = nil
+    local strongest = type(snapshot.threats) == "table" and snapshot.threats[1] or nil
+    local threat = strongest and strongest.actor or nil
+    local dangerTopic, band, bandRank = "danger.zombie", "one", 1
+    if SC.Dialogue and type(SC.Dialogue.threatTopic) == "function" then
+        dangerTopic, band, bandRank = SC.Dialogue.threatTopic("danger", count)
+    end
+    local immediate = tonumber(snapshot.immediateCount) or #(snapshot.immediateAttackers or {})
+    local escalated = bandRank > (tonumber(state.lastThreatBandRank) or 0)
+    -- Sitting wall zombies are live contacts, even if their floor flag is set.
+    -- The unusual posture earns one callout per zombie, by whichever companion
+    -- speaks first. Close contact stays with combat's own bark, a crowd or a
+    -- band that has risen since the last warning keeps its own warning, and
+    -- the party cooldown below still applies, so it never sets off a chorus.
+    local sittingThreat
+    for _, candidate in ipairs(snapshot.threats or {}) do
+        if candidate.posture == "sitting" and candidate.visible == true
+            and (tonumber(candidate.distanceSq) or math.huge) <= 64 then
+            sittingThreat = candidate
+            break
+        end
+    end
+    local sittingFresh = sittingThreat ~= nil and immediate == 0 and bandRank <= 3
+        and not (escalated and state.lastThreatBandRank ~= nil)
+        and lastSittingCallout ~= sittingThreat.actor
+        and current - (state.lastSittingWarningAt or -math.huge) >= 30000
+    if sittingFresh then
+        dangerTopic = "danger.sitting"
+        threat = sittingThreat.actor
+    end
+    -- The senses ranking can swap the first entry between nearby zombies every
+    -- perception tick. Cool down the warning category, not the object identity;
+    -- otherwise each swap restarts the same freeze hand signal and looks like an
+    -- endless raised-hand loop. A genuinely higher danger band still bypasses it.
+    if current < (state.nextThreatWarningAt or 0) and not escalated
+        and not sittingFresh then return end
+    -- Once this actor has acknowledged a continuous visible-threat episode,
+    -- elapsed cooldown alone must not make the same pack feel newly discovered.
+    -- A higher band still gets one immediate escalation warning; ordinary
+    -- warnings resume only after the configured threat-free reset window.
+    if state.lastThreatBandRank ~= nil and not escalated
+        and not sittingFresh then return end
+    local player = snapshot.player and snapshot.player.actor or nil
+    local threatDistance = threat and U().distance(actor, threat) or 0
+    local quietPreferred = immediate == 0
+        and not sittingFresh
+        and threatDistance > (U().config("dangerSignalImmediateRadius") or 4)
+        and threatDistance <= (U().config("dangerSignalMaxThreatDistance") or 12)
+        and player ~= nil
+        and U().distance(actor, player) <= (U().config("dangerSignalMaxDistance") or 10)
+        and U().canSee(player, actor)
+        and (tonumber(snapshot.player and snapshot.player.danger) or 0) <= 0
+    if speechOnly == true and quietPreferred then return end
+    state.lastWarnedThreat = threat
+    state.lastThreatBand = band
+    state.lastThreatBandRank = bandRank
+    state.nextThreatWarningAt = current + (U().config("threatWarningCooldownMs") or 30000)
+    -- Immediate contact is resolved in the same decision by Combat. Reserving
+    -- the overhead line lets the more useful Engage or Fall back bark describe
+    -- the action instead of first showing a generic warning and then replacing
+    -- it. Distant contacts retain the existing hand signal or warning.
+    if immediate > 0 then return end
+    if current - lastGroupThreatWarningAt
+        < (U().config("threatWarningGroupCooldownMs") or 10000)
+        and not (escalated and band == "horde") then return end
+    lastGroupThreatWarningAt = current
+    if sittingFresh then
+        lastSittingCallout = threat
+        state.lastSittingWarningAt = current
+    end
+    local quietSignal = quietPreferred
+    local recognitionCandidate = count == 1 and threat and SC.Quirks
+        and type(SC.Quirks.recognitionCandidate) == "function"
+        and SC.Quirks.recognitionCandidate(actor, threat, snapshot, commands, current) or nil
+    local recognitionSpoken = false
+    if quietSignal then
+        local signalled = U().move(actor, "walk", {
+            action = "hand_signal",
+            emote = "freeze",
+            target = threat,
+            facingTarget = threat,
+            faceTargetBeforeEmote = true,
+            stableFacing = true,
+            silent = true,
+        })
+        if signalled ~= true then
+            quietSignal = false
+        else
+            if recognitionCandidate and SC.Quirks
+                and type(SC.Quirks.speakRecognition) == "function" then
+                recognitionSpoken = SC.Quirks.speakRecognition(
+                    actor, recognitionCandidate, commands, current) == true
+            end
+            if not recognitionSpoken and SC.Dialogue
+                and type(SC.Dialogue.say) == "function" then
+                local signalTopic = SC.Dialogue.threatTopic("signal", count)
+                SC.Dialogue.say(actor, signalTopic, nil, nil, {
+                    recentLimit = 4,
+                    salt = tostring(current) .. ":" .. tostring(count),
+                })
+            end
+        end
+    end
+    if not quietSignal then
+        if recognitionCandidate and SC.Quirks
+            and type(SC.Quirks.speakRecognition) == "function" then
+            recognitionSpoken = SC.Quirks.speakRecognition(
+                actor, recognitionCandidate, commands, current) == true
+        end
+        if not recognitionSpoken and SC.Dialogue and type(SC.Dialogue.say) == "function" then
+            SC.Dialogue.say(actor, dangerTopic, nil, nil,
+                { fallback = U().text("IGUI_SC_Threat_Warning", "Zombie! Watch out!") })
+        elseif not recognitionSpoken then
+            U().say(actor, U().text("IGUI_SC_Threat_Warning", "Zombie! Watch out!"))
+        end
+    end
+    local x, y, z = U().position(threat or actor)
+    if x and SC.Senses and type(SC.Senses.hear) == "function" then
+        pcall(SC.Senses.hear, actor, x, y, z, 24, 18, "companion_alert")
+    end
+    local actorX, actorY, actorZ = U().position(actor)
+    if not quietSignal and actorX and type(addSound) == "function" then
+        local radius = U().config("threatWarningSoundRadius") or 10
+        pcall(addSound, actor, actorX, actorY, actorZ, radius, 12)
+    end
+    if quietSignal then
+        local native = SC.NativeActions
+        if type(native) == "table" and type(native.beginPacing) == "function" then
+            local holdMs = U().config("dangerSignalHoldMs") or 900
+            pcall(native.beginPacing, actor, "threat_signal", {
+                minimumMs = holdMs,
+                maximumMs = holdMs,
+                lookChancePercent = 0,
+                interruptForFollow = false,
+                holdReason = "threat_signal",
+            })
+        end
+    end
+    return quietSignal
+end
+Decision._warnAboutThreatForTests = warnAboutThreat
+function Decision._threatWarningMemoryForTests(groupAt, sittingCallout)
+    local previousAt, previousSitting = lastGroupThreatWarningAt, lastSittingCallout
+    lastGroupThreatWarningAt, lastSittingCallout = groupAt or -math.huge, sittingCallout
+    return previousAt, previousSitting
+end
+
+local function warnAboutHeardThreat(actor, snapshot, state, current)
+    local visibleCount = tonumber(snapshot.threatCount) or #(snapshot.threats or {})
+    if visibleCount > 0 then return end
+    local heard = type(snapshot.lastHeardDanger) == "table" and snapshot.lastHeardDanger
+        or type(snapshot.heardThreats) == "table" and snapshot.heardThreats[1]
+        or nil
+    if not heard then return end
+    local heardAt = tonumber(heard.heardAt) or (current - (tonumber(heard.ageMs) or 0))
+    if current - heardAt > (U().config("heardThreatMemoryMs") or 5000) then return end
+    if SC.Dialogue and type(SC.Dialogue.lastSpokenAt) == "function"
+        and current - SC.Dialogue.lastSpokenAt(actor) < 3000 then return end
+    if current < (state.nextHeardThreatWarningAt or 0) then return end
+    if heardAt <= (state.lastWarnedHeardAt or -math.huge) then return end
+
+    state.lastWarnedHeardAt = heardAt
+    state.nextHeardThreatWarningAt = current
+        + (U().config("heardThreatWarningCooldownMs") or 15000)
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        SC.Dialogue.say(actor, "danger.heard", nil, nil, {
+            fallback = "*listens* I heard a walker.",
+            recentLimit = 4,
+            salt = tostring(current) .. ":" .. tostring(heard.direction or "unknown"),
+        })
+    else
+        U().say(actor, "*listens* I heard a walker.")
+    end
+end
+
+local function survivalNeedsImmediateControl(snapshot, assessment, needs, commands)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    local immediate = tonumber(snapshot.immediateCount)
+        or #(snapshot.immediateAttackers or {})
+    local playerDanger = type(snapshot.player) == "table"
+        and tonumber(snapshot.player.danger) or 0
+    return immediate > 0 or snapshot.humanThreat ~= nil
+        or Decision._engagementPressure(snapshot) >= 1.5
+        or playerDanger > 0 or commands.order == "retreat"
+        or assessment.downed == true
+        or assessment.critical == true and ((tonumber(snapshot.threatCount) or #(snapshot.threats or {})) > 0
+            or assessment.needsBandageChange == true or (tonumber(assessment.dirtyBandages) or 0) > 0)
+        or (tonumber(assessment.bleedingCount) or 0) > 0
+        or type(needs) == "table" and needs.emergency == true
+end
+
+local function nonMedicalSurvivalNeedsImmediateControl(snapshot, needs, commands)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    local immediate = tonumber(snapshot.immediateCount)
+        or #(snapshot.immediateAttackers or {})
+    local playerDanger = type(snapshot.player) == "table"
+        and tonumber(snapshot.player.danger) or 0
+    return immediate > 0 or snapshot.humanThreat ~= nil
+        or Decision._engagementPressure(snapshot) >= 1.5
+        or playerDanger > 0 or commands.order == "retreat"
+        or type(needs) == "table" and needs.emergency == true
+end
+
+local function ownerNeedsImmediatePreemption(owner, snapshot, assessment, needs, commands,
+        policyEmergency)
+    if owner == "drive" then
+        -- Foot combat contacts do not transfer control from a seated driver.
+        -- Medical, needs and explicit control emergencies still park the car;
+        -- an actual zombie grab is handled by the runtime's grabbed branch.
+        return assessment.downed == true or assessment.critical == true
+            or (tonumber(assessment.bleedingCount) or 0) > 0
+            or type(needs) == "table" and needs.emergency == true
+            or commands.order == "retreat" or policyEmergency == true
+    end
+    local urgent = survivalNeedsImmediateControl(snapshot, assessment, needs, commands)
+    -- Bleeding/critical assessment is the reason a medical owner exists. Treating
+    -- it as a fresh survival interrupt made emergency self-care cancel its own rip
+    -- and bandage animations every decision tick. Only independent pressure may
+    -- preempt an already-active medical transaction.
+    if urgent and owner == "medical" and policyEmergency ~= true
+        and not nonMedicalSurvivalNeedsImmediateControl(snapshot, needs, commands) then
+        return false
+    end
+    return urgent or policyEmergency == true
+end
+
+Decision._ownerNeedsImmediatePreemptionForTests = ownerNeedsImmediatePreemption
+
+local function factionNeedsImmediateControl(actor, player, snapshot, commands)
+    if commands.recruited or not SC.FactionBehavior
+        or type(SC.FactionBehavior.intentFor) ~= "function" then return false end
+    local ok, intent = pcall(SC.FactionBehavior.intentFor, actor, player, snapshot)
+    return ok and type(intent) == "table"
+        and (intent.mode == "hostile" or intent.mode == "bandit_human")
+end
+
+local function pacingFollowMustMove(actor, player, commands, record)
+    if type(record) == "table" and record.interruptForFollow == false then return false end
+    if commands.order ~= "follow" and commands.order ~= "regroup" then return false end
+    if not player then return false end
+    local moving, movingOk = U().call(player, "isMoving")
+    local slack = U().config("actionPacingFollowSlack") or 2.5
+    local limit = math.max(3, tonumber(commands.followDistance) or 3) + slack
+    return U().distance(actor, player) > limit or (movingOk and moving == true
+        and U().distance(actor, player) > math.max(2, limit - 1.5))
+end
+
+local function queueUrgentReassessment(actor, state, source)
+    local service = SC.ActionSupervisor
+    if type(service) ~= "table" or type(service.queueUrgent) ~= "function" then
+        return false, "urgent_queue_unavailable"
+    end
+    return service.queueUrgent(actor, {
+        owner = "decision", action = "survival_reassess",
+        priority = service.Priority and service.Priority.SURVIVAL or 100,
+        targetKey = "actor:" .. tostring(U().idOf(actor) or actor),
+        reason = "survival_priority_waiting_for_owner",
+        detail = { source = source },
+        dispatch = function()
+            -- The concrete survival action is deliberately selected on the
+            -- next decision pass from fresh senses.  This callback is the
+            -- observable hand-off from the former non-cancellable owner.
+            state.current = "urgent"
+            state.intent = "survival_reassess_released"
+            state.urgentReleasedAt = U().nowMs()
+            state.lastHandledAt = 0
+            return true, "survival_reassess_dispatched", { source = source }
+        end,
+    })
+end
+
+local function holdOwnedActivityOrPacing(actor, player, snapshot, assessment,
+        needs, commands, state, current, rootRuntime)
+    local native = SC.NativeActions
+    -- A hostile household policy is an immediate combat order even before the
+    -- ordinary candidate pass. Without this early check, an existing medical
+    -- owner can indefinitely hide the hostile candidate behind the activity gate.
+    local factionEmergency = factionNeedsImmediateControl(
+        actor, player, snapshot, commands)
+    local urgent = survivalNeedsImmediateControl(snapshot, assessment, needs, commands)
+        or factionEmergency
+    if SC.ActionSupervisor and type(SC.ActionSupervisor.current) == "function" then
+        local token = SC.ActionSupervisor.current(actor)
+        if token then
+            urgent = ownerNeedsImmediatePreemption(
+                token.owner, snapshot, assessment, needs, commands, factionEmergency)
+            local serialChanged = token.owner == "downtime"
+                and type(token.metadata) == "table"
+                and tonumber(token.metadata.commandSerial) ~= (tonumber(commands.commandSerial) or 0)
+            if urgent or serialChanged then
+                local cancelled, cancelReason = SC.ActionSupervisor.cancel(actor,
+                    urgent and "survival_priority" or "command_changed",
+                    urgent and SC.ActionSupervisor.Priority.SURVIVAL
+                        or SC.ActionSupervisor.Priority.PLAYER, false)
+                if cancelled ~= true then
+                    state.current = "activity"
+                    if urgent then
+                        local queued, queueReason = queueUrgentReassessment(actor,
+                            state, tostring(token.owner) .. ":" .. tostring(token.action)
+                                .. ":" .. tostring(token.phase))
+                        state.intent = queued and (queueReason or "urgent_queued")
+                            or (queueReason or cancelReason or "action_cancel_pending")
+                    else
+                        state.intent = cancelReason or "action_cancel_pending"
+                    end
+                    state.lastHandledAt = current
+                    return true, state.intent
+                end
+            elseif token.rollbackObligation ~= nil then
+                state.current = "activity"
+                state.intent = tostring(token.owner) .. ":" .. tostring(token.action)
+                state.lastHandledAt = current
+                return true, state.intent
+            elseif token.owner == "downtime" and SC.Downtime
+                and type(SC.Downtime.update) == "function" then
+                -- Downtime owns a controller, not just an animation.  Poll it
+                -- while its supervisor token is live so approaches, bed entry,
+                -- washing and their completion proofs advance to a terminal
+                -- state.  Falling through to the ordinary candidate pass used
+                -- to select follow/stay again and cancel these actions every
+                -- few seconds as "decision_preempted".
+                local safe, _, downtimeReason = U().safeSubsystem(
+                    "downtime", actor, SC.Downtime.update,
+                    actor, player, rootRuntime or {})
+                state.current, state.currentKey = "downtime", "downtime"
+                state.intent = safe and (downtimeReason or "owned_downtime_polled")
+                    or "owned_downtime_poll_failed"
+                state.lastHandledAt = current
+                return true, state.intent
+            elseif token.owner == "player_control"
+                or token.phase == "committing" or token.phase == "verifying" then
+                state.current = "activity"
+                state.intent = tostring(token.owner) .. ":" .. tostring(token.action)
+                state.lastHandledAt = current
+                return true, state.intent
+            end
+        end
+    end
+    if type(native) ~= "table" then return false end
+    if type(native.activityStatus) == "function" then
+        local phase, owner, name = native.activityStatus(actor)
+        -- Production owns an indefinite native action (notably tree chopping).
+        -- Poll its controller while the animation runs so the 45-second base-job
+        -- lease, fallback events and completion proof cannot expire behind this
+        -- otherwise-correct activity hold. This also avoids the heavier generic
+        -- candidate pass while a single known owner is active.
+        if not urgent and owner == "work"
+            and (phase == "active" or phase == "result_pending")
+            and commands.order == "base_duty" and SC.BaseWork
+            and type(SC.BaseWork.update) == "function" then
+            local safe, _, workReason = U().safeSubsystem("base-work", actor,
+                SC.BaseWork.update, actor, player, rootRuntime or {})
+            state.current, state.currentKey = "base_work", "base_work"
+            state.intent = safe and (workReason or "owned_work_polled")
+                or "owned_work_poll_failed"
+            state.lastHandledAt = current
+            return true, state.intent
+        end
+        if phase == "active" and not urgent then
+            state.current = "activity"
+            state.intent = tostring(owner) .. ":" .. tostring(name)
+            state.lastHandledAt = current
+            return true, state.intent
+        elseif urgent and phase ~= nil and phase ~= "none" then
+            local interrupted, interruptReason = false, "activity_not_interruptible"
+            if type(native.interruptOwnedActivity) == "function" then
+                interrupted, interruptReason = native.interruptOwnedActivity(
+                    actor, "survival_priority")
+            end
+            if interrupted == true then
+                -- Drop a follow/work route whose portal preparation just yielded;
+                -- otherwise its retained native lease can mask the combat handoff
+                -- when ordinary navigation resumes later.
+                if SC.Navigation and type(SC.Navigation.cancel) == "function" then
+                    pcall(SC.Navigation.cancel, actor, "survival_priority")
+                end
+                return false
+            end
+            local queued, queueReason = queueUrgentReassessment(actor, state,
+                tostring(owner) .. ":" .. tostring(name) .. ":" .. tostring(phase))
+            state.current = "activity"
+            state.intent = queued and (queueReason or "urgent_queued")
+                or (queueReason or interruptReason or "urgent_queue_rejected")
+            state.lastHandledAt = current
+            return true, state.intent
+        end
+    end
+    if type(native.pacingStatus) ~= "function" then return false end
+    local pacing, record = native.pacingStatus(actor, current)
+    if not pacing then return false end
+    local serialChanged = tonumber(record.commandSerial) ~= (tonumber(commands.commandSerial) or 0)
+    local inVehicle = select(1, U().call(actor, "getVehicle")) ~= nil
+    if urgent or serialChanged or inVehicle
+        or pacingFollowMustMove(actor, player, commands, record) then
+        if type(native.cancelPacing) == "function" then
+            native.cancelPacing(actor, urgent and "survival_priority"
+                or serialChanged and "new_order"
+                or inVehicle and "vehicle_transition" or "follow_resumed")
+        end
+        return false
+    end
+
+    if record.stopped ~= true then
+        local stopped = type(native.stopDirect) == "function" and native.stopDirect(actor, {
+            preservePosture = commands.moveMode == "copy",
+        })
+            or U().stop(actor)
+        record.stopped = stopped == true
+    end
+    -- Thinking does not make a companion forget the team's movement posture.
+    -- Keep crouch in sync during the pause without starting a path request.
+    if commands.moveMode == "copy" and SC.Positioning
+        and type(SC.Positioning.syncCopiedPosture) == "function" then
+        SC.Positioning.syncCopiedPosture(actor, player, "copy")
+    end
+    local looked = false
+    if record.shouldLook == true and record.looked ~= true
+        and current >= (tonumber(record.lookDueAt) or math.huge) then
+        local x, y, z = U().position(actor)
+        if x ~= nil then
+            local directions = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
+            local direction = directions[(tonumber(record.lookDirection) or 0) % 4 + 1]
+            local accepted = U().move(actor, "walk", {
+                action = "rear_scan",
+                targetPosition = { x = x + direction[1] * 3,
+                    y = y + direction[2] * 3, z = z or 0 },
+                pacingObservation = true,
+                humanAnimationOnly = true,
+            })
+            looked = accepted == true
+        end
+        record.looked = true
+    end
+    state.current = "pacing"
+    state.intent = type(record.holdReason) == "string" and record.holdReason
+        or (looked and "looking_around" or "thinking")
+    state.lastHandledAt = current
+    return true, state.intent
+end
+Decision._holdOwnedActivityOrPacingForTests = holdOwnedActivityOrPacing
+
+local function chooseHumanThreat(actor, player, external, faction)
+    if external and external.external == "project_alife"
+        and not U().isALifeHostileToParty(external.actor, player, actor) then
+        external = nil
+    end
+    if external == nil then return faction end
+    if faction == nil then return external end
+    if external.visible ~= faction.visible then
+        return external.visible == true and external or faction
+    end
+    local externalDistance = tonumber(external.distance)
+        or U().distance(actor, external.actor or external)
+    local factionDistance = tonumber(faction.distance)
+        or U().distance(actor, faction.actor or faction)
+    return externalDistance <= factionDistance and external or faction
+end
+Decision._chooseHumanThreatForTests = chooseHumanThreat
+
+function Decision.update(actor, player, runtime, roundTimestamp)
+    local utility = U()
+    if not utility or not utility.isValidActor(actor) then return false, "invalid_actor" end
+    local state, rootRuntime = stateFor(actor, runtime)
+    local current = tonumber(roundTimestamp) or utility.nowMs()
+    if SC.Needs and type(SC.Needs.updateRates) == "function" then
+        utility.safeSubsystem("needs-rate", actor, SC.Needs.updateRates,
+            actor, rootRuntime, current)
+    end
+
+    local snapshot = rootRuntime.senses and rootRuntime.senses.current or rootRuntime.snapshot
+    if utility.isDue(actor, "perception", utility.config("perceptionIntervalMs") or 500, current) then
+        if SC.Senses and type(SC.Senses.snapshot) == "function" then
+            local safe, value = utility.safeSubsystem("senses", actor,
+                SC.Senses.snapshot, actor, player, rootRuntime)
+            if safe and type(value) == "table" then snapshot = value end
+        end
+    end
+    snapshot = snapshot or {
+        threats = {}, immediateAttackers = {}, escapeSquares = {}, allies = {},
+        threatCount = 0, immediateCount = 0, pressure = 0,
+        player = { danger = 0 },
+    }
+    if SC.Senses and type(SC.Senses.refreshImmediate) == "function" then
+        local safe, value = utility.safeSubsystem("senses-reflex", actor,
+            SC.Senses.refreshImmediate, actor, player, snapshot, rootRuntime)
+        if safe and type(value) == "table" then snapshot = value end
+    end
+    rootRuntime.snapshot = snapshot
+    if SC.Positioning and type(SC.Positioning.cancelConversation) == "function"
+        and ((tonumber(snapshot.threatCount) or 0) > 0
+            or (tonumber(snapshot.immediateCount) or 0) > 0
+            or snapshot.humanThreat ~= nil) then
+        SC.Positioning.cancelConversation(actor, "conversation_interrupted_by_danger")
+    end
+
+    if SC.Commands and type(SC.Commands.observeRelationship) == "function" then
+        utility.safeSubsystem("relationship", actor,
+            SC.Commands.observeRelationship, actor, player, snapshot)
+    end
+
+    local commands = commandsFor(actor)
+    if commands.recruited and SC.FactionBehavior
+        and type(SC.FactionBehavior.humanThreatFor) == "function" then
+        local ok, humanThreat = pcall(SC.FactionBehavior.humanThreatFor, actor, player)
+        local externalThreat = snapshot.humanThreat
+        snapshot.humanThreat = chooseHumanThreat(actor, player,
+            externalThreat, ok and humanThreat or nil)
+    else
+        snapshot.humanThreat = nil
+    end
+    if SC.Encounter and type(SC.Encounter.formationRejoinRequired) == "function"
+        and type(SC.Encounter.cancelScavenge) == "function" then
+        local rejoin, rejoinReason = SC.Encounter.formationRejoinRequired(
+            actor, player, commands)
+        if rejoin == true then
+            utility.safeSubsystem("scavenge-formation", actor,
+                SC.Encounter.cancelScavenge, actor,
+                rejoinReason or "formation_rejoin")
+        end
+    end
+    if SC.Combat and type(SC.Combat.observe) == "function" then
+        utility.safeSubsystem("combat-observe", actor, SC.Combat.observe, actor)
+    end
+    -- Carrying a light is not an activity, so it is upkeep rather than a
+    -- behaviour candidate: a companion lights its torch and keeps walking.
+    if SC.Lighting and type(SC.Lighting.observe) == "function" then
+        utility.safeSubsystem("lighting", actor, SC.Lighting.observe,
+            actor, player, rootRuntime, snapshot, commands, current)
+    end
+    if SC.Autonomy and type(SC.Autonomy.observe) == "function" then
+        utility.safeSubsystem("autonomy-observe", actor, SC.Autonomy.observe,
+            actor, player, rootRuntime, snapshot, commands)
+    end
+    local assessment = medicalAssessment(actor, rootRuntime, 100)
+    local needs
+    if SC.Needs and type(SC.Needs.assess) == "function" then
+        local ok, value = pcall(SC.Needs.assess, actor, rootRuntime)
+        if ok and type(value) == "table" then needs = value end
+    end
+    if not assessment.alive or assessment.health <= 0 or assessment.terminalKnox then
+        if SC.VehicleHotwire and type(SC.VehicleHotwire.cancel) == "function" then
+            SC.VehicleHotwire.cancel(actor, "companion_dead")
+        end
+        if SC.Driving and type(SC.Driving.stop) == "function" then
+            SC.Driving.stop(actor, "driver_dead")
+        end
+        if not utility.stop(actor) then
+            state.intent = "dead_stop_rejected"
+            return false, state.intent
+        end
+        state.current, state.intent = "dead", "dead"
+        return false, "dead"
+    end
+
+    -- Speech-only banter: a surrounded companion's deadpan distraction or a
+    -- taunt for a grabbed ally. It never changes what the companion does.
+    if SC.Banter and type(SC.Banter.combatPulse) == "function" then
+        utility.safeSubsystem("banter-combat", actor, SC.Banter.combatPulse,
+            actor, player, snapshot, commands, assessment, current)
+    end
+
+    -- World observations only add a line to this actor's ChatElement. Run
+    -- them before an owned scavenge or downtime action returns early; those
+    -- activities occupy most calm play and must not silence nearby speakers.
+    if SC.Dialogue and type(SC.Dialogue.ambientPulse) == "function" then
+        utility.safeSubsystem("ambient-dialogue", actor,
+            SC.Dialogue.ambientPulse, actor, player, snapshot, commands, current)
+    end
+
+    -- The player is examining or treating this companion through the native
+    -- health panel. The opening command already stopped its route; do not let
+    -- a fresh downtime, need, crowd-yield, or combat recheck move the patient
+    -- between vanilla treatment actions. Release the panel for immediate danger.
+    local medicalPanel = SC.MedicalUI and type(SC.MedicalUI.current) == "function"
+        and SC.MedicalUI.current() or nil
+    if medicalPanel and medicalPanel.actor == actor then
+        local immediate = tonumber(snapshot.immediateCount) or 0
+        local human = snapshot.humanThreat
+        if immediate > 0 or (human and human.visible == true) then
+            SC.MedicalUI.close("danger")
+        else
+            state.current, state.currentKey = "medical", "player_medical_check"
+            state.intent = "receiving_player_medical_check"
+            state.lastHandledAt = current
+            return true, state.intent
+        end
+    end
+
+    -- A drive owns its parked/waiting seat as well as its moving wheel. Keep
+    -- autonomous combat and the stopped-vehicle exit policy behind that lease.
+    if SC.Driving and type(SC.Driving.isDriving) == "function"
+        and SC.Driving.isDriving(actor) then
+        local factionEmergency = factionNeedsImmediateControl(actor, player, snapshot, commands)
+        if ownerNeedsImmediatePreemption("drive", snapshot, assessment, needs, commands,
+            factionEmergency) then
+            local stopped, stopReason = SC.Driving.stop(actor,
+                factionEmergency and "faction_priority" or "survival_priority")
+            if not stopped then
+                state.current, state.intent = "driving", stopReason or "drive_stop_pending"
+                return false, state.intent
+            end
+        else
+            state.current, state.currentKey = "driving", "drive_route"
+            state.intent, state.lastHandledAt = "driving", current
+            warnAboutThreat(actor, snapshot, commands, state, current, true)
+            warnAboutHeardThreat(actor, snapshot, state, current)
+            Decision.remarkOnNoise(actor, snapshot, state, current)
+            return true, "driving"
+        end
+    end
+
+    -- A manual hotwire owns the driver seat until the car resolves its native
+    -- attempt. Run before the ordinary exit policy and follow movement.
+    if SC.VehicleHotwire and SC.VehicleHotwire.active(actor) then
+        local worked, why = SC.VehicleHotwire.step(actor, snapshot)
+        state.current, state.currentKey = "vehicle", "hotwire"
+        state.intent, state.lastHandledAt = why or "hotwire", current
+        return worked == true, state.intent
+    end
+
+    -- Car expeditions reserve the exact native seat before motion. Drive
+    -- ownership above still wins for the leader once the wheel is engaged.
+    local carOrder = SC.ExpeditionCar
+        and SC.ExpeditionCar.boardingOrderFor(actor) or nil
+    if carOrder and (tonumber(snapshot.immediateCount) or 0) == 0 then
+        local boarded, boardReason = SC.ExpeditionCar.boardMember(
+            actor, carOrder, snapshot)
+        state.current, state.currentKey = "vehicle", "expedition_board"
+        state.intent, state.lastHandledAt = boardReason or "boarding", current
+        return boarded == true, state.intent
+    end
+
+    -- A completed hit may remove the final perceived threat before the native
+    -- swing exits. Keep that animation owner even though evaluate() would no
+    -- longer propose combat. Actionable critical medicine and native hit reactions
+    -- retain precedence; a failed stationary hold must not fall through to Follow.
+    if not assessment.downed and not (actionableMedical(actor, assessment, false)
+        and (assessment.critical or assessment.health <= (utility.config("downedHealth") or 18)))
+        and SC.Combat and type(SC.Combat.holdNativeAttack) == "function" then
+        local safe, held, holdReason = utility.safeSubsystem("combat-lease",
+            actor, SC.Combat.holdNativeAttack, actor, rootRuntime)
+        if not safe or held ~= nil then
+            state.current, state.currentKey = "combat", "combat"
+            state.intent = holdReason or "native_combat_hold_failed"
+            state.lastHandledAt = current
+            return safe and held == true, state.intent
+        end
+    end
+
+    local held, heldReason = holdOwnedActivityOrPacing(
+        actor, player, snapshot, assessment, needs, commands, state, current, rootRuntime)
+    if held then
+        -- Callouts are speech only. A companion busy with an owned activity
+        -- (reading, eating, base work, looting, treatment) or pausing between
+        -- actions still names a zombie it sees, a walker it hears or a noise
+        -- worth a word. Returning before them left every busy companion
+        -- silent; only the silent hand signal waits until it is free.
+        warnAboutThreat(actor, snapshot, commands, state, current, true)
+        warnAboutHeardThreat(actor, snapshot, state, current)
+        Decision.remarkOnNoise(actor, snapshot, state, current)
+        return true, heldReason
+    end
+
+    local vehicleHandled, vehicleReason = enforceVehicleExitPolicy(actor, player, commands)
+    if vehicleHandled ~= nil then
+        state.current = "vehicle"
+        state.intent = vehicleReason or "vehicle_policy"
+        state.lastHandledAt = current
+        return vehicleHandled == true, state.intent
+    end
+
+    if SC.Quirks and type(SC.Quirks.observeRecognitionResolution) == "function" then
+        utility.safeSubsystem("recognition-resolution", actor,
+            SC.Quirks.observeRecognitionResolution,
+            actor, snapshot, commands, current)
+    end
+    local threatSignalled = warnAboutThreat(actor, snapshot, commands, state, current)
+    warnAboutHeardThreat(actor, snapshot, state, current)
+    Decision.remarkOnNoise(actor, snapshot, state, current)
+    if threatSignalled then
+        state.current, state.currentKey, state.intent = "alert", "threat_signal", "threat_signal"
+        state.lastHandledAt = current
+        return true, state.intent
+    end
+    if SC.Navigation and type(SC.Navigation.serviceCrowdYield) == "function" then
+        local safe, moved, moveReason = utility.safeSubsystem("crowd-yield",
+            actor, SC.Navigation.serviceCrowdYield, actor, snapshot)
+        if safe and moved == true then
+            state.current, state.currentKey = "movement", "crowd_yield"
+            state.intent = moveReason or "crowd_yield_pathing"
+            state.lastHandledAt = current
+            return true, state.intent
+        end
+    end
+    local candidates = profiledDecisionPhase("evaluate", actor, evaluate,
+        actor, player, snapshot, commands, assessment, needs, state, current)
+    local selected = profiledDecisionPhase("targeting", actor,
+        selectWithHysteresis, state, candidates, current)
+    if not selected then
+        if not utility.stop(actor) then
+            state.intent = "idle_stop_rejected"
+            return false, state.intent
+        end
+        state.current, state.currentKey, state.intent = "idle", nil, "stable_idle"
+        return false, "no_candidate"
+    end
+
+    if not candidateDue(actor, selected, current) then
+        -- Work discovery/transfer stays on its normal one-second cadence.
+        -- While the same Scavenge task is approaching a container, Navigation
+        -- owns the retained route and refreshes native movement input on every
+        -- ordinary decision beat. Its input otherwise expires after 250 ms.
+        if (selected.kind == "scavenge" or selected.kind == "encounter")
+            and SC.Navigation and type(SC.Navigation.sustainScavenge) == "function"
+            and SC.Encounter and type(SC.Encounter.peek) == "function" then
+            local encounter = SC.Encounter.peek(actor)
+            local task = encounter and encounter.task
+            if task and task.phase == "approach" then
+                local sustained, sustainReason = SC.Navigation.sustainScavenge(
+                    actor, task, snapshot)
+                if sustained then
+                    state.current = selected.kind
+                    state.currentKey = selected.key
+                    state.intent = sustainReason or "approaching_container"
+                    state.lastHandledAt = current
+                    return true, state.intent
+                end
+            end
+        end
+        if retainedApproachKinds[selected.kind]
+            and state.current == selected.kind and state.currentKey == selected.key
+            and SC.Navigation
+            and type(SC.Navigation.sustainDecisionApproach) == "function" then
+            local sustained, sustainReason = SC.Navigation.sustainDecisionApproach(
+                actor, selected.kind, selected.key, snapshot)
+            if sustained then
+                state.intent = sustainReason or "approaching"
+                state.lastHandledAt = current
+                return true, state.intent
+            end
+        end
+        return false, "deferred"
+    end
+
+    local previous = state.current
+    local previousKey = state.currentKey
+    -- A combat re-check against zombies it just judged out of reach must not
+    -- tear down the companion's own work; if it finds a real target, the next
+    -- decision is no longer a re-check and preempts as usual.
+    local recheck = selected.kind == "combat"
+        and (selected.emergency ~= true or selected.criticalOnly == true)
+        and onlyUnreachableThreats(actor, snapshot, current)
+    if previous == "ritual" and selected.kind ~= "ritual"
+        and SC.Autonomy and type(SC.Autonomy.interrupt) == "function" then
+        pcall(SC.Autonomy.interrupt, actor, "decision_preempted")
+    end
+    if selected.kind ~= "mental_episode" and selected.kind ~= "social_participant"
+        and (selected.kind == "combat" or selected.kind == "retreat"
+            or selected.kind == "tactical" and selected.detail
+                and selected.detail.mode == "player_move"
+            or selected.kind == "medical" and selected.emergency) and not recheck then
+        if SC.Autonomy and type(SC.Autonomy.interrupt) == "function" then
+            pcall(SC.Autonomy.interrupt, actor,
+                selected.kind == "tactical" and "player_move_order" or "survival_priority")
+        end
+    end
+    if previous == "base_work" and selected.kind ~= "base_work" and not recheck
+        and (selected.kind == "combat" or selected.kind == "retreat" or selected.emergency)
+        and SC.BaseWork and type(SC.BaseWork.cancel) == "function" then
+        local called, cancelled, cancelReason = pcall(SC.BaseWork.cancel,
+            actor, "danger_preempted_base_work")
+        if not called or cancelled ~= true then
+            -- A Chef can own a native action or a hot vessel that cannot be
+            -- rolled back yet. Preserve its receipt and claim, but let urgent
+            -- combat/retreat take priority over tending the meal.
+            state.baseWorkEmergencyPending = called and cancelReason or cancelled
+        else
+            state.baseWorkEmergencyPending = nil
+        end
+    end
+    if previous == "fishing" and selected.kind ~= "fishing" and not recheck
+        and SC.Fishing and type(SC.Fishing.cancel) == "function" then
+        SC.Fishing.cancel(actor, "fishing_preempted")
+    end
+    if state.workAction and not recheck
+        and (selected.kind ~= "tactical" or commands.order ~= "work") then
+        local cancelled, cancelReason = cancelWork(actor, state, "work_preempted")
+        if not cancelled then
+            state.intent = cancelReason
+            return false, cancelReason
+        end
+    end
+    -- Downtime owns a timed animation and sometimes a reserved object. Release
+    -- both before another decision may translate the actor; otherwise the old
+    -- kneeling pose can move with the new follow path.
+    if previous == "downtime" and selected.kind ~= "downtime" and not recheck
+        and SC.Downtime and type(SC.Downtime.peek) == "function"
+        and type(SC.Downtime.cancel) == "function" then
+        local downtimeState = SC.Downtime.peek(actor)
+        if downtimeState and (downtimeState.active or downtimeState.curtainTask) then
+            local cancelled, cancelReason = SC.Downtime.cancel(actor, "decision_preempted")
+            if cancelled ~= true then
+                state.intent = cancelReason or "downtime_preempt_failed"
+                return false, state.intent
+            end
+        end
+    end
+    if selected.kind ~= "needs" and not recheck and (selected.kind == "combat"
+        or selected.kind == "retreat" or selected.emergency) then
+        if SC.Needs and type(SC.Needs.cancel) == "function" then
+            local cancelled, cancelReason = SC.Needs.cancel(actor, "needs_preempted")
+            if cancelled ~= true then
+                state.intent = cancelReason or "needs_preempt_failed"
+                return false, state.intent
+            end
+        end
+    end
+    local navigationSerial = SC.Navigation
+        and type(SC.Navigation.requestSerial) == "function"
+        and SC.Navigation.requestSerial(actor) or 0
+    local handled, reason = profiledDecisionPhase("delegate", actor, delegate,
+        selected, actor, player, rootRuntime, commands, snapshot, state)
+    if handled then state.safetyHoldSince, state.safetyHoldLastAt = nil, nil end
+    if not handled and deferredToUrgentWork(reason) then
+        -- Urgent work owns the actor for this pulse. Yield it intact: leave the
+        -- selection bookkeeping alone so the next pulse re-selects against fresh
+        -- senses, and leave any running safety-hold window untouched because the
+        -- urgent action is what is now keeping the companion safe.
+        state.intent = tostring(reason)
+        state.lastHandledAt = current
+        return true, state.intent
+    end
+    if not handled then
+        local selectedFailure = reason
+        local selectedRank = selected.safetyRank or safetyRank[selected.safetyTier] or 1
+        local strictSafetyFallback = selectedRank >= safetyRank[Decision.SafetyTier.TACTICAL]
+        -- A preferred subsystem may have no concrete action (for example no
+        -- bandage). Try lower utilities once, without recursive subsystem calls.
+        -- Survival/tactical decisions may only fall back within their own tier;
+        -- descending to follow, loot, or downtime during danger is unsafe.
+        for _, fallback in ipairs(candidates) do
+            if fallback ~= selected and fallback.key ~= selected.key
+                and (not strictSafetyFallback
+                    or (fallback.safetyRank or safetyRank[fallback.safetyTier] or 1)
+                        == selectedRank)
+                and candidateDue(actor, fallback, current) then
+                local fallbackNavigationSerial = SC.Navigation
+                    and type(SC.Navigation.requestSerial) == "function"
+                    and SC.Navigation.requestSerial(actor) or 0
+                local fallbackHandled, fallbackReason = profiledDecisionPhase(
+                    "delegate", actor, delegate, fallback, actor, player,
+                    rootRuntime, commands, snapshot, state)
+                if fallbackHandled then
+                    handled, reason, selected = true, fallbackReason, fallback
+                    navigationSerial = fallbackNavigationSerial
+                    break
+                end
+            end
+        end
+        local dangerPresent = type(snapshot) == "table" and (
+            (tonumber(snapshot.threatCount) or #(snapshot.threats or {})) > 0
+            or (tonumber(snapshot.immediateCount) or #(snapshot.immediateAttackers or {})) > 0
+            or snapshot.humanThreat ~= nil)
+        if not handled and (selectedRank >= safetyRank[Decision.SafetyTier.SURVIVAL]
+            or dangerPresent) then
+            local heldKind = selected.kind
+            local leashFollow = Decision._safetyLeashCandidate(actor, player, snapshot,
+                selected, candidates, commands, state, current)
+            local followOutcome = "rejoined_leader"
+            if not leashFollow then
+                leashFollow = Decision._targetlessFollowCandidate(selected, selectedFailure,
+                    snapshot, candidates, commands)
+                followOutcome = leashFollow and leashFollow.kind ~= "follow"
+                    and "resumed_order" or "followed_leader"
+            end
+            if not leashFollow then
+                leashFollow = Decision._unscoredExpeditionMoveCandidate(
+                    selected, selectedFailure, candidates, commands)
+                if leashFollow then followOutcome = "resumed_order" end
+            end
+            local outcome = "held"
+            if leashFollow then
+                local followNavigationSerial = SC.Navigation
+                    and type(SC.Navigation.requestSerial) == "function"
+                    and SC.Navigation.requestSerial(actor) or 0
+                local followHandled, followReason = profiledDecisionPhase(
+                    "delegate", actor, delegate, leashFollow, actor, player,
+                    rootRuntime, commands, snapshot, state)
+                if followHandled then
+                    handled, reason, selected = true, followReason, leashFollow
+                    navigationSerial = followNavigationSerial
+                    outcome = followOutcome
+                end
+            end
+            -- Nothing else to do while the only threats are out of reach:
+            -- stand idle rather than freeze in an aiming hold.
+            local tolerated = (selectedRank < safetyRank[Decision.SafetyTier.SURVIVAL]
+                    or selected.criticalOnly == true)
+                and onlyUnreachableThreats(actor, snapshot, current)
+            if not handled and not tolerated then
+                handled, reason = guardedSafetyHold(actor, snapshot, selected)
+            elseif not handled then
+                outcome = "idle_unreachable"
+            end
+            Decision._noteSafetyHold(actor, player, snapshot, heldKind, selectedFailure,
+                state, current, outcome, commands.order)
+        end
+        if not handled then reason = selectedFailure end
+    end
+
+    if handled then
+        if retainedApproachKinds[selected.kind] and SC.Navigation
+            and type(SC.Navigation.retainDecisionApproach) == "function" then
+            SC.Navigation.retainDecisionApproach(actor, selected.kind,
+                selected.key, navigationSerial)
+        end
+        if previousKey ~= selected.key then
+            state.enteredAt = current
+            state.minimumUntil = current + (utility.config("decisionMinStateMs") or 900)
+        end
+        state.current = selected.kind
+        state.currentKey = selected.key
+        state.intent = reason or selected.kind
+        state.score = selected.score
+        state.lastHandledAt = current
+        return true, state.intent
+    end
+    state.intent = reason or "not_handled"
+    return false, state.intent
+end
+
+function Decision.peek(actor)
+    return actor and states[actor] or nil
+end
+
+function Decision.cancelWork(actor, reason)
+    if actor == nil then return false, "invalid_actor" end
+    local state = states[actor]
+    if not state then
+        if SC.Encounter and type(SC.Encounter.cancelPlayerSupply) == "function" then
+            SC.Encounter.cancelPlayerSupply(actor)
+        end
+        local runtime = U().peekActorState(actor)
+        state = runtime and runtime.decision or nil
+    end
+    if not state then
+        if SC.NativeActions and type(SC.NativeActions.cancelWork) == "function" then
+            return SC.NativeActions.cancelWork(actor, reason)
+        end
+        return true, reason or "no_work_state"
+    end
+    return cancelWork(actor, state, reason)
+end
+
+function Decision.reset(actor)
+    if actor then
+        Decision.cancelWork(actor, "decision_reset")
+        if SC.Needs and type(SC.Needs.reset) == "function" then SC.Needs.reset(actor) end
+        if SC.Logistics and type(SC.Logistics.reset) == "function" then SC.Logistics.reset(actor) end
+        if SC.NativeActions and type(SC.NativeActions.resetActivity) == "function" then
+            SC.NativeActions.resetActivity(actor)
+        end
+        if SC.Locomotion and type(SC.Locomotion.reset) == "function" then
+            SC.Locomotion.reset(actor)
+        end
+        states[actor] = nil
+        local runtime = U().peekActorState(actor)
+        if runtime then runtime.decision = nil end
+    else
+        for candidate, state in pairs(states) do
+            cancelWork(candidate, state, "decision_reset")
+        end
+        states = setmetatable({}, { __mode = "k" })
+        workReservations = {}
+        lastGroupThreatWarningAt = -math.huge
+    end
+end
+
+-- Combat is not loaded in every context that reads a snapshot, and the existing
+-- code guards SC.Combat for exactly that reason. A missing combat module
+-- degrades to the old broad value rather than throwing.
+function Decision._engagementPressure(snapshot)
+    local combat = SC.Combat
+    if type(combat) == "table" and type(combat._engagementPressure) == "function" then
+        return combat._engagementPressure(snapshot)
+    end
+    return math.max(0, tonumber(type(snapshot) == "table" and snapshot.pressure) or 0)
+end
+
+function Decision.resetAll()
+    for actor, state in pairs(states) do cancelWork(actor, state, "world_reset") end
+    local modules = { SC.Locomotion, SC.Senses, SC.ZombieTargeting, SC.Navigation, SC.Combat, SC.Medical, SC.Needs,
+        SC.Logistics, SC.Encounter, SC.Downtime, SC.BaseWork, SC.Positioning, SC.Commands }
+    modules[#modules + 1] = SC.FactionLife
+    modules[#modules + 1] = SC.FactionContracts
+    modules[#modules + 1] = SC.FactionBehavior
+    for _, module in ipairs(modules) do
+        if type(module) == "table" and type(module.reset) == "function" then
+            local ok, result = pcall(module.reset, nil)
+            if not ok or result == false then return false, "reset_failed" end
+        end
+    end
+    states = setmetatable({}, { __mode = "k" })
+    workReservations = {}
+    leaderStillness = setmetatable({}, { __mode = "k" })
+    if SC.NativeActions and type(SC.NativeActions.resetWork) == "function" then
+        SC.NativeActions.resetWork(nil)
+    end
+    if SC.NativeActions and type(SC.NativeActions.resetActivity) == "function" then
+        SC.NativeActions.resetActivity(nil)
+    end
+    if SC.NativeActions and type(SC.NativeActions.resetFinal) == "function" then
+        SC.NativeActions.resetFinal(nil)
+    end
+    if SC.NativeActions and type(SC.NativeActions.resetNeeds) == "function" then
+        SC.NativeActions.resetNeeds(nil)
+    end
+    if SC.NativeActions and type(SC.NativeActions.clearVisual) == "function" then
+        SC.NativeActions.clearVisual(nil)
+    end
+    lastGroupThreatWarningAt = -math.huge
+    if U() and type(U().clearActorState) == "function" then U().clearActorState(nil) end
+    return true
+end
+
+return Decision

@@ -1,0 +1,4203 @@
+-- SPDX-License-Identifier: MIT
+
+SurvivorCompanion = SurvivorCompanion or {}
+local SC = SurvivorCompanion
+if not SC.GameplayUtil and type(require) == "function" then pcall(require, "SCGameplayUtil") end
+
+SC.Dialogue = SC.Dialogue or {}
+local Dialogue = SC.Dialogue
+
+Dialogue.VERSION = 1
+
+-- Dialogue is grouped by intent rather than by caller. This gives every
+-- subsystem the same anti-repetition rules and lets personality influence
+-- wording without changing what an action means.
+local pools = {
+    ["vehicle.hotwire.success"] = { common = {
+        "It's wired and ready.",
+        "There. Turn the key you don't have.",
+        "Engine's ours now. Let's get moving.",
+        "A little spark, a little luck. She's ready.",
+        "That should start without a key. Try it.",
+    } },
+    ["vehicle.hotwire.failure"] = { common = {
+        "That didn't go well...",
+        "No spark. Give me another shot later.",
+        "I found the wires. They didn't like me.",
+        "Not today. This one's fighting back.",
+        "Well, that was a lot of noise for nothing.",
+    } },
+    ["downtime.tv.learn"] = {
+        common = {
+            "This could be useful. Keep that part in mind.",
+            "Hang on, that is actually worth learning.",
+            "Interesting. I had been doing that the hard way.",
+            "I wish somebody had shown me this last month.",
+            "That trick might save us some trouble.",
+            "Wait, turn that up. I want to catch the next step.",
+            "I can use that when we get back to work.",
+            "So that is how they do it. Huh.",
+            "I never thought television would teach me something we need.",
+        },
+        brave = {
+            "All right, let me try that tomorrow.",
+            "That looks easier than they make it sound. Famous last words.",
+        },
+        cautious = {
+            "I want to see that demonstration twice before I try it.",
+            "Useful, if we have the right tools and a safe place.",
+        },
+        caring = {
+            "We should show the others this part.",
+            "I know someone at camp who could use that lesson.",
+        },
+        practical = {
+            "Good. That is one less thing to learn by mistake.",
+            "Useful method. I will remember the order of steps.",
+        },
+    },
+    ["downtime.tv.comment"] = {
+        common = {
+            "I used to watch this with dinner.",
+            "Strange seeing ordinary life still running on that screen.",
+            "That host talks like nothing outside has changed.",
+            "I know what happens next. I am watching anyway.",
+            "That is a terrible idea. Keep watching.",
+            "For a minute I almost forgot where we are.",
+            "Interesting. I did not expect that turn.",
+            "The picture is fuzzy, but I can follow it.",
+            "Whoever taped this gave us a quiet hour.",
+            "I miss complaining about what was on TV.",
+        },
+        brave = {
+            "If that were me, I would have left five minutes ago.",
+            "Look at them. No idea what is coming.",
+        },
+        cautious = {
+            "Could we keep the volume a little lower? I can still hear it.",
+            "One ear on the show, one on the door.",
+        },
+        caring = {
+            "Come sit with me. This part is good.",
+            "I wish the others could see this bit.",
+        },
+        practical = {
+            "The signal is holding. Might as well see the end.",
+            "I wonder how long this station kept broadcasting.",
+        },
+    },
+    ["fishing.cast"] = {
+        common = {
+            "Give me a quiet minute and a little luck.",
+            "Water looks calm enough. Let us see what bites.",
+            "A meal from the river would be nice.",
+            "All right, little fish. Where are you?",
+            "I could get used to this part.",
+            "Cast is out. Now we wait.",
+            "The dead can't swim. The fish have been keeping quiet about it.",
+            "One hook, some bait, and a very small retirement plan.",
+            "Casting again. Dinner hasn't agreed to the terms.",
+            "If patience fed people, we'd have a full pantry.",
+        },
+        brave = { "If there is a monster in there, I am bringing it home." },
+        cautious = { "I checked the bank. We have room to step back." },
+        caring = { "If I catch enough, everybody eats tonight." },
+        practical = { "Line is clear. Bait is set." },
+    },
+    ["fishing.bite"] = {
+        common = {
+            "There we go. Something has it.",
+            "This feels like a big one.",
+            "Easy now. Do not shake the hook.",
+            "I felt that tug. Come on.",
+            "Something is pulling hard down there.",
+            "Hold on, hold on. I have a bite.",
+            "There's weight on it. Please let supper be the heavy part.",
+            "That tug wasn't the current. Something wants the bait.",
+            "The line's moving. Let's settle this before it changes its mind.",
+            { "Come on, you slippery bastard. The pan's waiting.", clean = "Come on, you slippery rascal. The pan's waiting." },
+        },
+        brave = { "Oh, you want a fight? Come on, then." },
+        cautious = { "Easy on the line. Let it tire itself out." },
+        caring = { "If this holds, dinner is sorted." },
+        practical = { "Bite confirmed. Keeping the tension steady." },
+    },
+    ["fishing.catch"] = {
+        common = {
+            "Got it. That will make a meal.",
+            "Look at that. A proper fish.",
+            "Worth the wait, this one.",
+            "Into the bag you go.",
+            "That is one more supper we did not have before.",
+            "Fresh fish. I almost forgot the smell.",
+            "One meal, caught honestly. Nobody has to know about the bait.",
+            "A fish at last. The river has approved our application.",
+            "Enough to cook. I'll spare you the heroic version.",
+            "Caught it. Something alive made the trip home worthwhile.",
+        },
+        brave = { "Told you I had it." },
+        cautious = { "Good catch. I will keep it cool until we get home." },
+        caring = { "There is enough here to share." },
+        practical = { "A real catch. Let us keep it fresh." },
+    },
+    ["fishing.lost"] = {
+        common = {
+            { "Lost it, damn it.", clean = "Lost it, blast it." },
+            "No, no, no. It slipped the hook.",
+            "Had it right there and let it go.",
+            "That one got away. I felt the line go slack.",
+            { "Damn. It took the bait and left me a story.", clean = "Blast. It took the bait and left me a story." },
+            "I was too quick. Next time I wait.",
+            "The river keeps its fish. I keep my wounded pride.",
+            "Gone. Dinner has declined to attend.",
+            "I saw the scales, then nothing. Clever little thief.",
+            { "Shit. That's another fish with a story about me.", clean = "Crap. That's another fish with a story about me." },
+        },
+        brave = { "Lucky fish. It will not get me twice." },
+        cautious = { "I pulled too hard. Need a gentler hand." },
+        caring = { "Sorry. I thought that was dinner." },
+        practical = { "Hook is empty. I will reset the line." },
+    },
+    ["fishing.trash"] = {
+        common = {
+            "Well, the river gave me rubbish.",
+            "Not a fish. Not even close.",
+            "I hooked somebody else's bad day.",
+            "Could have sworn that was alive.",
+            "The water is full of surprises. Mostly garbage.",
+            "That is going in the trash, not the pan.",
+            "The river's pantry is mostly somebody else's pockets.",
+            "No fins. Just a souvenir from better garbage collection.",
+            "Another piece of junk. Apparently the fish recycle.",
+            "If we can eat this, we've already lost.",
+        },
+        brave = { "I fought a tin can and won." },
+        cautious = { "Careful. I do not know what is on that." },
+        caring = { "At least the next fish has less rubbish to swim through." },
+        practical = { "Junk catch. Clear the hook and try again." },
+    },
+    ["reading.choose"] = {
+        common = {
+            "I'll take %1. Might be worth the weight.",
+            "%1 looks like something I can finish on the road.",
+            "Found %1 on the shelf. I'll bring it back when I'm done.",
+            "Let me borrow %1. A quiet hour would do me good.",
+            "I'm taking %1 along. Better company than my own thoughts.",
+        },
+        brave = {
+            "%1? Good. Give me a story with some nerve in it.",
+            "If %1 is dull, I'll argue with the author.",
+            "I'm packing %1. Can't fight every hour of the day.",
+            "A book on a dangerous road. That's my kind of gamble.",
+            "Let's see if %1 can surprise me.",
+        },
+        cautious = {
+            "I'll keep %1 dry and bring it back intact.",
+            "I checked the cover. %1 looks useful enough to carry.",
+            "Taking %1 for the quiet stops, if we get any.",
+            "I want something to think through before we move again. %1 will do.",
+            "One book at a time. I'll start with %1.",
+        },
+        caring = {
+            "I might read %1 aloud if anyone wants to listen.",
+            "I'll borrow %1. Maybe we can talk about it later.",
+            "Someone saved %1 for a reason. I'll treat it kindly.",
+            "A shared book makes this place feel a little more like home.",
+            "I found %1. Remind me to pass it on when I'm finished.",
+        },
+        practical = {
+            "%1 fits in the pack. Borrowing it.",
+            "Taking %1. Reading time is cheaper than mistakes.",
+            "I'll put %1 back after I work through it.",
+            "One useful book, one free pocket. Good trade.",
+            "I'll see what %1 can teach me before the next job.",
+        },
+    },
+    ["reading.progress"] = {
+        common = {
+            "The middle of a book always makes me think harder than the beginning.",
+            "I had to reread that page. It landed differently the second time.",
+            "This chapter gave me a question I didn't have yesterday.",
+            "I thought I knew where this was going. I was wrong.",
+            "I'll finish a few more pages before I pretend to understand it.",
+        },
+        brave = {
+            "The writer makes a bold claim. I almost believe it.",
+            "I'd have done that differently. Probably worse, but differently.",
+            "This chapter has a fight in it, even without weapons.",
+            "A good book ought to argue back. This one does.",
+            "I turned the page because I couldn't let that stand.",
+        },
+        cautious = {
+            "I like how the author checks the facts before drawing a line.",
+            "There's a warning buried in this chapter. I'm keeping it.",
+            "I'm taking this slowly. Missing a detail could matter.",
+            "The last page changed how I read the first one.",
+            "I want to test this idea before I trust it.",
+        },
+        caring = {
+            "There's a person in these pages who needed someone to listen.",
+            "I keep wondering what happened to the people who wrote this.",
+            "This part reminded me of someone I'd rather not forget.",
+            "A few pages helped me feel less alone tonight.",
+            "I'd like to hear what somebody else makes of this chapter.",
+        },
+        practical = {
+            "I found one useful point. I'll keep reading for the second.",
+            "The example is clear. The conclusion needs work.",
+            "I've read enough to try the method, not enough to trust it.",
+            "This book gets better when it stops repeating itself.",
+            "Good explanation. I can use that tomorrow.",
+        },
+    },
+    ["reading.finished"] = {
+        common = {
+            "Finished %1. I'd like to hear what you made of it.",
+            "That last page stayed with me longer than I expected.",
+            "I finished the book. Time to let someone else have it.",
+            "I learned something from %1. I'm still deciding what to do with it.",
+            "I didn't agree with every page. That's why it was worth reading.",
+        },
+        brave = {
+            "Finished %1. It changed my mind on one thing. Don't make a fuss.",
+            "The ending earned its nerve. I'll give it that.",
+            "I wanted to throw %1 across the room. Then I read it again.",
+            "The author was wrong about courage. The rest might be right.",
+            { "Put me down as someone who finished the damn book.", clean = "Put me down as someone who finished the darn book." },
+        },
+        cautious = {
+            "Finished %1. There are two ideas in it worth testing.",
+            "The book raised more questions than it answered. Fair enough.",
+            "I marked the part I'd want to check against experience.",
+            "I finished it, but I won't call myself an expert.",
+            "Knowing the words is the first step. Doing it safely is the next.",
+        },
+        caring = {
+            "Finished %1. I'd like to lend it to someone who needs it.",
+            "I wish I could tell the writer that these pages mattered.",
+            "The best lesson was to pay attention to the person beside me.",
+            "I came out of that book wanting to ask how everyone is doing.",
+            "I'll put it back for the next tired soul looking for a quiet hour.",
+        },
+        practical = {
+            "Finished %1. One useful lesson, three things to verify.",
+            "Book complete. I'll try the method before I recommend it.",
+            "I can explain the point now. That means I probably learned it.",
+            "Time to return this and borrow something I don't know yet.",
+            "I finished it. The next job will tell me whether it helped.",
+        },
+    },
+    ["reading.philosophy"] = {
+        common = {
+            "If a book changes how I act tomorrow, did it save a piece of the world?",
+            "We keep stories because facts alone don't tell us how to live.",
+            "A page can't bring anyone back. It can keep their questions alive.",
+            "The world ended, but an argument can still have two sides.",
+            "Maybe learning is just admitting we aren't finished yet.",
+        },
+        brave = {
+            "A brave choice isn't always a loud one. I hate how true that sounds.",
+            "If fear made every choice for me, I'd still be behind the first locked door.",
+            "The author calls hope a discipline. I call it a fight worth having.",
+            "I used to think survival was winning. Now I'm less certain.",
+            "What good is courage if it never lets anyone else be afraid?",
+        },
+        cautious = {
+            "Certainty has killed more people than doubt ever did.",
+            "A rule is useful until it stops matching the world in front of you.",
+            "The safe answer today could be the dangerous habit tomorrow.",
+            "If we can't change our minds, we aren't really watching.",
+            "I trust questions that leave space for new evidence.",
+        },
+        caring = {
+            "A story only survives because someone stays to hear it.",
+            "Maybe kindness is a skill. We practice it or we lose it.",
+            "We owe the dead more than remembering how they died.",
+            "I don't want fear to decide who deserves a place at our table.",
+            "The book asks who we are alone. I want to know who we are together.",
+        },
+        practical = {
+            "An idea is a tool. I want to know what it builds.",
+            "Principles matter most when following them costs something.",
+            "We can measure supplies. We still have to decide what enough means.",
+            "Useful knowledge should outlive the person who found it.",
+            "A good plan answers how. A decent life still asks why.",
+        },
+    },
+    ["banter.books.open"] = {
+        common = {
+            "%1, what are you reading these days?",
+            "I found a good page today, %1. Want to hear it in my own words?",
+            "%1, if you could keep one book, which would it be?",
+            "This book made me think of you, %1. In a good way.",
+            "%1, tell me whether you agree with this: people can change.",
+        },
+        brave = {
+            "%1, would you argue with an author who couldn't argue back?",
+            "This book says courage can be learned. What do you think, %1?",
+            "%1, I found a character who'd get us both killed. I like them.",
+            "One chapter, three bad decisions. Beat that, %1.",
+            "%1, if the ending cheats, I'm burning this book for heat.",
+        },
+        cautious = {
+            "%1, does this advice still hold when the world changes?",
+            "I found a useful claim. Help me find the hole in it, %1.",
+            "%1, would you trust a manual with no date on it?",
+            "This book says prepare for the worst. How far is too far, %1?",
+            "%1, what would you check before trying this for real?",
+        },
+        caring = {
+            "%1, want me to save you this book when I'm done?",
+            "There's a part here about grief. Can I tell you about it, %1?",
+            "%1, did anyone read to you when you were little?",
+            "This story made a lonely person feel seen. Does that sound foolish, %1?",
+            "%1, what did you used to read for comfort?",
+        },
+        practical = {
+            "%1, I found a trick in this book. Help me test it later?",
+            "The author skips a step. Can you spot it, %1?",
+            "%1, which shelf should this go back on when I'm done?",
+            "I can carry one book on the next trip. Any recommendation, %1?",
+            "%1, is the lesson worth the time it took to read?",
+        },
+    },
+    ["banter.books.reply"] = {
+        common = {
+            "I think the best books leave room to disagree, %1.",
+            "Read me the part you keep thinking about, %1.",
+            "I'd borrow that next, if you're willing to pass it along.",
+            "Maybe the lesson is that we keep asking questions.",
+            "I miss libraries. Mostly I miss choosing what to worry about.",
+        },
+        brave = {
+            "I'd argue with the author and then buy them a drink, %1.",
+            "Courage is learned one bad day at a time.",
+            "A terrible decision can still make a great story.",
+            "If the ending cheats, read me the middle instead.",
+            "Give me the book after you. I'll find my own fight with it.",
+        },
+        cautious = {
+            "I'd test the advice somewhere we can afford to be wrong, %1.",
+            "Old facts need checking. Old questions can still be good.",
+            "I would keep the warning and question the certainty.",
+            "Preparing helps. Living in fear doesn't. I'm working on the difference.",
+            "Let me see the page. I want the whole argument.",
+        },
+        caring = {
+            "Save it for me, %1. I'd like to know what moved you.",
+            "It isn't foolish if the story helped someone through the night.",
+            "My mother read to me. I can still hear how she said the names.",
+            "We can read the hard part together if you want.",
+            "Maybe we pass books around so nobody has to carry everything alone.",
+        },
+        practical = {
+            "Test the trick in daylight. Then tell me whether it works.",
+            "If a step is missing, write it in the margin, %1.",
+            "Return it to literature storage. Somebody else will need it.",
+            "Take the thinnest useful book. Space in a pack matters.",
+            "Time spent reading counts if we use what we learned.",
+        },
+    },
+    ["player_hit.warning"] = { common = {
+        "Hey! Watch your swing.",
+        "Careful. That was me you hit.",
+        "Easy! I'm on your side.",
+        "Watch it. I don't want to get hurt by you.",
+        "Ow! Eyes up when you swing.",
+        "Hey, friendlies on this side!",
+        "Easy there. I bruise same as you.",
+        "Mind that blade. I'm right here.",
+        "Whoa! Give me a little room.",
+        "That landed on me. Watch it.",
+        "HEY! Check your target!",
+        "Careful, that's my shoulder.",
+        "You caught me with that one. Slow down.",
+        "I'm with you, remember?",
+        "Aim past me, not through me.",
+        { "Damn, that stung. Watch your reach.", clean = "Blast, that stung. Watch your reach." },
+        "Hold up! I'm not one of them.",
+        "We good? Because that looked close.",
+        "Watch the backswing, will you?",
+        "A little warning next time would help.",
+    } },
+    ["player_hit.angered"] = { common = {
+        "Again? Keep your distance from me.",
+        "That's twice. I'm staying back.",
+        "I warned you. Don't come close right now.",
+        "I can't trust your aim. Give me room.",
+        "Twice is enough. Back away from me.",
+        "I said watch it! Keep your distance.",
+        "Another one? I'm done standing near you.",
+        "Put some space between us. Now.",
+        "You hit me again. What am I supposed to think?",
+        "That didn't feel like an accident.",
+        "HEY! I already warned you!",
+        "Stay over there until you calm down.",
+        "I won't stand in your way again. Or near it.",
+        "You keep swinging my way, I'm moving out.",
+        "I trusted you with my back. Don't make me regret it.",
+        "Enough. I'm giving you room, and taking mine.",
+        "Are you even looking at who you're hitting?",
+        "I can forgive one mistake. Two is harder.",
+        "Watch where you point that thing!",
+        "No more close quarters with you. Not tonight.",
+    } },
+    ["player_hit.last_warning"] = { common = {
+        "Three times. Hit me again and I will fight back.",
+        "Last warning. Keep that weapon off me.",
+        "One more hit and we're done talking.",
+        "Stop right there. Next swing, I defend myself.",
+        "Put it down. This is your last chance.",
+        "I don't want to fight you. Don't make me.",
+        "HEY! One more and I hit back!",
+        "You have one chance left to walk away.",
+        "I'm done calling these accidents.",
+        "Keep coming and this turns ugly.",
+        "Back off. I'm not taking a fourth hit.",
+        "I won't let you beat me for free.",
+        "This is where I draw the line. Stay back.",
+        "We can still stop this. Drop your guard and step away.",
+        "Last warning! I mean it!",
+        "Don't make me choose between you and staying alive.",
+        "The next blow ends whatever trust we had.",
+        "Take a breath. Put the weapon down.",
+        "You swing again, I fight. Understand?",
+        "I'm telling you plainly: stop hitting me.",
+    } },
+    ["player_hit.hostile"] = { common = {
+        "You asked for this. Defend yourself.",
+        "I warned you. Now I'm fighting back.",
+        "That's no accident anymore.",
+        "ENOUGH! Get away from me!",
+        "You want a fight? You've got one!",
+        "I won't stand here and take it!",
+        "Stay down and leave me alone!",
+        "You made me do this. Back off!",
+        "I gave you every chance to stop!",
+        "Hands off me!",
+        "I'm defending myself now!",
+        "You lost the right to call me a friend.",
+        "Get back! I mean it!",
+        "This is what your warnings bought you!",
+        "No more standing still while you swing.",
+        "You started this. I'm ending it!",
+        "I didn't want this fight!",
+        "Leave me be or I'll put you down!",
+        "BACK OFF!",
+        "I won't die because you can't stop swinging!",
+    } },
+    ["player_hit.ceasefire"] = { common = {
+        "You're hurt enough. I'm done fighting.",
+        "Stop. This has gone far enough.",
+        "I won't finish you. Stay away from me.",
+        "That's enough. I'm backing off.",
+        "We're done. Don't follow me.",
+        "Stay down. I don't want your blood on me.",
+        "I can stop. Can you?",
+        "You need help, not another blow.",
+        "I'm stepping away. Let it end here.",
+        "Don't get up swinging. I'm done.",
+        "I'm giving us both a way out.",
+        "No more. Keep your distance.",
+        "We can leave this here. Stay back.",
+        "I'll spare you. Don't make that a mistake.",
+        "Enough blood for one day. I'm leaving.",
+        "I said stop! I'm backing away!",
+        "This fight is over if you let it be.",
+        "You got your warning. I'm walking off.",
+        "I won't strike again unless you do.",
+        "Stay where you are. I'm done.",
+    } },
+    ["player_hit.after_ceasefire"] = { common = {
+        "I gave you a chance. No more warnings.",
+        "You hit me after I let you go. This ends here.",
+        "I stopped once. I won't stop again.",
+        "I spared you, and you came back swinging.",
+        "You should have let me walk away.",
+        "I offered peace. You answered with a blow.",
+        "No more second chances!",
+        "You broke the truce. I'm fighting for my life.",
+        "I won't turn my back on you again.",
+        "You chose this after I stopped. Remember that.",
+        "I tried to leave it there. Now I can't.",
+        "That's it! No more mercy!",
+        "I won't fall for that twice.",
+        "You had your way out. You threw it away.",
+        "You struck while I backed off. Never again.",
+        "I gave you room to live. You came after me.",
+        "I said ceasefire, not surrender!",
+        "There was a way home from this. You ended it.",
+        "I'm done trusting you to stop.",
+        "BACK OFF! I won't spare you again!",
+        "You wanted to keep fighting. So fight.",
+    } },
+    ["downtime.radio_check"] = { common = {
+        "Radio check. Can everyone hear me?",
+        "Checking the channel. Give me a word if you're listening.",
+        "One, two. Sound off when you get this.",
+        "Team, this is a radio check. How's my signal?",
+        "If you hear me, tap back. No need to shout.",
+        "Checking in before the batteries surprise us.",
+        "Say something if this gets through the static.",
+        "Testing the line. Anybody out there?",
+        "Channel's clear on my end. You copy?",
+        "Quick check. I want to know this thing works when it matters.",
+        "Can you hear me over the weather?",
+        "Testing. Don't make me walk over there to find out.",
+        "Checking the team's frequency. Come back if you hear me.",
+        "This is a check, nothing urgent. Everybody copy?",
+        "The dial says we're together. The air can prove it.",
+        "One voice into the dark. Anybody receiving?",
+        "Let's hear a word before we trust this old box.",
+        "Checking range and signal. Who's still with us?",
+        "No trouble here. Just making sure the wire's alive.",
+        "Radio check. Kentucky, be kind to us for once.",
+    } },
+    ["downtime.radio.tune"] = { common = {
+        "Let's see if this old receiver still has a voice.",
+        "A little power, a little luck, and maybe a signal.",
+        "Turning the dial. Keep an ear on the door.",
+        "There. The radio has a pulse.",
+        "Let's find something besides static.",
+        "This station used to come in clear after dark.",
+        "Knox County, calling from the far side of a bad week.",
+        "I'll try the old frequency. It used to reach the farms.",
+        "The dial sticks. Everything else around here does too.",
+        "Come on, little box. Say something human.",
+        "If there's news out there, this is where it will find us.",
+        "I'll keep the volume low. Sound carries farther now.",
+        "Somebody kept the batteries dry. Bless them.",
+        "Every station is a road we cannot see.",
+        "All right. One more turn through the band.",
+        "The antenna's crooked, but so are we.",
+        "Back home, we turned this on for the weather.",
+        "I can still remember where the good stations were.",
+        "Cold fingers, warm tubes. Let's see what survives.",
+        "The world got quiet. The dial did not.",
+    } },
+    ["downtime.radio.found"] = { common = {
+        "There is a radio on up here. I'll sit and listen.",
+        "A signal already waiting for us. That's a rare kindness.",
+        "I can hear it from the stairs. Let me find a chair.",
+        "Someone left the radio on. I think I'll stay a moment.",
+        "The sound carried down the hall like a light under a door.",
+        "This room has a voice. I want to hear it properly.",
+        "Good, the receiver is already awake.",
+        "That old set is still talking. I'll take a closer listen.",
+        "The signal made it through the walls and the weather.",
+        "I followed the sound. Now I can rest my feet.",
+    } },
+    ["downtime.radio.listen"] = { common = {
+        "I'll sit here a while and listen.",
+        "A chair, a signal, and one less mile to walk.",
+        "Let the radio talk. I'll keep watch with my ears.",
+        "It feels like waiting for a call that never quite comes.",
+        "Kentucky sounds farther away through a speaker.",
+        "I'll listen until the batteries or my patience run out.",
+        "Even the static makes this room feel occupied.",
+        "The rain on the roof and the radio underneath it. Good enough.",
+        "I want to hear a voice that hasn't seen this place.",
+        "This chair has a better story than the road today.",
+        "Leave the dial there. I think I hear something.",
+        "A little signal can make a long night shorter.",
+        "The room gets colder when the station goes quiet.",
+        "We can spare a few minutes to hear the world breathe.",
+        "Sitting still is hard. Listening helps.",
+        "Some nights a voice over the air is shelter enough.",
+        "That hum sounds like every kitchen I used to know.",
+        "I'll keep one ear on the radio and one on the dead.",
+        "The signal fades in and out like headlights in fog.",
+        "For a moment, let's be people with a radio again.",
+    } },
+    ["downtime.radio.broadcast"] = { common = {
+        "Someone is still behind a microphone.",
+        "Hear that? A real voice through all this noise.",
+        "I wonder where they are broadcasting from.",
+        "The signal crossed a lot of empty roads to get here.",
+        "They sound tired. I know that sound.",
+        "It is strange hearing someone speak to the whole county.",
+        "That voice makes the dark feel less certain of itself.",
+        "Stay on this station. I want to hear the rest.",
+        "Whoever keeps that transmitter alive deserves a meal.",
+        "The static almost swallowed that last part.",
+        "I heard a voice. That is enough for tonight.",
+        "They pause like they are listening for footsteps too.",
+        "Somewhere there is a room with a red ON AIR light.",
+        "The world is bigger than this house. The radio remembers.",
+        "Keep talking, stranger. We are still here.",
+        "Even bad news sounds different when someone says it gently.",
+        "That came in from a long way off.",
+        "There are people at the other end. There have to be.",
+        "A voice in the wire. A little proof of life.",
+        "The signal is weak, but it made it through.",
+    } },
+    ["downtime.radio.useful"] = { common = {
+        "Wait. That part might help us.",
+        "I should remember what they just said.",
+        "Turn it up a touch. That sounds useful.",
+        "A practical voice. We could use more of those.",
+        "I never thought a radio lesson would matter this much.",
+        "There is a method in there, underneath the static.",
+        "I want to try that when daylight comes.",
+        "That was worth sitting down for.",
+        "Someone out there learned the hard way for us.",
+        "That sounds simple enough to keep in my head.",
+        "I wish the others had heard that bit.",
+        "A small piece of knowledge can carry a camp.",
+        "The dead do not teach. The living still do.",
+        "I'll write that down before the signal fades.",
+        "The old broadcasts still know a thing or two.",
+        "That advice may outlast the station.",
+        "Good. Something useful survived the airwaves.",
+        "I can work with that. I think.",
+        "The speaker crackled, but the point came through.",
+        "Remember that. We may need it tomorrow.",
+    } },
+    ["downtime.radio.silence"] = { common = {
+        "Only static tonight. Still, I listened.",
+        "No one answered the air. Maybe tomorrow.",
+        "The station went quiet before I did.",
+        "Just hiss and weather. I'll try again another night.",
+        "I kept waiting for a voice. The room stayed cold.",
+        "The dial has more ghosts than stations now.",
+        "Nothing clear. Could be the storm, could be the world.",
+        "I heard the wind between the frequencies.",
+        "No news is not always good news anymore.",
+        "All that distance, and nothing came through.",
+        "I'll leave the silence where I found it.",
+        "The radio had nothing to say. Fair enough.",
+        "Static sounds like snow falling on an empty highway.",
+        "Maybe the hills are swallowing the signal.",
+        "There used to be music here. I remember the tune.",
+        "A quiet station can still come back.",
+        "The night swallowed every frequency I tried.",
+        "At least the speaker is working. That is something.",
+        "We can listen again when the weather clears.",
+        "I miss the ordinary annoyance of an advertisement.",
+    } },
+    ["downtime.radio.signoff"] = { common = {
+        "I heard enough to know someone is still out there.",
+        "Let the signal rest. I'll remember that voice.",
+        "That was company, for a little while.",
+        "The station is still breathing. So are we.",
+        "I think I can face the road again.",
+        "Good to hear another living voice tonight.",
+        "The world came through in pieces, but it came through.",
+        "I'll leave the chair for whoever needs the next turn.",
+        "There is still someone keeping the lights on somewhere.",
+        "That voice will stay with me a while.",
+        "Enough radio for now. Back to our own little world.",
+        "The signal faded, but I caught the important part.",
+        "I hope whoever spoke gets home safe.",
+        "A few minutes of company from a hundred miles away.",
+        "Time to stand up. The airwaves will be here later.",
+        "The news can wait. Our people cannot.",
+        "There is a light at the far end of the dial.",
+        "Maybe tomorrow the voice will sound less tired.",
+        "I came looking for news and found a person.",
+        "That is enough hope to carry for one day.",
+    } },
+    ["hygiene.pee_start"] = { common = {
+        "Give me a minute. Nature has filed a complaint.",
+        "I need a short stop. Keep an ear out.",
+        "Back in a moment. Don't let the road leave without me.",
+        "Even the end of the world takes bathroom breaks.",
+        "Cover the path a second, would you?",
+        "I can hold a line. This, less so.",
+        "One minute, then we move.",
+        "I need some privacy and a clear exit.",
+        "Don't turn around. I'll catch up.",
+        "My bladder has worse timing than the weather.",
+        "A quick stop before the next fight.",
+        "There's one errand nobody can scavenge for me.",
+        "Give me a breath. The body has its own orders.",
+        "Not far. I know the way back.",
+        "I'll take care of something and rejoin you.",
+        "If anyone asks, I was checking the perimeter.",
+    } },
+    ["hygiene.pee_outdoor"] = { common = {
+        "Kentucky has plenty of trees and not enough doors.",
+        "This ditch has seen worse days than mine.",
+        "I miss a bathroom with a lock.",
+        "Wind's wrong. Give me another second.",
+        "Quiet out here. Too quiet for this sort of thing.",
+        "The trees can keep this secret.",
+        "A road trip used to have gas stations.",
+        "No plumbing, no queue. Small mercies.",
+        "If the woods judge me, they can file a report.",
+        "Somewhere beyond those pines is a working faucet. Maybe.",
+        "I've got the tree line. Watch the road.",
+        "Cold air makes a simple job complicated.",
+        "At least the rain will cover the sound.",
+        "I never thought I'd envy a highway rest stop.",
+        "This is still better than a crowded motel bathroom.",
+        "Nobody gets a map marker for this stop.",
+        "The last quiet place in Knox County might be this hedge.",
+        "If you hear a branch snap, say something.",
+    } },
+    ["hygiene.pee_toilet"] = { common = {
+        "A real toilet. Civilization lives another minute.",
+        "The porcelain throne still has a kingdom.",
+        "I could almost pretend this is a normal house.",
+        "Door stays open enough to hear trouble.",
+        "One ordinary minute. That's all I'm asking.",
+        "They built this room for privacy. Imagine that.",
+        "If the pipes knock, I'm leaving.",
+        "No mirror today. I know how I look.",
+        "The light flickers like it remembers the owner.",
+        "I'd trade a can of beans for toilet paper.",
+        "Nobody rush me. The dead can wait outside.",
+        "A bathroom with walls feels extravagant now.",
+    } },
+    ["hygiene.pee_done"] = { common = {
+        "All right. I'm ready.",
+        "Back to it.",
+        "Thanks for watching the approach.",
+        "Let's keep moving.",
+        "That bought me a few hours.",
+        "Nobody followed me. We're clear.",
+        "Small victories still count.",
+        "If I ever find a clean restroom, I'm framing the sign.",
+        "Right. Where were we?",
+        "The road hasn't changed. We have.",
+        "I'm done. Keep your voice down.",
+        "No trouble. Let's go.",
+    } },
+    ["hygiene.shower_start"] = { common = {
+        "I'm washing the road off before it becomes part of me.",
+        "Ten minutes under water sounds like a miracle.",
+        "This blood isn't all mine. I want it gone.",
+        "The shower still works. I'm taking my chance.",
+        "I can smell the last three houses on this jacket.",
+        "Keep watch. I'll be quick.",
+        "A little warm water could bring me back to myself.",
+        "These hands need more than a wipe on my pants.",
+        "I used to complain about low water pressure.",
+        "Soap or no soap, this is overdue.",
+        "There's dirt in places the sun has forgotten.",
+        "If the water stops, I stop. Fair deal.",
+        "I need a clean start, even if it's only for tonight.",
+        "Nobody take my clothes. I know what I left there.",
+        "The dead can have the street. I'm claiming this shower.",
+        "Just a few minutes to feel human again.",
+    } },
+    ["hygiene.shower_sing"] = { common = {
+        "Oh, the rain in Kentucky knows my name...",
+        "Blue moon over a broken water tower...",
+        "One road out and the headlights gone...",
+        "I had a home by the river, now I have this song...",
+        "The old radio says the night is long...",
+        "Wash the mud away, leave the memory on...",
+        "If the county line could talk, it'd tell us to run...",
+        "Hum along if you know the last verse.",
+        "North wind, hold your breath till morning...",
+        "There was a train through Riverside once...",
+        "Soap in my eyes and ghosts in the hall...",
+        "A little song keeps the cold outside.",
+        "The lights go out, but the chorus stays.",
+        "I can't remember the tune. I remember who sang it.",
+        "Let the pipes rattle. I'll sing louder.",
+        "No audience, no encore. Just water.",
+    } },
+    ["hygiene.shower_done"] = { common = {
+        "Clean enough to know which stains are old.",
+        "I feel a little more like myself.",
+        "That was worth every drop.",
+        "The mirror still looks tired, but at least it's clean.",
+        "Clothes back on. Let's see what needs doing.",
+        "I forgot how good water can feel.",
+        "The blood's gone. The memory can wait.",
+        "A shower doesn't fix the world. It helps with this hour.",
+        "If anyone asks, I found a spa in Knox County.",
+        "I could sleep now without smelling yesterday.",
+        "All right. Back to work before I get dirty again.",
+        "For a moment, it sounded like rain on a safe roof.",
+    } },
+    ["hygiene.pee_gnome"] = { common = {
+        "Sorry, little fellow. Wrong side of the garden.",
+        "That gnome is judging me harder than the living do.",
+        "Keep staring, garden man. We all need a break.",
+        "If this gnome tells anyone, I'll deny it.",
+    } },
+    ["hygiene.pee_hydrant"] = { common = {
+        "A fire hydrant. The dogs knew something we didn't.",
+        "Sorry, hydrant. The fire trucks aren't coming.",
+        "This hydrant's had a worse week than me.",
+        "The county can send me a bill when it reopens.",
+    } },
+    ["hygiene.pee_corpse"] = { common = {
+        "Not on the body. Beside it. There's a line.",
+        "Even now, I can show the dead a little respect.",
+        "Give the body room. I can find another patch.",
+        "I'm stepping away from that corpse first.",
+    } },
+    ["hygiene.pee_reaction"] = { common = {
+        "I'll watch the road. Take your minute.",
+        "You're clear. I'll keep my back turned.",
+        "Nobody's timing you. Much.",
+        "I'll look the other way.",
+        "Just don't pick the only patch of poison ivy.",
+        "I saw nothing. That's our story.",
+        "I'll keep the dead away from your little kingdom.",
+        "Make it quick. This place gives me the creeps.",
+        "You've got cover. Call if you need it.",
+        "No shame in stopping while we still can.",
+    } },
+    ["hygiene.pee_dirty"] = { common = {
+        "It's not about size. It's all about speed.",
+        "The stream's strong. My aim's seen better days.",
+        "I can miss a zombie at ten paces, but not this tree.",
+        "If this takes any longer, name the river after me.",
+        "That's one weapon I refuse to holster in a hurry.",
+        "The apocalypse has really lowered the bar for privacy.",
+        "Easy now. No need to scare the shrubbery.",
+        "If someone scores this, I want points for distance.",
+        "The road is long. This part should be short.",
+        "Aiming is easier when the target's a whole county.",
+        "That's enough excitement for one pair of trousers.",
+        "Even the dead ought to give a person a minute.",
+    } },
+    ["hygiene.pee_reaction_dirty"] = { common = {
+        "%1, let go of that ugly thing and come on.",
+        "%1, I said cover the road, not water the county.",
+        "%1, is that a bathroom break or a border dispute?",
+        "Put it away, %1. The trees have suffered enough.",
+        "%1, you're making the fire hydrant look embarrassed.",
+        "All right, %1. Nobody asked for a demonstration.",
+        "Move it, %1. Even the zombies are losing interest.",
+        "%1, that's a mighty long speech for a short stop.",
+        "I'm watching your back, %1. Strictly your back.",
+        "Finish up, %1. This is not a county fair contest.",
+    } },
+    ["downtime.clean_start"] = { common = {
+        "I'll get this blood off the floor.",
+        "Give me a minute with the mop.",
+        "Nobody should have to wake up to this stain.",
+        "I found the cleaner. Might as well use it.",
+        "That wall has seen enough. I'm scrubbing it.",
+        "Mind your boots. This patch is getting cleaned.",
+        "I'll take the floor. You keep an ear on the door.",
+        "This place is ours now. Let's make it look that way.",
+        "The bleach smells better than what's under it.",
+        "I'm cleaning this before it sets any deeper.",
+        "A mop won't fix the county, but it'll fix this floor.",
+        "Step around me. I need room to scrub.",
+        "I'm not eating beside that mess another night.",
+        "Let's get the walls looking like walls again.",
+        "This corner needs work. I've got it.",
+    } },
+    ["downtime.clean_done"] = { common = {
+        "There. You can see the floor again.",
+        "That's one less reminder to look at.",
+        "Cleaner now. Smells like bleach, but cleaner.",
+        "The wall's still standing, and the stain isn't.",
+        "That took more scrubbing than it had any right to.",
+        "Done. Mind the wet patch for a bit.",
+        "Not perfect, but this room feels lived in again.",
+        "Mop's earned a rest. So have I.",
+        "That's as clean as Kentucky lets a place get.",
+        "We can put our boots down without thinking about it.",
+        "There. The room looks less haunted.",
+        "I got the worst of it off.",
+        "Clean enough for supper, if anyone's asking.",
+        "No stain left. The smell will take longer.",
+        "One small job done. I'll take it.",
+    } },
+    ["expedition.support_call"] = {
+        common = {
+            "I need support here! Now!", "They're on me! Help me clear this room!",
+            "Squad, to me! I've got company!", "I need a hand over here!",
+        },
+        brave = { "To me! We finish this together!" },
+        cautious = { "Close in, but watch the exits!" },
+        stressed = { "Help! Right now, please!" },
+    },
+    ["expedition.departure"] = {
+        common = {
+            "Gather up, people. We're heading out.",
+            "Kentucky's still out there. Let's see what it kept.",
+            "Keep your boots dry and your eyes open. The county's lying again.",
+            "Pack light. Trouble never needs an invitation.",
+            "We leave together. We come back together. That's the deal.",
+            "The road's quiet. I don't trust it.",
+            "If the church bell rings, it wasn't me.",
+            "Gray sky, empty pumps. Feels like a fine day to be disappointed.",
+            "Check your straps. I won't stop twice for loose gear.",
+            "The dead own the front porch. We'll try the back.",
+            "There's daylight enough for one mistake. Let's make none.",
+            "I know a place past the tobacco fields. Stay close.",
+            "Rain on tin, mud on boots. Could be worse. Usually is.",
+            "Nobody gets left on a Kentucky road. Not while I'm breathing.",
+            "We'll take what we need and leave the ghosts their furniture.",
+            "The map says home is this way. Maps have been wrong before.",
+            "Keep the noise down. Even the crows are listening.",
+            "I've seen warmer welcomes from a boarded-up diner.",
+            "If we find coffee, I'm calling this a victory.",
+            "Zip up, count heads, and follow me into the gray.",
+        },
+    },
+    ["expedition.homecoming"] = {
+        common = {
+            "We're back. Everybody who left is standing right here.",
+            "Told you. We leave together, we come back together.",
+            "That's the trip. Count heads. We're all here.",
+            "Made it back. Somebody tell me there's coffee.",
+            "Back in one piece. Several pieces, technically, all still attached.",
+            "The road let us go. I'm not going to ask why.",
+            "Back before the county changed its mind about us.",
+            "We're back. Give us a minute, then you get the full report.",
+            "Boots off soon. Stories later. Most of them true.",
+            "Every one of us walked back. Somebody write that down.",
+            "Kentucky tried its best. We came back anyway.",
+            "Good to see a face that isn't trying to bite me.",
+        },
+        brave = {
+            "Back already. The road should've tried harder.",
+            "Out and back. Point me at the next one.",
+        },
+        cautious = {
+            "We're back. I checked behind us twice. Keep an eye on the road anyway.",
+            "Made it. I'll relax once there's a locked door between us and the road.",
+        },
+        caring = {
+            "We're back, all of us. Now let me look at you for a change.",
+            "Everyone made it. I kept counting the whole way.",
+        },
+        practical = {
+            "Squad's back, headcount matches. Report when you're ready.",
+            "Returned with everyone we left with. That's the number that matters.",
+        },
+    },
+    ["expedition.road_intersection"] = {
+        common = {
+            "%1 coming up. Eyes on both sides.",
+            "Crossing at %1. Check the corners.",
+            "Here's %1. Nobody drift off alone.",
+            "%1 ahead. Keep the spacing.",
+            "At %1, we look before we commit.",
+            "Another junction. %1 is our line through.",
+            "Watch the side street at %1.",
+            "%1. Quiet feet, open eyes.",
+        },
+        cautious = { "%1. Something could be waiting past the corner." },
+        brave = { "%1. I'll watch the far side." },
+        practical = { "%1. Count heads before we cross." },
+        caring = { "%1. Stay where I can see you." },
+    },
+    ["expedition.search_arrival"] = {
+        common = {
+            "This is the place. Spread out and see what we can carry.",
+            "Check the rooms. Keep an ear on the door.",
+            "We made it. Look for supplies and call out what you find.",
+            "Search the shelves, then we head home together.",
+            "Nobody wander too far. Let's see what's left here.",
+        },
+    },
+    ["team.recruit"] = {
+        common = {
+            "All right. I'll come with you.",
+            "Okay. We stick together from here.",
+            "You've got a deal. I'm with you.",
+            "I was hoping you would ask. Let's move.",
+            "Fine by me. You won't have to do this alone.",
+        },
+        brave = { "I'm in. Point me toward the trouble.", "Let's see what we can survive together." },
+        cautious = { "I'll join you, but we watch each other's backs.", "All right, as long as we keep an exit open." },
+        caring = { "Yes. We will look after each other.", "I'd rather face this with someone. I'm with you." },
+        practical = { "Agreed. Two people can cover more ground.", "That makes sense. I'll gather my things." },
+    },
+    ["team.dismiss"] = {
+        common = {
+            "I understand. Take care of yourself.",
+            "All right. This is where we part ways.",
+            "Understood. I hope you make it.",
+            "If that is your decision, I'll go.",
+            "Then this is goodbye. Stay alive.",
+        },
+        brave = { "No hard feelings. I'll manage.", "I'll find my own road from here." },
+        cautious = { "Fine. I'll leave before it gets dark.", "Understood. I'll find somewhere defensible." },
+        caring = { "I wish it had gone differently. Be safe.", "Take care. I mean that." },
+        practical = { "Understood. I'll take only what is mine.", "All right. We both know where we stand." },
+    },
+    ["ambient.morning"] = {
+        common = {
+            "Morning. We made it through another night.",
+            "Good morning. Let's see what today gives us.",
+            "Morning. Quiet so far. I hope it stays that way.",
+            "New day. Same rules: stay sharp and stay alive.",
+            "Good morning. It is almost strange how normal that sounds.",
+        },
+        brave = { "Morning. Let's make today count.", "Another sunrise. I'm still ready." },
+        cautious = { "Morning. Let's check the exits before we settle in.", "Daylight helps. We should use it." },
+        caring = { "Good morning. I'm glad you're still here.", "Morning. How are you holding up?" },
+        practical = { "Morning. Daylight means we can cover more ground.", "New day. We should review our supplies." },
+        low = { "Morning found us. The empty houses did not notice.",
+            "Daylight on an empty street. It only shows you what is gone." },
+    },
+    ["ambient.dusk"] = {
+        common = {
+            "Dusk is coming. We should decide where we're spending the night.",
+            "Light is going. Let's not get caught outside without a plan.",
+            "It will be dark soon. Time to think about shelter.",
+            "Sun's getting low. We should check our way back.",
+            "Evening already. Keep an eye on the shadows.",
+        },
+        brave = { "Dusk is coming. One more job, then we get inside.", "Night doesn't own the road, but we shouldn't tempt it." },
+        cautious = { "We're losing daylight. I want walls around us soon.", "Dusk. Let's mark the safest route home." },
+        caring = { "It is getting dark. I'd rather have everyone inside.", "Dusk is coming. Stay close, all right?" },
+        practical = { "Daylight is nearly gone. Shelter should be the next objective.", "Dusk. We should finish up and secure a room." },
+        low = { "The light leaves early now. Nothing asks it to stay.",
+            "Dusk settles over houses that will not turn their lamps on." },
+    },
+    ["ambient.dusk.camp"] = {
+        common = {
+            "Dusk already. Let's check the doors before it gets dark.",
+            "The light's going. I'll make one more round of the camp.",
+            "Evening's here. We should bring the loose gear inside.",
+            "It's getting dark. Let's make sure everyone's back.",
+            "Sun's down soon. I'll check that we're ready for the night.",
+        },
+        brave = { "Dark's coming. I'll take a look at the perimeter.",
+            "Let night come. We've got this place to hold." },
+        cautious = { "Dusk. I'll check the doors and windows again.",
+            "Let's count heads before we settle in for the night." },
+        caring = { "Evening, everyone. Come inside when you're done.",
+            "It's getting dark. Let me know if anyone needs anything." },
+        practical = { "Dusk. Tools in, doors checked, then rest.",
+            "Daylight's nearly gone. I'll finish the camp check." },
+        low = { "Night folds over the camp, one room at a time.",
+            "The windows are dark now. At least we're together." },
+    },
+    ["ambient.rain"] = {
+        common = {
+            "Rain's setting in. The noise will hide more than our footsteps.",
+            "Here comes the rain. Watch the corners; hearing will be worse.",
+            "Rain. Good cover for us, and for anything nearby.",
+            "We're getting wet. Let's keep an eye out for somewhere dry.",
+            "That rain could last. We should protect anything that needs to stay dry.",
+        },
+        brave = { "Rain won't stop us. Just keep your footing.", "A little rain beats a street full of dead." },
+        cautious = { "Rain cuts visibility. Slow down around blind corners.", "I don't like what this does to our hearing." },
+        caring = { "You're getting soaked. Let's find cover when we can.", "Rain's coming down. Tell me if you get cold." },
+        practical = { "Rain will mask sound in both directions.", "Wet roads and poor visibility. We adjust our pace." },
+        low = { "The rain doesn't care who's left to stand in it.",
+            "Grey sky, grey road, grey everything. At least it matches." },
+    },
+    ["ambient.fog"] = {
+        common = {
+            "Fog's getting thick. Stay where we can see each other.",
+            "I don't like this fog. Anything could be ten steps away.",
+            "Visibility is going. Let's keep the spacing tight.",
+            "Fog like this makes every corner a blind corner.",
+            "Keep your voice low, but don't disappear on me in this fog.",
+        },
+        brave = { "Fog or not, we keep each other in sight.", "Can't fight what we can't see. Stay close." },
+        cautious = { "This fog is bad. Short steps, frequent checks.", "Visibility's poor. I want a clear retreat line." },
+        caring = { "Stay close in this fog. I don't want to lose sight of you.", "Let me know before you change direction in this." },
+        practical = { "Fog has cut our useful sight range. Tight formation.", "Low visibility. We should avoid open-ended searches." },
+        low = { "The fog decides how far the world goes today.",
+            "You can hear how empty it is. Nobody warns you about the quiet." },
+    },
+    ["danger.sitting"] = {
+        common = {
+            "Walker sitting against the wall. Watch it.",
+            "That one is sitting. It's still alive.",
+            "Seated zombie ahead. Keep your distance.",
+            "One of them is sitting there. Don't pass it.",
+            "Sitting walker. I'll deal with it.",
+            "That sitting one is alive. Don't step past its hands.",
+            "Seated walker. Waiting doesn't make it harmless.",
+            "That one looks comfortable. It will still bite. Keep clear.",
+            "Sitting zombie by the wall. Don't mistake it for furniture.",
+            "Watch the seated one. It can reach from there.",
+            "That walker is sitting, not finished. Give it space.",
+            { "Sitting there like it owns the damn place. Stay clear.", clean = "Sitting there like it owns the darn place. Stay clear." },
+        },
+        brave = { "Sitting walker. Stay back; I'll make sure it stays down." },
+        cautious = { "That seated one may lunge. Give it room." },
+        caring = { "That seated one can bite. Keep the others away from it." },
+        practical = { "Sitting zombie spotted. Treat it as a live contact." },
+    },
+    ["danger.zombie"] = {
+        common = {
+            "Zombie! Watch out!", "Dead ahead!", "Contact! Zombie!",
+            "Heads up! We've got a zombie!", "Walker! Right there!",
+            "Look alive! One of them is close!", "Zombie coming in!",
+        },
+        brave = { "Zombie! I'll take it!", "Contact! Keep moving!" },
+        cautious = { "Zombie! Check your escape route!", "Movement! Zombie nearby!" },
+        caring = { "Watch yourself! Zombie!", "Get back! One of them is close!" },
+        practical = { "Zombie spotted!", "Contact, close range!" },
+        stressed = { { "Oh hell, zombie!", clean = "Oh heck, zombie!" },
+            { "Damn it, one of them is here!", clean = "Blast it, one of them is here!" } },
+    },
+    ["danger.heard"] = {
+        common = {
+            "*listens* I heard a walker.",
+            "*goes quiet* Something dead is moving nearby.",
+            "Quiet. I can hear one of them.",
+            "*tilts head* There's a walker close. I can't see it.",
+            "I heard shuffling. Stay alert.",
+            "Something's moving on the other side. Walker, I think.",
+        },
+        brave = { "I hear one. Let it come into view.", "Walker nearby. We wait until we see it." },
+        cautious = { "I heard a walker. Don't rush the corner.", "Something's close, but I don't have eyes on it." },
+        caring = { "Stay close. I heard one nearby.", "I can hear a walker. Watch the blind side." },
+        practical = { "Audible contact. No visual.", "Walker heard nearby. Position uncertain." },
+        stressed = { "I heard one. Where is it?", "Something's right there. I can't see it." },
+    },
+    ["danger.one"] = {
+        common = {
+            "One zombie ahead.", "Single walker, up ahead.", "I've got one moving out there.",
+            "One of them, straight ahead.", "Just one zombie in sight.", "One deadhead, out ahead.",
+            "Contact. One zombie.", "One walker crossing our path.", "I see one. Keep your eyes on it.",
+            "One walker. I've got it.", "Single contact ahead - nothing we can't handle.",
+            "Lone zombie ahead.", "One body moving. Not alive.", "We've got a single contact.",
+        },
+        brave = { "Only one. I can handle it.", "One walker. Easy does it." },
+        cautious = { "One zombie. There may be more behind it.", "Single contact. Check the corners too." },
+        caring = { "One zombie ahead. Stay close to me.", "Just one in sight. Watch yourself." },
+        practical = { "One confirmed. No others visible.", "Single contact at the moment." },
+        stressed = { { "One of them. Damn it.", clean = "One of them. Blast it." }, "I see one. Please let it be alone." },
+    },
+    ["danger.pair"] = {
+        common = {
+            "Two zombies ahead.", "Pair of walkers, front.", "I've got two moving together.",
+            "Two contacts in sight.", "Not one. Two of them.", "Two deadheads crossing ahead.",
+            "Watch it. Two zombies.", "There's a pair up ahead.", "Two walkers, close together.",
+            "I count two.", "Two bodies moving our way.", "Pair of contacts. Keep some room.",
+        },
+        brave = { "Two of them. We can split them.", "Pair ahead. I'll take the closer one." },
+        cautious = { "Two zombies. Don't let them come side by side.", "I count two. Leave us an exit." },
+        caring = { "Two ahead. Stay where I can see you.", "Pair of walkers. Nobody gets isolated." },
+        practical = { "Two confirmed, moving together.", "Pair ahead. We can separate them." },
+        stressed = { "Two now. Of course there are two.",
+            { "Damn it, a pair of them.", clean = "Blast it, a pair of them." } },
+    },
+    ["danger.group"] = {
+        common = {
+            "Three or four zombies ahead.", "Small group. Three, maybe four.",
+            "I've got several walkers moving together.", "Group of zombies in front of us.",
+            "Multiple contacts. About four.", "Three or four deadheads up ahead.",
+            "That's a group, not a pair.", "Several zombies. Keep your spacing.",
+            "I count four moving shapes.", "Small pack ahead.",
+            "Four walkers, give or take one.", "We've got a cluster of them ahead.",
+        },
+        brave = { "Small pack. We break them apart first.", "Four ahead. Don't let them surround us." },
+        cautious = { "About four. That's enough to trap us.", "Small group. Mark the way back." },
+        caring = { "Several ahead. Stay together and don't rush.", "Four walkers. Nobody goes in alone." },
+        practical = { "Four contacts. We need space between them.", "Small group confirmed. Choose the ground." },
+        stressed = { "There are four of them. This keeps getting worse.",
+            { "Damn, that's a whole group.", clean = "Blast, that's a whole group." } },
+    },
+    ["danger.crowd"] = {
+        common = {
+            "Crowd of zombies ahead.", "That's more than a small group.",
+            "I've got at least half a dozen.", "Six, maybe eight walkers in sight.",
+            "Too many to treat like a quick fight.", "A crowd is gathering up ahead.",
+            "Multiple walkers, spread out ahead.", "Big cluster ahead of us.",
+            "I count at least six.", "A lot of movement ahead.",
+            "Crowd of deadheads. Watch the sides.", "This is becoming a pack.",
+        },
+        brave = { "Big group. We fight only if we control the ground.", "Crowd ahead. Make every hit count." },
+        cautious = { "Six or more. Start looking for another route.", "Crowd ahead. Keep the exit behind us." },
+        caring = { "That's a lot of them. Stay close and stay calm.", "Crowd ahead. I don't want anyone separated." },
+        practical = { "At least six contacts. Direct engagement is a bad trade.", "Large group. We need distance or a choke point." },
+        stressed = { "There are too many. There are way too many.",
+            { "Oh hell, look at all of them.", clean = "Oh heck, look at all of them." } },
+    },
+    ["danger.horde"] = {
+        common = {
+            "Horde ahead!", "That's a horde. We turn around now.",
+            "The whole street is moving.", "More zombies than I can count.",
+            "Mass of dead ahead. Do not go that way.", "They're everywhere up there.",
+            "Huge horde in front of us.", "That road is lost. Horde.",
+            "Wall of walkers ahead.", "I can't count them all.",
+            "The dead own that whole block.", "Horde moving this way. We need to disappear.",
+        },
+        brave = { "Horde! Courage won't fix those numbers.", "That's an army of them. We move." },
+        cautious = { "Horde ahead. Quietly back the way we came.", "Too many to count. Break sight and leave." },
+        caring = { "Horde! Stay together and follow me out.", "Nobody gets left behind. Move away from them." },
+        practical = { "Horde confirmed. This route is closed.", "Mass contact. No engagement. Find another way." },
+        stressed = { "Oh God, that's a horde.", "No. No way. There are too many to count." },
+    },
+    ["signal.one"] = {
+        common = {
+            "*raises one finger: one walker ahead*", "*closes a fist, then points to one zombie*",
+            "*holds up one finger and points ahead*", "*signals one contact, straight ahead*",
+            "*points low, then shows one finger*", "*one finger, then a flat palm: move slow*",
+            "*flashes one finger, then points toward the sound*", "*points once and motions for silence*",
+        },
+        cautious = { "*signals one walker, then points back to the escape route*",
+            "*one finger, then traces the safest line around it*" },
+        practical = { "*shows one finger: single contact*", "*one finger, then a thumb: I'll take it*" },
+    },
+    ["signal.pair"] = {
+        common = {
+            "*raises two fingers: two walkers ahead*", "*points ahead, then holds up two fingers*",
+            "*signals a pair moving together*", "*shows two fingers and motions for spacing*",
+            "*holds two fingers low, then points forward*", "*signals two contacts near each other*",
+            "*two fingers, then a chopping motion: split them*", "*shows two fingers and points to the flank*",
+        },
+        cautious = { "*shows two fingers, then motions to split them apart*",
+            "*two fingers, then points firmly back to the exit*" },
+        practical = { "*signals two contacts and marks the nearer one*",
+            "*shows two fingers, then points to themself: I lead*" },
+    },
+    ["signal.group"] = {
+        common = {
+            "*holds up four fingers: small group ahead*", "*signals several walkers clustered ahead*",
+            "*shows four fingers, then makes a spreading motion*", "*points forward and signals a small pack*",
+            "*counts four on one hand and gestures for quiet*", "*signals multiple contacts ahead*",
+            "*four fingers, then a fist: hold and let them bunch*", "*shows four, then pairs two fingers: team up*",
+        },
+        cautious = { "*signals four, then traces the route back with one finger*",
+            "*shows four, shakes their head, and points to the exit*" },
+        practical = { "*shows four contacts and points toward better ground*",
+            "*four fingers, then marks a choke to fight them one at a time*" },
+    },
+    ["signal.crowd"] = {
+        common = {
+            "*spreads both hands: large group ahead*", "*signals many walkers and motions everyone down*",
+            "*shows both hands, then points away from the crowd*", "*makes a wide circling motion: big pack*",
+            "*signals six-plus contacts and a quiet retreat*", "*points ahead, then waves the route closed*",
+            "*both hands wide, then a flat palm down: everyone stay low*", "*sweeps a hand across their throat: too many, no fight*",
+        },
+        cautious = { "*signals a crowd and urgently points toward another route*",
+            "*both hands up, then jabs a finger back the way we came*" },
+        practical = { "*marks the route blocked by a large group*",
+            "*wide hands, then slowly closes a fist: wait them out*" },
+    },
+    ["signal.horde"] = {
+        common = {
+            "*spreads both arms wide: horde ahead*", "*signals a mass of walkers, then points back*",
+            "*draws a line across their throat and points away from the horde*",
+            "*waves both hands low: too many, turn around*", "*points ahead, shakes their head, and signals retreat*",
+            "*makes a wide crowd signal, then urgently motions everyone back*",
+        },
+        cautious = { "*signals a horde and silently orders an immediate withdrawal*" },
+        practical = { "*marks the entire route closed: horde*" },
+    },
+    ["scavenge.loot.excited"] = {
+        common = {
+            "Ha! %1. Now that's a find.", { "Got %1! Hell yes.", clean = "Got %1! Heck yes." },
+            "*holds up %1* Look what I found!", "%1! Today just improved.",
+            "Found %1. Tell me that isn't beautiful.", "Would you look at that: %1!",
+            "%1. Jackpot by Kentucky standards.", "I got %1! Still useful, still ours.",
+            "%1! That's one less thing to worry about.", "Found %1. This room just paid its rent.",
+            "I knew there was something left. %1!", "%1. Put that on the good pile.",
+            "Found %1. The shelves had one secret left.", "%1! We can work with this.",
+            "Well, look at us. We have %1 now.", "Found %1. That's a trip worth making.",
+        },
+        brave = { "%1! That's what I'm talking about.", "Found %1. The wasteland blinked first.",
+            "Found %1. Let the dead complain about it.", "%1. See? I said this place had something." },
+        cautious = { "Found %1. Good. That makes the next bad surprise easier.", "%1. Worth the search, and we still have an exit.",
+            "Got %1. Let's secure it before we press our luck.", "%1. Good find. I'm checking the way back." },
+        caring = { "I found %1! Someone's going to need this.", "%1! Good. That could keep one of us going.",
+            "%1. I know who could use this tonight.", "Found %1. Maybe that'll make somebody's day easier." },
+        practical = { "%1. Useful, portable, and no bullets spent.", "Found %1. That earns its weight.",
+            "%1. Goes straight into the supply count.", "Found %1. Good return for the time." },
+        hopeful = { "%1! See? The world hasn't taken everything yet.", "Found %1. Maybe our luck finally changed.",
+            "%1. A little more of tomorrow, right there.", "Found %1. Maybe this town still has a few gifts." },
+        stressed = { "%1. Good. Good, we needed one win.", "Found %1. Finally, something that isn't trying to kill us.",
+            "%1! I can breathe for a second.", "Found %1. Please let the rest of today be this simple." },
+        low = { "Found %1. At least this trip gave us something.", "%1. Small victory, but I'll take it.",
+            "%1. I'll count that as a decent hour.", "Found %1. That's more than I expected to bring home." },
+        steady = { "Found %1. Useful. No need to make a ceremony of it.",
+            "%1. That's sorted, then. More or less.",
+            "Found %1. Put it away and keep looking.", "%1. Good. One thing handled." },
+    },
+    ["scavenge.loot.disappointed"] = {
+        common = {
+            "Found %1. This is useless.", "%1. That's what all that rummaging bought us.",
+            "*looks over %1* Well, that's disappointing.", "%1. Barely worth the pocket space.",
+            "I got %1. Try not to spend it all in one place.", "%1. The apocalypse can keep the receipt.",
+            "Found %1. Somewhere, a Kentucky yard sale is weeping.", "%1. Great. Survival is assured.",
+            "%1. I can hear the shelves laughing.", "Found %1. That's a lot of dust for very little help.",
+            "We came this far for %1?", "%1. The cupboard won this round.",
+            "Found %1. I'll file it under bad timing.", "%1. Well, at least it isn't another empty tin.",
+            "I carried hope in here and %1 out.", "Found %1. Back to the list, I suppose.",
+        },
+        brave = { "%1. I've fought harder for worse, but not often.", "Found %1. Even the dead wouldn't steal this.",
+            "%1. All right, building. You had your joke.", "Found %1. I'm still checking the next room." },
+        cautious = { "%1. Not worth getting cornered over.", "Found %1. We should have checked the exit first.",
+            "Found %1. Let's leave before the noise catches up.", "%1. Not enough to justify staying here." },
+        caring = { "%1. Please tell me nobody risked a bite for this.", "Found %1. Maybe someone can still make use of it.",
+            "%1. I wish I had better news for the others.", "Found %1. Maybe I can repair it for someone." },
+        practical = { "%1. Poor condition, low value.", "Found %1. Technically useful. Technically.",
+            "%1. Doesn't fill a need on the list.", "Found %1. Low priority; keep searching." },
+        stressed = { "%1? Are you kidding me?", "Found %1. Of course that's all there was.",
+            "%1. Every room is another little insult.", "Found %1. I need one useful thing today." },
+        low = { "%1. Figures.", "Found %1. I expected nothing and somehow got less.",
+            "%1. Of course that's what was left.", "Found %1. I'll try the next place." },
+        steady = { "Found %1. Fine. Not good. Fine.",
+            "%1. I've had worse finds. Not many, but some.",
+            "Found %1. No point arguing with a shelf.", "%1. Set it down. Move on." },
+    },
+    ["scavenge.loot.gross"] = {
+        common = {
+            "I found %1. Eww, I got some of it on my hands.",
+            "*holds %1 at arm's length* This had better be worth it.",
+            "%1. It is wet, and I refuse to ask why.", "Found %1. Smells like a hot dumpster behind Spiffo's.",
+            "%1. If this starts moving, I'm dropping it.", "Got %1. I need soap, fire, then more soap.",
+            "Found %1. The corpse did not surrender it gracefully.", "%1. Useful or not, it has touched too much Kentucky.",
+            "%1. This smells older than the end of the world.", "Found %1. I need a different pair of gloves.",
+            "%1. It made a noise when I picked it up.", "Found %1. Keep it away from the food.",
+            "%1. I can feel that through my sleeve.", "Found %1. Nobody ask where it was.",
+            "%1. Straight into a sealed bag, please.", "Found %1. I am washing twice when we get home.",
+        },
+        brave = { "%1. I've had worse on me. Probably.", "Found %1. Disgusting doesn't mean defeated.",
+            "%1. I've survived uglier things than this.", "Found %1. I can hold my breath longer than it can stink." },
+        cautious = { "%1. Nobody touch my hands until I disinfect them.", "Found %1. Bag it separately. Very separately.",
+            "%1. We should clean this before it goes near supplies.", "Found %1. I'm keeping it outside the pack." },
+        caring = { "%1. Please let me clean this before anyone uses it.", "Found %1. Don't touch it bare-handed like I just did.",
+            "%1. I'll scrub it before anyone else handles it.", "Found %1. Tell me we have soap left for this." },
+        practical = { "%1. Contaminated-looking, but salvageable.", "Found %1. Hygiene cost: unacceptable.",
+            "%1. Quarantine it until we've cleaned it.", "Found %1. Useful after a thorough wash." },
+        stressed = { "%1 - oh God, it squished.", "Found %1. Nope. I hate this. I hate all of this.",
+            "%1. I felt something crawl. Tell me I imagined it.", "Found %1. I want it out of my hands right now." },
+        low = { "%1. Somehow this is exactly the day I deserved.", "Found %1. I miss clean shelves.",
+            "%1. Even the dirt has given up on this place.", "Found %1. I'll wash the smell off eventually." },
+        steady = { "Found %1. It has been a difficult day for soap.",
+            "%1. Still useful. Best not to discuss the texture.",
+            "Found %1. Wrap it up before it drips.", "%1. We'll clean it when we're safe." },
+    },
+    ["traversal.wall.success"] = {
+        common = {
+            "*drops onto the far side* Still got it.", "Over. Your turn.",
+            "That fence looked taller from down there.", "*dusts off their hands* Fence cleared.",
+            "Kentucky built it high. Not high enough.", "Made it. Nothing important tore.",
+            "And that is how you disrespect private property.", "Over the top and still breathing.",
+        },
+        brave = { "Ha! Fence never stood a chance.", "Tell the fence I won." },
+        cautious = { "I'm over. Checking this side before we move.", "Clear landing. Watch yours." },
+        caring = { "I'm across. Take it carefully, all right?", "Made it. I'll watch while you climb." },
+        practical = { "Wall crossed. Route is open.", "Over. No injury, no lost gear." },
+        hopeful = { "Made it! Maybe the road likes us today.", "One more wall behind us." },
+        stressed = { "Made it. I am not doing that twice.", "Over. Keep moving before my knees complain." },
+        low = { "I'm over. Something worked today.", "Made it. Small miracles." },
+        steady = { "Over. Nothing tore that matters.", "Wall crossed. Could have been less graceful." },
+    },
+    ["traversal.wall.struggle"] = {
+        common = {
+            "*boots scrape against the wall* Give me a second.", "*hauls themself over* Easy for somebody, maybe.",
+            "Whoever built this fence hated knees.", "*lands hard* I meant to make that look difficult.",
+            "That fence collected its toll in dignity.", "Over. Barely, but over.",
+            "Kentucky gravity is feeling personal today.", "*catches their breath* The fence put up a fight.",
+        },
+        brave = { "*grunts* Not pretty, but it counts.", "Fence fought dirty. I fought dirtier." },
+        cautious = { "That took too much out of me. Check the landing.", "I'm over, but give me a breath." },
+        caring = { "I made it. Please do not copy that landing.", "Across. Let me catch my breath, then I'll help." },
+        practical = { "Crossed, with more effort than forecast.", "Over. Stamina cost was unacceptable." },
+        hopeful = { "Ugly climb, good ending.", "Still made it. That is what matters." },
+        stressed = { "*gasps* Stupid fence.", "I am over. My arms have filed a complaint." },
+        low = { "Over, somehow.", "The fence almost had me. Almost." },
+        steady = { "That was adequate. The wall may disagree.",
+            "Still upright. That's the whole report." },
+    },
+    ["traversal.wall.fail"] = {
+        common = {
+            "*drops back down* Nope. Fence wins this round.", "Not happening. I need another way.",
+            "That wall just audited my fitness.", "*rubs their shoulder* I have made better decisions.",
+            "Too high, bad grip. Pick another route.", "The fence says no. Loudly.",
+            "Kentucky property law remains undefeated.", "I got halfway to freedom and all the way to embarrassed.",
+        },
+        brave = { "Fine. One point to the fence.", "I slipped. That is not the same as surrendering." },
+        cautious = { "Bad grip. I am not risking the second try yet.", "No. That landing is not worth a broken ankle." },
+        caring = { "I'm all right. Just give me a moment.", "Did not make it, but nothing is broken." },
+        practical = { "Attempt failed. We need a lower crossing.", "Insufficient leverage. Rerouting." },
+        hopeful = { "Not this time. There will be another way.", "Fence got this one. We are still moving." },
+        stressed = { "Oh, come on! It is a fence!", "*hits the ground* I hate this fence." },
+        low = { "Of course the fence won.", "Could not even clear a wall. Great." },
+        steady = { "Well. That happened.", "The wall remains where it was. So do I." },
+    },
+    ["combat.engage"] = {
+        common = {
+            "Engaging!", "I'm going in!", "Taking it down!", "I've got this one!",
+            "Moving in!", "On it!", "Here we go!", "Keep back, I've got it!",
+            "Here's your eviction notice!", "Lights out, neighbor!",
+            "Back in the ground with you!", "Clocking you out!",
+        },
+        brave = { "Come on, then!", "My turn!", "Let's finish this!" },
+        cautious = { "One target. Keep an exit open!", "Moving in. Watch my flank!" },
+        caring = { "Stay behind me!", "I've got it. Keep yourself safe!" },
+        practical = { "Target selected. Engaging!", "Closing in now!" },
+        stressed = { "Fine! Let's do this!", "Get away from us!" },
+    },
+    ["grab.pinned"] = {
+        common = {
+            "They've got me! Get them off!", "Help! I'm down!", "I'm pinned - help!",
+            "Get them off me!", "They're on me - help!", "I can't get up - hurry!",
+        },
+        brave = { "Get them off and I'll make them pay!", "I'm down, not done - help me up!" },
+        cautious = { "Too many! Pull them off me!", "I'm pinned - don't lose me!" },
+        caring = { "Help - I don't want to leave you like this!", "Get them off, please!" },
+        practical = { "Pinned. Clear the ones on top of me!", "I'm down - thin them out!" },
+        stressed = { "No no no - get them OFF!", "They've got me! Please!" },
+    },
+    ["grab.rescued"] = {
+        common = {
+            "Thank you - I'm up!", "That was too close.", "I owe you one.",
+            "Back on my feet. Thanks.", "You pulled me out of that - thank you.",
+        },
+        brave = { "Ha! Not today. Thanks.", "Back up. Let's finish them." },
+        cautious = { "Close. Let's not do that again.", "Up. Watch the flanks this time." },
+        caring = { "You came back for me. Thank you.", "I knew you wouldn't leave me." },
+        practical = { "Up and clear. Thanks.", "Good pull. Back to it." },
+        stressed = { "Oh thank God. Thank you.", "Never again. Please." },
+    },
+    ["grab.escaped"] = {
+        common = {
+            "Got loose!", "Off me - I'm up!", "Broke free!", "Shook them off!", "Not today.",
+        },
+        brave = { "You'll have to do better than that!", "Ha! Off me!" },
+        cautious = { "Free - regrouping.", "Up. Keeping my distance now." },
+        practical = { "Loose. Back to it.", "Free and standing." },
+        stressed = { "Off! Get off!", "Free - barely!" },
+    },
+    ["lastwords.pinned"] = {
+        common = {
+            "%1! They've got me!", "%1, please! Get them off!",
+            "Don't let this be where you lose me!", "Help me! I can't get my arms free!",
+            "They're pulling me down! I need you now!", "Get them off me - please!",
+            "Not like this! We were supposed to make it home!", "I'm still here! Fight your way to me!",
+            "Don't make me a memory yet!", "I can't get up! %1, hurry!",
+            "They have my legs! Don't let them take me!", "Look at me, %1! I need your help!",
+            "I don't want to leave you like this!", "Please, I still have things to say!",
+            "I'm pinned! Clear the ones on top!", "Don't turn away! I'm not gone yet!",
+            "I can feel them biting! Get me out!", "We survived too much for it to end here!",
+            "You're the reason I kept going - don't stop now!", "I can still hear you! Keep coming!",
+        },
+        brave = {
+            "Pull them off and I'll stand back up!", "I'm down, not finished! Come get me!",
+            "Give me one opening, %1!", "I can still fight - just clear my arms!",
+            "Make them pay for touching one of us!",
+        },
+        cautious = {
+            "Thin the pile, then pull me out!", "Don't rush straight in - but don't leave me!",
+            "Take the one at my shoulders first!", "Keep your exit, %1! Just get me loose!",
+            "Too many on top of me! Break the pile!",
+        },
+        caring = {
+            "%1, I don't want our last moment to be this!", "You always came back for me. Come back now!",
+            "Please don't get yourself killed reaching me!", "I can't leave you alone out here!",
+            "Stay alive - but please, try to reach me!",
+        },
+        practical = {
+            "Pinned! Clear the closest two!", "Hit the one over my shoulders first!",
+            "I need space on my left!", "Break their grip, then pull me up!",
+            "No footing, no weapon - I need assistance!",
+        },
+        stressed = {
+            "No, no, no - %1, HELP!", "I can't breathe! Get them OFF!",
+            "Please! Don't let me die here!", "They're tearing me apart!",
+            "%1! Where are you? I need you!",
+        },
+        bond_cautious = {
+            "%1, I know we barely know each other - but please don't leave me!",
+            "I took a chance following you. Make it mean something - get me up!",
+            "We haven't had enough time for this to be goodbye!",
+        },
+        bond_ally = {
+            "%1, we work better together! I need my partner now!",
+            "You said we'd watch each other's backs - they're on mine!",
+            "This team still needs both of us. Pull me out!",
+        },
+        bond_trusted = {
+            "I trusted you with my life, %1! I'm trusting you now!",
+            "You've never left me behind. Please don't start today!",
+            "We have survived worse together. Reach me!",
+        },
+        bond_close = {
+            "%1, you are the reason I still fight! Don't lose me here!",
+            "I can't leave you alone in this world. Get me back up!",
+            "You know I'd crawl through them for you. Please try for me!",
+        },
+        bond_family = {
+            "%1! Family doesn't end under a pile of corpses - come get me!",
+            "I found a family with you. Don't let them take it away!",
+            "Come back for me, %1! I need my family!",
+        },
+    },
+    ["lastwords.zombies"] = {
+        common = {
+            "%1... don't watch. Just live.", "You gave me more days than I thought I had. Thank you.",
+            "Go. Please make losing me mean something.", "We were a good team, weren't we?",
+            "I thought we'd get one more morning.", "Don't let the last thing I see be you dying too.",
+            "You came back for me every time. You can't this time.", "Remember me standing, not like this.",
+            "Keep my bag. Keep moving.", "Tell the others I stayed human to the end.",
+            "Don't carry the guilt, %1. Carry what we built.", "I'm glad I didn't face this world alone.",
+            "There was still so much road left.", "I know your face. I won't forget it.",
+            "If there is somewhere after this, I'll wait for you - but not soon.",
+            "You found me when I had nobody. That mattered.", "Don't waste another bullet on revenge.",
+            "Promise me this doesn't make you stop trusting people.",
+            "I was scared before I met you. I'm less scared now.", "Say my name once when you get somewhere safe.",
+        },
+        brave = {
+            "They got me, not the fight. Finish it.", "No fear now. Get out of here.",
+            "I held as long as I could, %1.", "Make the next swing count for both of us.",
+            "I said I'd watch your back. I meant it to the end.",
+        },
+        cautious = {
+            "Don't come closer. The numbers are wrong.", "Use the route we marked. Go now.",
+            "Break sight, cross the fence, don't look back.", "This position is lost. You are not.",
+            "Promise me you'll check the next corner twice.",
+        },
+        caring = {
+            "You made the end of the world feel less lonely.", "Please eat. Sleep. Keep being a person.",
+            "I need you to forgive yourself, %1.", "Thank you for making me part of something again.",
+            "Take care of them the way you took care of me.",
+        },
+        practical = {
+            "Leave the gear. Take only what keeps you alive.", "The opening is behind you. Use it.",
+            "No rescue possible. Withdraw, %1.", "Save your strength. I am already spent.",
+            "One survivor leaving is better than two bodies here.",
+        },
+        stressed = {
+            "I don't want to die! %1, I don't want to die!", "Please don't let them eat me alive.",
+            "Stay with me - no, go! Go!", "I can't feel my hands anymore.",
+            "Tell me we mattered. Please.",
+        },
+        bond_cautious = {
+            "We barely had time to know each other, %1. I'm sorry it ends here.",
+            "Thank you for taking a chance on me. Now take your chance to run.",
+            "I wish I'd trusted you sooner. Go.",
+        },
+        bond_ally = {
+            "You were a good partner, %1. Find another reason to keep going.",
+            "We made a strong team. One of us can still make it home.",
+            "I was lucky to have you beside me. Don't die beside me now.",
+        },
+        bond_trusted = {
+            "I trusted you with every bad road. Trust me when I tell you to go.",
+            "You always came back for me, %1. This time, live with walking away.",
+            "Knowing you would be there made me brave. Be brave enough to leave.",
+        },
+        bond_close = {
+            "You gave me a reason to call somewhere home, %1.",
+            "The worst part is leaving you to face tomorrow without me.",
+            "I need my last thought to be you getting away safely.",
+        },
+        bond_family = {
+            "%1, you became my family. That is the life I want remembered.",
+            "I lost one world and found a family in you. Thank you.",
+            "Tell our family I loved them. You already know I loved you.",
+        },
+    },
+    ["lastwords.health"] = {
+        common = {
+            "%1... sit with me a moment.", "I'm sorry. My body gave up before I did.",
+            "Don't call this failure. We made a life in impossible days.", "I'm so tired now.",
+            "I want to see the sky once more.", "Promise me you'll eat something tomorrow.",
+            "I kept thinking there would be more time.", "You don't have to fix this one, %1.",
+            "Stay until it gets quiet. Then keep going.", "I don't hurt anymore. I think that's bad.",
+            "Thank you for every ordinary morning.", "Take the things in my bag. I chose them for us.",
+            "I wish we had met before the world ended.", "Don't remember the sickness. Remember the road.",
+            "I can hear you. Keep talking.", "I was someone again when I was with you.",
+            "Tell me about somewhere safe, even if you have to invent it.",
+            "The end feels smaller with someone beside you.", "Don't let this room become my whole story.",
+            "When you think of me, make it one of the good days.",
+        },
+        brave = {
+            "I've fought this long enough. It's all right.", "No more battles for me. You still have yours.",
+            "I am not afraid of the quiet.", "Stand up when I can't, %1.",
+            "This body is done. I am not ashamed of it.",
+        },
+        cautious = {
+            "Check the doors after. Grief makes people careless.", "Don't stay here after dark for my sake.",
+            "Burn what needs burning. Keep the room safe.", "Take the south exit if you have to leave quickly.",
+            "You need rest too. Promise me you'll remember that.",
+        },
+        caring = {
+            "You were family when I thought family was gone.", "Hold my hand, %1. Just for a little while.",
+            "I hope you know how much your kindness mattered.", "You made me want tomorrow again.",
+            "Keep a place for new people. Don't close your heart with me.",
+        },
+        practical = {
+            "My medicine won't help me now. Save it.", "Take inventory when this is over. Nothing gets wasted.",
+            "You know what has to be done afterward.", "The supplies are labeled. You'll manage.",
+            "No more treatment, %1. Spend it on someone who has time.",
+        },
+        stressed = {
+            "I thought I was ready. I'm not.", "Please don't leave the room yet.",
+            "I can't catch my breath, %1.", "Tell me I'm not disappearing alone.",
+            "I'm scared. Just say my name.",
+        },
+        bond_cautious = {
+            "We did not know each other long, %1, but I am glad we met.",
+            "Thank you for giving a stranger somewhere safe to stop.",
+            "Maybe with more time I would have told you more. I wanted to.",
+        },
+        bond_ally = {
+            "You were a good partner, %1. I could not have asked for fairer.",
+            "We kept each other alive longer than either of us expected.",
+            "Keep doing the work we started. It mattered to me.",
+        },
+        bond_trusted = {
+            "I knew I was safe whenever you took the watch, %1.",
+            "You earned every piece of trust I had left to give.",
+            "I could close my eyes because I knew you were here.",
+        },
+        bond_close = {
+            "You made this broken world feel like a life again, %1.",
+            "I hate that I will miss all your tomorrows.",
+            "You knew me as I became, not only as I was. Thank you.",
+        },
+        bond_family = {
+            "Stay close, %1. I want to leave this world beside my family.",
+            "You were home to me after every other home was gone.",
+            "I need you to hear it once more: you are my family, and I love you.",
+        },
+    },
+    ["lastwords.turning"] = {
+        common = {
+            "%1, if I stop knowing you, remember that I know you now.",
+            "When I get back up, that won't be me.", "Don't use my name for whatever comes after.",
+            "Let me say goodbye while the words are still mine.", "Remember my voice, not the sound I'll make later.",
+            "If I reach for you afterward, don't hesitate.", "You have to leave before my face lies to you.",
+            "I can feel pieces of me going missing.", "Soon I won't know why you matter. Right now, you do.",
+            "Tie the door. Then walk away before I change my mind.", "Don't let me hurt you, %1. I couldn't bear that.",
+            "The fever is taking the room away from me.", "Say something true. I need one last true thing.",
+            "Keep the photograph. I won't be able to remember it.",
+            "Whatever wears my face next is not your friend.", "I wanted more time as myself.",
+            "Look at me now, while I can still look back.", "I am still here. Please remember this version.",
+            "When the eyes change, go. Promise me.", "Don't wait for proof. This is me giving you permission.",
+        },
+        brave = {
+            "I'll hold on to my name as long as I can.", "I won't give it an easy body to inherit.",
+            "Do what I would do for you, %1.", "One clean end. No hesitation.",
+            "The infection wins my body, not who I was.",
+        },
+        cautious = {
+            "Secure both doors before the fever takes me.", "Keep your distance from now on.",
+            "Count to ten after I stop breathing. Then be certain.", "Don't sleep anywhere near this room.",
+            "Take no chances with me, %1. None.",
+        },
+        caring = {
+            "I love that I got to know you before I forgot everything.",
+            "Please remember I would never choose to hurt you.", "You gave me people worth saying goodbye to.",
+            "Tell everyone my last thought was of home.", "Don't let my face make you feel guilty afterward.",
+        },
+        practical = {
+            "The restraints need checking before I lose control.", "Use one round. Make it certain.",
+            "Move the supplies out before you seal the room.", "My pulse will stop before the danger does.",
+            "Record the time, lock the door, and leave, %1.",
+        },
+        stressed = {
+            "I can feel it behind my eyes!", "I'm forgetting something - don't let it be you.",
+            "Please, %1, don't let me wake up hungry.", "I don't want my last face to be that thing's face.",
+            "Tell me who I am. Quickly.",
+        },
+        bond_cautious = {
+            "We did not have long, %1. Remember that I chose to trust you at the end.",
+            "You took in a stranger. Do not let what I become punish you for that kindness.",
+            "I wish you had met the version of me that had more time.",
+        },
+        bond_ally = {
+            "You were my partner while I was human. Keep that part of me.",
+            "We had each other's backs, %1. Mine belongs behind a locked door now.",
+            "Thank you for every mile we walked as a team.",
+        },
+        bond_trusted = {
+            "I trust you to know when I am gone, %1.",
+            "You knew the real me. Do not let the infection rewrite that memory.",
+            "The last person I trust is the one who may have to stop me.",
+        },
+        bond_close = {
+            "Losing your face from my memory frightens me more than dying.",
+            "You made me myself again, %1. Remember me that way.",
+            "If I say your name after I turn, please know it is only an echo.",
+        },
+        bond_family = {
+            "%1, my last human certainty is that you are my family.",
+            "Whatever wakes in this body, it cannot have what we were.",
+            "Tell our family I remembered every one of them at the end.",
+        },
+    },
+    ["combat.engage.one"] = {
+        common = {
+            "One contact. I'm taking it!", "I've got the lone walker!", "Just one. Moving in!",
+            "Single target. Engaging!", "I'll handle this one!", "One walker. Cover me!",
+            "Taking the only one in sight!", "I have the single contact!",
+            "Hold still. This won't take long!", "Sorry, neighbor. Nothing personal!",
+            "Visiting hours are over!", "Take a number. Yours is up!",
+            "We're closed! Go home!", "Hey there, neighbor. Bye, neighbor!",
+            "C'mere, you sorry thing!", "Bless your heart. Hold still!",
+            "Lord, forgive me. Again!", "Fixin' to end this one!",
+            "Out of my county!", "Get off my road!",
+        },
+        brave = { "Only one? Mine.", "One walker. Let's end it.",
+            "Just you and me, ugly!", "One? I'm insulted!" },
+        cautious = { "One target. Watch for the one we can't see.", "I'll take it. Keep checking behind us.",
+            "Quick and quiet. Don't draw a crowd!", "One swing at a time. Stay loose!" },
+        caring = { "Stay back. I'll take this one.", "One walker. Keep yourself clear.",
+            "Don't you dare get bit! I've got it!", "Keep clear! This one's mine!" },
+        practical = { "Single target selected.", "Engaging the lone contact.",
+            "One walker. Three swings, tops!", "Clean and quick. Moving in!" },
+        stressed = { "Fine, one of you. Come on!", "One walker. Go down fast.",
+            "Why won't you stay dead?!", "Just go down already!" },
+    },
+    ["combat.engage.pair"] = {
+        common = {
+            "Two contacts. Take them one at a time!", "Pair ahead. I'm on the closer one!",
+            "I'll pull one away from the other!", "Two walkers. Keep them separated!",
+            "Engaging the first of two!", "Pair of them. Watch my side!",
+            "Two targets. Don't let them line up on us!", "I'm taking the lead walker!",
+            "Buy one, get one! I'm on it!", "Matching set! I'll take both!",
+            "Double trouble! Slow one first!", "Mind the pair! Near one's mine!",
+            "Two of y'all? Line up nice!", "Swing your partner! Then swing harder!",
+            "Two-step time! Keep them apart!", "Couple of drifters! Split them up!",
+        },
+        brave = { "Two walkers. Pick one and commit!", "Pair ahead. Let's split them.",
+            "Two? Now it's a fair fight!", "Both of you! Come on!" },
+        cautious = { "Two contacts. Keep them from flanking us.", "I'll engage. Hold the exit.",
+            "Don't let them pinch us! Back up!", "Make them string out first!" },
+        caring = { "Two of them. Stay close and don't get between them.", "I'll take one. Guard each other.",
+            "Two! Stay where I can see you!", "I've got the near one! You stay safe!" },
+        practical = { "Pair confirmed. Isolate the closer target.", "Two targets. Focus one down.",
+            "Pair. Peel one off, finish it, repeat!", "Near one first, then the straggler!" },
+        stressed = { "Two of them. Fine!", { "Damn it, don't let both reach me!", clean = "Blast it, don't let both reach me!" },
+            "Why is it always two?!", "Not both at once!" },
+    },
+    ["combat.engage.group"] = {
+        common = {
+            "Small group! Hold the line!", "Four contacts. Keep your spacing!",
+            "I'm engaging. Don't get surrounded!", "Several walkers. Focus the nearest!",
+            "Small pack. Make them come through us one at a time!", "Four or so. Watch the flanks!",
+            "Group ahead. Hit one and keep moving!", "Multiple targets. Stay on your feet!",
+        },
+        brave = { "Small pack. We break them here!", "Four walkers. Keep swinging!" },
+        cautious = { "Four contacts. Fight toward the exit.", "Small group. Do not chase into them." },
+        caring = { "Stay together! Nobody gets pulled into that group!", "Several ahead. Watch each other!" },
+        practical = { "Four contacts. Control the approach.", "Small group. Use the narrow ground." },
+        stressed = { "There are four! Keep them off me!", "Too many hands. Don't let them grab you!" },
+    },
+    ["combat.engage.crowd"] = {
+        common = {
+            "Big group! Fight only for room!", "Crowd incoming. Keep the exit open!",
+            "Six or more! Don't stand still!", "Large pack. Push through, don't chase!",
+            "Too many for a clean fight. Make space!", "Crowd ahead. Cover the withdrawal!",
+            "Multiple targets. We fight our way out!", "Big cluster. Stay mobile!",
+        },
+        brave = { "Large group. We hit hard and move!", "Crowd incoming. Hold your nerve!" },
+        cautious = { "Six-plus. Every strike should buy an escape step.", "Fight backward. Keep the route clear." },
+        caring = { "Stay with me! We're getting everyone out!", "Nobody falls behind. Fight for space!" },
+        practical = { "Large group. This is a controlled withdrawal.", "Crowd contact. Conserve room and stamina." },
+        stressed = { "There's too many! Keep moving!", "They're closing in. Get them off us!" },
+    },
+    ["combat.engage.horde"] = {
+        common = {
+            "Horde! Fight only to escape!", "Mass contact! Clear a path and run!",
+            "Don't try to win this! Make a hole!", "Horde on us! Break through!",
+            "The street is full! Fight your way out!", "Too many to kill! Buy us room!",
+            "Horde! One opening, then we move!", "We're not holding here! Clear the exit!",
+        },
+        brave = { "Horde! We hit once and get out!", "No heroics! Cut a path!",
+            "Too many to fight - punch through and go!", "Stay on me! One line, straight out!" },
+        cautious = { "Horde contact. Do not stop moving!", "Break sight as soon as the path opens!",
+            "Do not let them box us in - keep an exit open!", "Quiet feet, keep moving, do not turn to fight!" },
+        caring = { "Everyone out! I'll help clear the way!", "Stay together! Nobody disappears in that horde!" },
+        practical = { "Horde. Engagement objective is escape only.", "Mass contact. Clear one lane and withdraw." },
+        stressed = { "Oh God, they're all coming!", "Horde! Run as soon as you can!" },
+    },
+    ["combat.retreat"] = {
+        common = {
+            "Fall back!", "Break contact!", "Pull back, now!", "Back! We need space!",
+            "Too many! Move!", "Cover me, I'm moving!", "We're being overrun!",
+            "Not here! Move!",
+        },
+        brave = { "Back up! We fight on better ground!", "Move! I'll cover the retreat!" },
+        cautious = { "Exit route! Fall back!", "Bad position! Get out!" },
+        caring = { "Everyone back! Stay together!", "Move! I don't want anyone trapped!" },
+        practical = { "Position lost! Withdraw!", "Too much pressure! Disengage!" },
+        stressed = { { "Oh hell, get back!", clean = "Oh heck, get back!" }, "They're everywhere! Move!" },
+    },
+    ["combat.retreat.one"] = {
+        common = {
+            "Back up! This one's too close!", "Break contact with the lone walker!",
+            "One zombie, bad position. Move!", "Give this one space!", "Back away from it!",
+            "Not worth a bite. Pull back!", "One contact. Reset the distance!", "Move back and make it follow!",
+        },
+        cautious = { "One is enough to kill us. Back up.", "Pull it into the open first!" },
+        practical = { "Single contact, poor angle. Reposition.", "Reset against the lone target." },
+        stressed = { "Get it away from me!", "Back! Back!" },
+    },
+    ["combat.retreat.pair"] = {
+        common = {
+            "Two on us! Pull back!", "Break away before they flank us!", "Pair too close. Move!",
+            "Back up and separate them!", "Two contacts. Reset the fight!", "Don't get caught between them!",
+            "Pull them apart. Fall back!", "Give ground before both can grab!",
+        },
+        cautious = { "Two angles of attack. Withdraw.", "Back up until they form a line." },
+        practical = { "Pair contact. Reposition and isolate one.", "Two targets. Recover spacing." },
+        stressed = { "Both of them are on us! Move!", "I can't hold two! Back!" },
+    },
+    ["combat.retreat.group"] = {
+        common = {
+            "Small group closing! Fall back!", "Four contacts. Give ground!", "Pull back before they surround us!",
+            "Several on us. Move to the choke point!", "Break contact with the group!", "Back! Keep them in front!",
+            "We're losing space. Withdraw!", "Four walkers pressing in. Move!",
+        },
+        cautious = { "Four contacts. The flank is folding. Back out.", "Withdraw while the exit is still open." },
+        practical = { "Small group has the advantage. Reposition.", "Four contacts. Trade ground for spacing." },
+        stressed = { "They're around us! Get back!", "Too many hands! Move!" },
+    },
+    ["combat.retreat.crowd"] = {
+        common = {
+            "Crowd closing in! Run!", "Large group! Break contact now!", "Too many in reach. Move!",
+            "We're being compressed! Get out!", "Six-plus on us. Withdraw!", "The exit is closing! Fall back!",
+            "Big pack! Stop fighting and move!", "They're flooding the position. Go!",
+        },
+        cautious = { "Large group. Leave before this becomes a horde.", "Exit now, while we still have one." },
+        practical = { "Crowd pressure critical. Disengage.", "Large pack. Position no longer defensible." },
+        stressed = { "They're everywhere! Run!", "I can't count them anymore. Go!" },
+    },
+    ["combat.retreat.horde"] = {
+        common = {
+            "Horde! Run!", "Break contact! The whole horde is coming!", "Leave everything and move!",
+            "We cannot hold this! Get out!", "Horde on top of us! Go, go!", "The street is lost! Run!",
+            "Too many! Do not stop!", "Mass of dead incoming! Withdraw now!",
+        },
+        brave = { "Horde! Nobody plays hero. Move!", "I'll cover the first steps. Run!" },
+        cautious = { "Horde! Break sight and keep going!", "Do not look back. Follow the escape route!" },
+        caring = { "Everyone with me! Nobody gets left!", "Stay together and run! I'll watch the rear!" },
+        practical = { "Horde contact. Full withdrawal.", "Position lost. Immediate evacuation." },
+        stressed = { "Oh God, run!", "They're swallowing the whole road! Move!" },
+    },
+    ["combat.struggle"] = {
+        common = {
+            "Go down!", "Stay down!", "Why won't you die?", { "Damn thing won't drop!", clean = "Darn thing won't drop!" },
+            "Just die already!", "Come on!", "Almost got it!", "I'm working on it!",
+        },
+        brave = { "You are not getting through me!", "Come on, fall already!" },
+        cautious = { "This is taking too long!", "I need room to finish this!" },
+        caring = { "Keep away from them!", "I won't let it reach you!" },
+        practical = { "Target is still active!", "It keeps getting back up!" },
+        stressed = { "For God's sake, die!", "Why are you still moving?" },
+    },
+    ["combat.kill"] = {
+        common = {
+            "It's down!", "Target down!", "One less!", "Got it!",
+            "That's one!", "Clear! It's down.", "Not getting back up.", "Dead for good.",
+            "Stay dead.", "That one is finished.", "Down and done.",
+            "It won't be following us.", "That's another cleared.",
+            "Confirmed. It's not moving.", "One problem handled.",
+            "The road's a little clearer.", "That one's done.",
+            "Keep moving. It is down.", "No pulse. Clear.", "That was the last hit.",
+        },
+        brave = { "Dropped it!", "Done. Who's next?" },
+        cautious = { "It's down. Check around us!", "Target down. Keep watching!" },
+        caring = { "It's down. Is everyone all right?", "Clear here. Check yourselves!" },
+        practical = { "Confirmed down.", "Target neutralized." },
+        stressed = { "Finally! It's down!", { "Damn it. Dead at last.", clean = "Blast it. Dead at last." } },
+        registers = { brave = { steady = {
+            "He's not hungry any more. Silver linings.",
+            "Somebody's neighbor. Probably the loud one.",
+            "I'd apologize, but he opened the conversation.",
+            "That's three. I'm not counting. I'm absolutely counting.",
+            "He went quietly. Eventually.",
+            "Not my best work. Effective, though.",
+            "Down. Whatever he was before, he's simpler now.",
+            "That one had a wedding ring. Hope she got out. Hope she got far.",
+        } } },
+    },
+    ["gift.weapon.thanks"] = {
+        common = {
+            "Thanks. I'll use it when I need it.",
+            "Thanks for trusting me with this.",
+            "I appreciate it. I'll keep it ready.",
+            "Good. I was tired of facing them empty-handed.",
+            "Thank you. This might keep both of us alive.",
+            "I'll take care of it. And I'll use it when it counts.",
+        },
+        brave = { "That's more like it. Thanks!", "Now I can pull my weight. Thanks." },
+        cautious = { "Thanks. I'll save it for when we really need it." },
+        caring = { "Thank you. I'll use it to keep us safe." },
+        practical = { "Received. I'll keep it in working order. Thanks." },
+    },
+    ["gift.offer"] = {
+        common = {
+            "I saved this for you. Would you take it?",
+            "Here. I thought you might like this.",
+            "You've looked after me. Let me give you something back.",
+            "I found something I wanted you to have.",
+        },
+        brave = { "Don't make a fuss. Just take it, all right?" },
+        cautious = { "I've been holding on to this. I trust you with it." },
+        caring = { "You deserve something good for once. Here." },
+        practical = { "I set this aside for you. It might help." },
+    },
+    ["gift.accepted"] = { common = {
+        "Good. I'm glad you took it.", "It's yours. Put it to good use.",
+        "You would have done the same for me.",
+    } },
+    ["gift.declined"] = { common = {
+        "All right. I'll keep it safe.", "No trouble. Maybe another time.",
+        "Fair enough. The offer still meant something to me.",
+    } },
+    ["work.cannot"] = { common = {
+        "I can't do that safely.", "That won't work from here.",
+        "I can't complete that as things stand.", "I need a better setup before I try that.",
+            "I can't do that safely from here. We need another approach.",
+            "This position won't let me work. I'll need a clear place.",
+            "I can't reach it safely. Clear the approach first.",
+            "That job is blocked here. A better position might let me finish.",
+        }, steady = { "Not safe. Mildly inconvenient, but still not safe.",
+        "That will not work. Nice of it to be clear about it." } },
+    ["work.hammer"] = { common = {
+        "I need an unbroken hammer.", "Find me a working hammer and I can do it.",
+        "I can't start without a usable hammer.", "The hammer is the missing piece here.",
+            "A working hammer would settle this. Mine won't.",
+            "I need a usable hammer before this turns into an apology.",
+            "Find an unbroken hammer. The nails aren't going to persuade themselves.",
+            { "No sound hammer. Even the damn tools have given up.", clean = "No sound hammer. Even the darn tools have given up." },
+        }, steady = { "No hammer. The wall can wait patiently.",
+        "I need a hammer that is still on speaking terms with its handle." } },
+    ["work.plank"] = { common = {
+        "I need a plank.", "We're short one plank for this.",
+        "Bring me a plank and I can continue.", "No good. I don't have the lumber I need.",
+            "One usable plank, please. We can call it architecture afterward.",
+            "I need a plank before I can patch this gap.",
+            "No plank means no progress. Find me one solid piece.",
+            "Bring one plank. Air has terrible structural strength.",
+        }, steady = { "One plank short. Could be worse. Usually is.",
+        "No lumber. That's put a firm limit on the carpentry." } },
+    ["work.nails"] = { common = {
+        "I need two nails.", "We're out of the nails this needs.",
+        "Give me a couple of nails and I'll finish it.", "I can't secure this without nails.",
+            "Two nails. Civilization ended over less.",
+            "I need two nails to secure this properly.",
+            "Bring two nails. Good intentions don't hold a board.",
+            "Two usable nails, please. Then this job can stop waiting.",
+        }, steady = { "Two nails short. The apocalypse remains poorly supplied.",
+        "No nails. Everything else was going almost suspiciously well." } },
+    ["work.saw"] = { common = {
+        "I need an unbroken saw.", "This needs a working saw.",
+        "Find me a usable saw first.", "I can't make the cut with what I have.",
+            "I need a working saw. This wood won't cut itself.",
+            "Find a usable saw. Teeth are useful outside mouths too.",
+            "An unbroken saw would get this moving again.",
+            "Bring a working saw before I start bargaining with the log.",
+        }, steady = { "No working saw. The log seems pleased.",
+        "I need a saw with teeth. A surprisingly strict requirement." } },
+    ["work.missing.axe"] = { common = {
+        "I need an axe for chopping those trees you asked about.",
+        "Let's make a salvage run for a good axe.",
+        "Those trees aren't coming down with my bare hands.",
+        "I've got timber to cut and nothing that'll bite into it.",
+        "Find me a sound axe and I'll get back to the woodcutting.",
+        "No usable axe in our supplies. Lumber work is stopped.",
+        "I can mark the trees all day. I still need an axe to fell them.",
+        "We need a proper chopping tool before I go back out there.",
+        "Got an axe tucked away somewhere? I could use it now.",
+        "I'd get to work on those trees if we had an axe.",
+    }, steady = { "The trees won this round. We still need an axe.",
+        "I can glare at the forest, but it won't make planks." } },
+    ["work.missing.saw"] = { common = {
+        "Let's go out and find a saw. I can't make do without one.",
+        "We won't turn logs into planks without a saw.",
+        "Can we look for a working saw? The lumber is waiting.",
+        "I'm stuck here until somebody finds a saw.",
+        "This wood won't cut itself. We need a saw.",
+        "I've checked the tools. No usable saw in there.",
+        "Bring me a saw and I'll get the planks done.",
+        "The job's ready. The saw isn't.",
+        "I can't build much from whole logs. Help me find a saw.",
+        "We should search a workshop for a saw before trying this again.",
+    }, steady = { "Logs everywhere, saw nowhere. That's our progress report.",
+        "I tried asking the log to split itself. It declined." } },
+    ["work.missing.shovel"] = { common = {
+        "I can't dig without a shovel.",
+        "I need a shovel before I can open that grave.",
+        "The ground's hard enough with a shovel. Without one, forget it.",
+        "Can we find a digging tool? I've got work waiting outside.",
+        "No shovel in the supplies. I can't get this hole started.",
+        "I need something that can break ground, not just my hands.",
+        "We'll have to search the sheds for a shovel.",
+        "That grave won't dig itself. Find me a shovel.",
+        "I'm ready to work, but we don't have a spade to spare.",
+        "Give me a proper shovel and I'll finish the digging.",
+    }, steady = { "The dirt has the advantage. It has a shovel shortage on its side.",
+        "I can stand over the ground and look useful. That's about it." } },
+    ["work.missing.hammer"] = { common = {
+        "I need a hammer before I can finish the carpentry.",
+        "No hammer, no carpentry. Can we find one?",
+        "I've got work waiting, but nothing to drive the nails.",
+        "We need a working hammer from a shed or garage.",
+        "There's no usable hammer in our tools.",
+        "Can you spare a hammer? This job's stopped without it.",
+    }, steady = { "I can hold the nails in place. They won't stay there.",
+        "The wall is waiting on a hammer. So am I." } },
+    ["work.missing.screwdriver"] = { common = {
+        "I need a screwdriver to take this apart.",
+        "We should search a toolbox for a working screwdriver.",
+        "These screws aren't coming out with my fingers.",
+        "Can't salvage this properly without a screwdriver.",
+        "Find me a screwdriver and I'll get back to dismantling.",
+        "I've got the parts in sight, but no tool to reach them.",
+    }, steady = { "The screws are winning. I need a screwdriver.",
+        "I asked the screws nicely. They want a tool." } },
+    ["work.missing.blowtorch"] = { common = {
+        "I need a fueled blowtorch for this metalwork.",
+        "No fueled torch in our supplies. Can we look for one?",
+        "We won't cut through that metal without a working torch.",
+        "Find me a torch with fuel and I can finish this.",
+        "I've got the job lined up, but no flame to do it with.",
+        "Check the garages for a usable blowtorch.",
+    }, steady = { "Metal doesn't listen to persuasion. We need a torch.",
+        "No usable torch. So much for that job." } },
+    ["work.missing.pry"] = { common = {
+        "I need a pry tool to get those boards off.",
+        "That barricade needs leverage. Have we got a crowbar?",
+        "I can't pull this apart with my hands.",
+        "Find me something sturdy to pry with and I'll finish it.",
+        "The boards are stuck fast. We need a proper tool.",
+        "Could we look for a crowbar before I try that again?",
+    }, steady = { "The boards are holding firm. My fingers aren't a crowbar.",
+        "I tried pulling. The barricade was unimpressed." } },
+    ["work.missing.knife"] = { common = {
+        "I need a sharp knife before I can prep this meal.",
+        "There's bread to slice and no knife to do it with.",
+        "A kitchen knife would get this dinner moving.",
+        "I can't clean that fish with my bare hands. Find me a knife.",
+        "We should look through the kitchen drawers for a decent knife.",
+        "The food's here. The knife isn't.",
+        "Can you spare a sharp knife for the cooking?",
+        "I need a blade before this turns into supper.",
+    }, steady = { "I'm a cook, not a bread saw. We need a knife." } },
+    ["work.missing.pot"] = { common = {
+        "I need a cooking pot to get this meal started.",
+        "We've got food for soup, but no pot to make it in.",
+        "Could you find me a pot from one of the kitchens?",
+        "This stew needs a pot. I'm still looking for one.",
+        "I can't cook a pot meal without the pot.",
+        "Check the cupboards for a usable cooking pot.",
+        "The ingredients can wait. We need a pot first.",
+        "Bring me a pot and I'll make something of this.",
+    }, steady = { "No pot. The soup remains a collection of opinions." } },
+    ["work.missing.pan"] = { common = {
+        "I need a frying pan for this meal.",
+        "There's food to fry, but nothing to fry it in.",
+        "Can you find a pan in one of those kitchens?",
+        "The stove's ready. I'm missing a pan.",
+        "I can't put dinner straight on the burner. Find me a pan.",
+        "A sound frying pan would solve this.",
+        "We have the ingredients, just no pan to cook them in.",
+        "Bring me a pan and I'll get this started.",
+    }, steady = { "The stir fry has no pan. That's a structural problem." } },
+    ["work.missing.bowl"] = { common = {
+        "I need bowls before I can serve this.",
+        "There aren't enough bowls for the soup.",
+        "Can you look for a couple of clean bowls?",
+        "The meal's possible, but we've nothing to portion it into.",
+        "Find me some bowls and I'll finish dinner.",
+        "I can't serve everyone from the same pot.",
+        "We're short on bowls. Check the kitchen cupboards.",
+        "A bowl or two would get the food moving.",
+    }, steady = { "Soup without bowls is just a transportation problem." } },
+    ["work.missing.heat_source"] = { common = {
+        "I need a working stove or a lit campfire for this.",
+        "The food's ready to cook, but we have no heat.",
+        "Can we get the stove working before I start dinner?",
+        "A fueled campfire would do if the power's gone.",
+        "I can't cook this cold. We need a heat source.",
+        "The pot's ready. The fire isn't.",
+        "Could you help me find a working place to cook?",
+        "No stove and no fire. This meal has to wait.",
+    }, steady = { "The ingredients are ambitious. The stove is not." } },
+    ["work.missing.rod"] = { common = {
+        "I need a fishing rod before I can catch anything.",
+        "Got a spare rod? The water looks worth a try.",
+        "We should look for a fishing rod on the next supply run.",
+        "I found the bank. I haven't found a rod.",
+        "I can't fish with my hands. Not these fish, anyway.",
+        "Find me a working rod and I'll bring back dinner.",
+        "The water's there, but our fishing gear isn't.",
+        "Can you spare a rod for the fishing?",
+    }, steady = { "Fish: present. Fishing rod: absent." } },
+    ["work.missing.bait"] = { common = {
+        "I have the rod, but I need bait or a lure.",
+        "The fish won't bite an empty hook. Can you find some bait?",
+        "Got a lure I can put on this line?",
+        "We need bait before I cast again.",
+        "The rod's ready. The hook isn't.",
+        "Can we search for worms or a usable lure?",
+        "I can't keep fishing without bait.",
+        "Bring me a lure and I'll try that water again.",
+    }, steady = { "No bait. The fish have negotiated well." } },
+    ["work.screwdriver"] = { common = {
+        "I need an unbroken screwdriver.", "This job needs a working screwdriver.",
+        "I can't dismantle it without a screwdriver.", "Find me a usable screwdriver first.",
+            "A usable screwdriver, please. The screws remain unreasonable.",
+            "I need a screwdriver to finish this without wrecking it.",
+            "Find me a working screwdriver. This needs a proper fit.",
+            "No screwdriver, no disassembly. I'd like the parts afterward.",
+        }, steady = { "No screwdriver. It gets to remain assembled for now.",
+        "I need a working screwdriver. Nothing dramatic. Just essential." } },
+    ["work.blowtorch"] = { common = {
+        "I need a fueled blowtorch.", "The torch is empty. I can't do this yet.",
+        "This needs a working, fueled blowtorch.", "Bring me a torch with fuel and I'll handle it.",
+            "I need a working blowtorch with fuel. An empty one is decoration.",
+            "Bring a fueled blowtorch. Heat is part of the instructions.",
+            "A usable torch and fuel would let me finish this.",
+            { "No fueled blowtorch. Cold metal doesn't give a shit.", clean = "No fueled blowtorch. Cold metal doesn't give a hoot." },
+        }, steady = { "Empty torch. Nothing's on fire, at least.",
+        "I need fuel for the torch. Small detail. Quite important." } },
+    ["work.pry"] = { common = {
+        "I need a tool that can remove barricades.", "I can't pry this loose with my hands.",
+        "Find me a proper prying tool.", "I need leverage before that barricade will move.",
+            "I need a proper pry tool before this barricade comes loose.",
+            "Bring a usable prying tool. That board is staying put.",
+            "A tool with leverage, please. My hands aren't crowbars.",
+            "Find me something made for prying. I'd rather keep my fingers.",
+        }, steady = { "No leverage. The barricade has won a temporary victory.",
+        "I need a prying tool. My fingers have declined the assignment." } },
+    ["work.busy"] = { common = {
+        "I need to finish what I'm doing first.", "One thing at a time. I'm still busy.",
+        "Give me a moment to finish this.", "I heard you. Let me complete this action first.",
+            "I'm already on another job. Ask me again when this is done.",
+            "Let me finish this action before you give me another.",
+            "Already busy here. That request will need another try.",
+            "One action at a time. I can't start that yet.",
+        }, steady = { "One thing at a time. We still have time for that luxury.",
+        "Still busy. That's the whole report." } },
+    ["farm.plot.start"] = {
+        common = {
+            "I'll start on this plot.", "This ground is next.",
+            "I'll get this patch into shape.", "Let me work this soil.",
+            "Starting on the plot now.", "I'll take care of this ground.",
+        },
+        brave = { "Give me the ground and a tool. I'll make it useful.", "Let's put this dirt to work." },
+        cautious = { "I'll check the soil before I commit the seed.", "Slow and clean. Bad ground wastes good seed." },
+        caring = { "A little work here could feed all of us.", "I'll make room for something living." },
+        practical = { "Plot selected. I'll prepare it properly.", "I'll work this patch from the edges in." },
+        steady = { "Ground first. Ambition later.", "I'll turn the soil. It has had worse done to it." },
+    },
+    ["farm.sow.start"] = {
+        common = {
+            "Seeds are going in.", "I'll sow this row now.",
+            "Time to get these planted.", "Let's see what takes root.",
+            "Planting this patch.", "Seed by seed. Here we go.",
+        },
+        brave = { "Grow strong or die trying. I understand that.", "Into the ground. Your turn to fight." },
+        cautious = { "Spacing these out. We cannot afford to waste them.", "Careful with the seed. Every one matters." },
+        caring = { "Come on, little things. Give us something green.", "I'll give these the best start I can." },
+        practical = { "Sowing at a useful spacing.", "Seed count checked. Planting now." },
+        steady = { "Seeds are in. Now we wait and pretend to be patient.",
+            "Planting. Nothing heroic, which is a relief." },
+    },
+    ["farm.water.start"] = {
+        common = {
+            "These need water.", "I'll water this patch.",
+            "The soil is getting dry.", "Bringing the water over now.",
+            "This row needs a drink.", "I'll keep the roots from drying out.",
+        },
+        brave = { "Hold on, plants. Water is coming.", "Nothing dies of thirst on my watch." },
+        cautious = { "Not too much. Drowned roots are no better than dry ones.", "I'll give them only what the soil needs." },
+        caring = { "There you go. Drink up.", "Easy now. I'll get water to every one." },
+        practical = { "Water level is low. Correcting it.", "This patch is below its water target." },
+        steady = { "Watering. The plants are the quietest mouths here.",
+            "A drink for the crops. They complain less than we do." },
+    },
+    ["farm.harvest.start"] = {
+        common = {
+            "This crop is ready.", "I'll bring the harvest in.",
+            "Time to pick what grew.", "We have food ready here.",
+            "I'll clear the ripe plants.", "This row finally paid us back.",
+        },
+        brave = { "Now that is a victory I can eat.", "We beat the dead and the weather. Harvest time." },
+        cautious = { "I'll take the ripe ones and leave the rest.", "Careful picking. We need seed as much as food." },
+        caring = { "This will put something fresh on everyone's plate.", "Good. Nobody has to go hungry tonight." },
+        practical = { "Crop is mature. Collecting usable yield.", "Harvesting now and preserving the seed reserve." },
+        steady = { "It grew. Best not to look surprised.",
+            "Harvest time. Something went according to plan." },
+    },
+    ["farm.harvest.done"] = {
+        common = {
+            "Harvest is in.", "That's the crop collected.",
+            "Food is ready for storage.", "This patch is picked clean.",
+            "We got a useful yield.", "I'll get this under cover.",
+        },
+        brave = { "That is what surviving tastes like.", "Good harvest. We earned this one." },
+        cautious = { "Count it before we celebrate.", "Yield is in. Keep the seed separate." },
+        caring = { "Fresh food. Everyone gets some.", "This will do people good." },
+        practical = { "Harvest complete. Moving output to storage.", "Yield collected and ready to sort." },
+        steady = { "Harvest is in. We can postpone starvation again.",
+            "That's sorted, then. More or less. Mostly more." },
+    },
+    ["farm.crop.ruined"] = {
+        common = {
+            "This crop is gone. I'll clear it and start again.",
+            "Nothing left to save here. We replant.",
+            "The plants did not make it. The ground still can.",
+            "Lost this patch. I'll turn it over for another try.",
+            "Rot took the crop. It does not get the soil too.",
+            "This row failed. I'm clearing it before it spreads.",
+        },
+        brave = { "It died. We plant again. That is the answer.", "The season gets another swing at us. So do we." },
+        cautious = { "We need to know why this failed before we repeat it.", "Clear it carefully. I don't want the next row catching this." },
+        caring = { "I know they are only plants. It still hurts to lose food.", "All that tending, gone. I'll try again." },
+        practical = { "Crop loss confirmed. Clearing and replanting.", "Failed plot. Salvage nothing; reset the bed." },
+        stressed = { { "Damn it. We needed this crop.", clean = "Blast it. We needed this crop." }, "All that work, and now we start over." },
+        steady = { "Crop's gone. The ground remains available for another disappointment.",
+            "Well. That failed. We plant again." },
+    },
+    ["farm.crop.diseased"] = {
+        common = {
+            "This crop is sick. I'll treat it.", "Disease in the row. Getting the spray.",
+            "Something is eating at these plants.", "I'll deal with this before it spreads.",
+            "This patch needs treatment.", "Caught it early. I can still help it.",
+        },
+        brave = { "Tiny enemies still count. I'll handle them.", "The dead are not getting these plants, and neither are the bugs." },
+        cautious = { "Keep the treatment to this row until we know it worked.", "I'll check the neighboring plants too." },
+        caring = { "Easy. We caught it. Let me help.", "I'll tend every plant that still has a chance." },
+        practical = { "Disease identified. Applying the matching treatment.", "Treat first, then check the adjacent plots." },
+        steady = { "The crop is sick. Apparently we needed one more problem.",
+            "Treating the plants. Nobody panic, especially the cabbage." },
+    },
+    ["farm.tool.trouble"] = {
+        common = {
+            "I need a working tool for this plot.", "The farm tools are missing or broken.",
+            "I cannot turn this soil by hand.", "Find me a usable digging tool.",
+            "This job stops until we have the right tool.", "The plot is ready. Our tools are not.",
+        },
+        brave = { "Give me a shovel and I'll finish the argument.", "I can fight dirt, but I still need a tool." },
+        cautious = { "A broken tool out here is how hands get hurt.", "I need a sound digging tool, not the first rusty thing we find." },
+        caring = { "Someone may have put the tools away. I'll wait.", "Please find a proper tool. I don't want anyone ruining their hands." },
+        practical = { "Work blocked: no serviceable digging tool.", "Tool requirement unresolved. The plot has to wait." },
+        steady = { "No working tool. The dirt has earned a short reprieve.",
+            "Farm work paused. Our equipment has other plans." },
+    },
+    ["doing.active"] = { common = {
+        "I'm %1 right now.", "I'm busy %1.",
+        "Right now, I'm %1.", "Give me a moment. I'm %1.",
+            "I'm %1. Keeping at it until the job is done.",
+            "Still %1. Nothing has stopped the work.",
+            "I'm %1, one step at a time.",
+            "I'm busy %1. Making progress, slowly enough to do it properly.",
+            "I'm %1. The work is moving along.",
+            "I'm %1 for now. I'll tell you if that changes.",
+        }, steady = { "I'm %1. Nothing unusual to report.",
+        "Still %1. Could be worse." } },
+    ["doing.target"] = { common = {
+        "I'm %1 at %2.", "I'm busy %1 near %2.",
+        "The current job is %1 at %2.", "I'm %1 over by %2.",
+            "I'm %1 at %2. That's where the job needs me.",
+            "I'm %1 near %2. You can find me there.",
+            "Still %1 at %2. I've got the right place.",
+            "I'm %1 over at %2. Working through it.",
+            "I'm %1 by %2. That is my current assignment.",
+            "I'm %1 at %2. I'll finish there before moving on.",
+        }, steady = { "I'm %1 at %2. That's the plan, anyway.",
+        "%1 near %2. Everything's fine enough." } },
+    ["doing.waiting"] = { common = {
+        "I'm waiting before I can finish %1.", "I'm held up trying to finish %1.",
+        "I haven't abandoned it. I'm still waiting to finish %1.", "I need a clear moment to continue %1.",
+            "I'm still waiting to finish %1. The job is on hold.",
+            "I'm %1 once the blockage clears. For now, I wait.",
+            "%1 is held up. I'm ready when the way is clear.",
+            "I'm waiting on %1. No clear chance to continue yet.",
+            "I'm holding here until I can resume %1.",
+            "I'm ready to continue %1. Something is still in the way.",
+        }, steady = { "Still waiting to finish %1. It seems committed to taking its time.",
+        "%1 is delayed. Not cancelled. Merely testing character." } },
+    ["doing.recovering"] = { common = {
+        "That route failed. I'm finding another way. Still %1.",
+        "I'm working around an obstacle so I can finish %1.",
+        "The approach is blocked. I'm finding a way to finish %1.",
+        "I'm still %1. I just need a safer route.",
+            "I'm %1. Taking another route after that last obstruction.",
+            "Still %1. I'm checking a different approach.",
+            "I'm %1 by a safer path. The direct one failed.",
+            "I'm rerouting, then continuing %1. The job still stands.",
+            "I'm %1. Looking for a way around the blockage.",
+            "Still %1. I need a clear approach before I continue.",
+        }, steady = { "Still %1, by another route. The first one had opinions.",
+        "Still %1. Rethinking the approach." } },
+    ["doing.failed"] = { common = {
+        "I couldn't finish %1. I'll try again in about %2.",
+        "%1 failed. Give me roughly %2 before I try again.",
+        "I hit a problem with %1. The next attempt is in about %2.",
+        "That attempt at %1 didn't work. I'm waiting %2 before another try.",
+            "I couldn't keep %1 going. I'll retry in %2.",
+            "%1 hit a snag. I'm giving it %2 before another attempt.",
+            "No success with %1 yet. I'm trying again in %2.",
+            "I stopped %1 after a problem. Next try is in %2.",
+            "%1 didn't finish. I'll wait %2 and take another look.",
+            "I need %2 before trying %1 again. That last attempt failed.",
+        }, steady = { "%1 failed. Give it %2 to reconsider.",
+        "No luck with %1. Trying again in %2, with modest expectations." } },
+    ["doing.idle"] = { common = {
+        "Nothing urgent. I'm %1.", "For now, I'm %1.",
+        "I'm clear at the moment, so I'm %1.", "No active job. I'm %1.",
+            "I'm %1 while the work board is clear.",
+            "I'm %1. Nothing else needs my hands right now.",
+            "No pressing task, so I'm %1 for a bit.",
+            "I'm %1 until another job comes through.",
+            "I'm free for now. Just %1.",
+            "I'm %1 between assignments. Ready when something needs doing.",
+        }, steady = { "Nothing urgent. I'm %1. Let's not tempt it.",
+        "For now, I'm %1. An uneventful report is a good report." } },
+    ["stress.vent"] = {
+        common = {
+            { "Damn it. I need a minute before I say something worse.", clean = "Blast it. I need a minute before I say something worse." },
+            { "This whole damn place is grinding me down.", clean = "This whole darn place is grinding me down." },
+            { "Hell, I can't keep pretending that run was fine.", clean = "Heck, I can't keep pretending that run was fine." },
+            { "For fuck's sake. Just give me some space.", clean = "For pity's sake. Just give me some space." },
+            "Every little thing is starting to get under my skin.",
+            "I swear, one more bad surprise and I'm going to lose it.",
+        },
+        brave = { "I'm angry, not beaten. Give me a second.", "I hate feeling this powerless." },
+        cautious = { "We keep gambling with our lives, and I am sick of it.", "Nobody thinks about the exit until it is too late." },
+        caring = { "I am trying not to take this out on anyone.", "I can't keep carrying everyone else's fear too." },
+        practical = { "That run was a mess. We need to learn from it.", "We are wasting energy making the same mistakes." },
+    },
+    ["stress.argument.open"] = { common = {
+        "We need to talk about the last run. You took a risk with all of us.",
+        "You left the exit exposed back there. I am not letting that slide.",
+        "That run nearly got us killed, and everyone is acting like it was nothing.",
+        "Someone needs to say it: that plan fell apart the moment we went inside.",
+        "I followed your call back there. I need to know you understand what it cost us.",
+        "We survived, but that does not make the choices we made good ones.",
+    } },
+    ["stress.argument.reply"] = { common = {
+        "I was there too. You don't get to put all of that on me.",
+        "We made the best call we had. Shouting will not change it.",
+        "Back off. I am not your punching bag.",
+        "You think I don't replay it in my head? I did what I could.",
+        "Say what you need to say, but do not pretend you had every answer.",
+        "We can fix the plan. We cannot fix this by tearing into each other.",
+    } },
+    ["stress.withdraw"] = { common = {
+        "I need to be alone for a while.", "Do not follow me. I need some quiet.",
+        "I can't do another argument right now.", "Give me a little space to clear my head.",
+        "I'm stepping away before I say something I regret.", "I need a room, a door, and five minutes of silence.",
+    } },
+    ["stress.shutdown"] = { common = {
+        "I can't do this right now. Please leave me alone.", "I just need to sit here for a while.",
+        "Everything feels pointless right now.", "I don't have anything left in me today.",
+        "Let me be still for a bit. I can't think.", "I am here, but I am not all right.",
+    } },
+    ["grief.mourn"] = { common = {
+        "%1 is gone. I need a minute.", "I keep expecting to see %1 walk through that door.",
+        "We lost %1. I am not ready to pretend I am fine.",
+        "I should have said more while %1 was still here.",
+        "It is too quiet without %1 here.", "I keep thinking there was something else I could have done for %1.",
+        "I know %1 is gone. My mind hasn't caught up yet.", "Give me a moment. I was just thinking about %1.",
+    }, caring = { "I hope %1 knew how much they mattered to us.", "%1 deserved more time than this." },
+      practical = { "We still have work to do. I just need a moment for %1 first." },
+      brave = { "I'll keep moving. Just not this second. Not after losing %1." },
+      cautious = { "I keep wondering which choice might have brought %1 home." } },
+    ["stress.minor.venter"] = {
+        common = {
+            "This pressure is getting to me.", "I need to let some of this out.",
+            "I'm wound too tight. Give me a second.", "I can feel my temper getting shorter.",
+        },
+        brave = { "I'm angry, not afraid. I still need a minute.", "Let me burn this off before the next fight." },
+        cautious = { "I keep seeing every way that could have gone worse.", "We are taking risks faster than I can swallow them." },
+        caring = { "I don't want my temper landing on any of you.", "I care too much to keep pretending this feels fine." },
+        practical = { "I need to say what failed, then fix it.", "Give me a minute to turn this anger into a plan." },
+        stressed = { "Everything is too loud inside my head.", "If I don't let this out, I am going to snap." },
+    },
+    ["stress.minor.restless"] = {
+        common = {
+            "I need something useful to do before I start climbing the walls.",
+            "Standing around is making this worse.", "Give me a job. Any useful job.",
+            "I need to move before I wear a hole in the floor.",
+        },
+        brave = { "Point me at something hard. I need the fight out of me.", "I have too much energy to sit here safely." },
+        cautious = { "Waiting gives every bad possibility time to grow.", "I need to check the doors again. All of them." },
+        caring = { "Let me help somebody before I worry myself sick.", "Is there anyone who needs a hand? I need to move." },
+        practical = { "Idle hands are making this worse. Give me a task.", "I need a short job with a clear finish." },
+        stressed = { "I can't sit still. I can't even think sitting still.", "My skin feels too tight when there is nothing to do." },
+    },
+    ["stress.minor.confronter"] = {
+        common = {
+            "We need to stop making the same mistakes.", "Something about our plan has to change.",
+            "We keep avoiding the hard conversation.", "I am not staying quiet if this keeps happening.",
+        },
+        brave = { "Say it plainly. We cannot fix what nobody will name.", "I would rather have the argument than bury the mistake." },
+        cautious = { "We need to talk before that risk becomes a pattern.", "Ignoring this is how a bad call kills us later." },
+        caring = { "I am bringing this up because I want everyone home alive.", "We can disagree without tearing each other apart." },
+        practical = { "The plan failed in specific ways. Let's name them.", "This needs a review, not another excuse." },
+        stressed = { "No. We talk about this now, before I lose my nerve.", "I cannot carry this and everybody else's silence." },
+    },
+    ["stress.minor.withdrawer"] = {
+        common = {
+            "I could use a little space.", "I need a few quiet minutes.",
+            "Let me get my thoughts back in order.", "I am going to keep to myself for a bit.",
+        },
+        brave = { "I need one quiet corner, then I'll be ready again.", "Let me step away before I bring this mood into the group." },
+        cautious = { "I think better when nobody is watching me think.", "Give me space to go over what happened." },
+        caring = { "It isn't anyone's fault. I just need to be alone.", "I need quiet, not company. Please don't take it personally." },
+        practical = { "I need a short reset. I'll come back when my head is clear.", "Ten quiet minutes, then I can function properly." },
+        stressed = { "Please stop asking. I need the room to be empty.", "I can't hear myself think with anyone near me." },
+    },
+    ["stress.minor.shutdown"] = {
+        common = {
+            "I am not doing well. I am trying to hold it together.", "Everything feels heavier today.",
+            "I am running out of ways to say I am tired.", "I can function. I just can't pretend I am fine.",
+        },
+        brave = { "I can still stand. That is about all I can promise.", "I hate admitting it, but I have nothing in reserve." },
+        cautious = { "My thoughts keep stopping halfway through.", "I need things slow and simple for a while." },
+        caring = { "I want to help. I just don't have anything left to give.", "Please don't worry about me. Just let me be quiet." },
+        practical = { "I am operating below safe capacity.", "I need rest before I become another problem to solve." },
+        stressed = { "I can't make myself care what happens next.", "Everything in me has gone quiet, and not in a good way." },
+    },
+    ["joy.focused"] = {
+        common = {
+            "I know what needs doing. Let me get through the list.", "My head is clear today. Put me to work.",
+            "For once, everything feels manageable.", "I have a rhythm going. Let me keep it.",
+        },
+        brave = { "Clear head, steady hands. Let's use them.", "I feel sharp today. Give me the difficult job." },
+        cautious = { "I can see the steps clearly. No need to rush them.", "Everything is in order enough that I can breathe." },
+        caring = { "I have enough in me today to look after everyone.", "Let me handle the list so somebody else can rest." },
+        practical = { "Priorities are clear. I am working them in order.", "Good conditions, useful plan, no wasted motion." },
+        stressed = { "I have one clear thread. Let me hold onto it.", "Working the list is the only thing keeping me level." },
+    },
+    ["joy.rallying"] = {
+        common = {
+            "Look at us. We are still here, and we are getting better at this.",
+            "We made it this far together. That has to count for something.",
+            "This group is tougher than any of us expected.", "We have had worse days. We are still standing.",
+        },
+        brave = { "We have taken worse hits than this. Keep moving.", "They haven't broken us yet. They won't today." },
+        cautious = { "We are doing well because we watch out for each other.", "Keep the exits clear and this good day can stay good." },
+        caring = { "Every face still here is a reason to keep trying.", "We carried each other this far. That matters." },
+        practical = { "The group is working. Keep doing what works.", "Good discipline got us here. Let's maintain it." },
+        stressed = { "I need this to be a good sign, so let it be one.", "We are still here. Today, that has to be enough." },
+    },
+    ["joy.caretaker"] = {
+        common = {
+            "Everyone take a breath. I will check bandages and make sure we are all right.",
+            "Let me look after the small things before they become big things.",
+            "We are safe for a moment. Let me check on everyone.", "Nobody ignores a wound today. I mean it.",
+        },
+        brave = { "Sit down and let me check you. Yes, that was an order.", "We won the moment. Now let me keep everyone standing." },
+        cautious = { "A quiet minute is when we find the injuries we missed.", "Hold still. Small wounds become large problems." },
+        caring = { "Come here. Let me make sure you are really all right.", "I feel better when I know everyone has what they need." },
+        practical = { "Quick health check, then we return to work.", "Bandages, water, food. I am checking all three." },
+        stressed = { "Let me count everyone again. I need to know you're here.", "Please let me check you. It will help me breathe." },
+    },
+    ["joy.organizer"] = {
+        common = {
+            "This place is finally starting to work like a real camp.",
+            "The supplies are sorted, the doors hold, and I can finally breathe.",
+            "We are turning this place into something worth defending.", "A little order makes the world feel less broken.",
+        },
+        brave = { "Walls up, shelves full. Let the world try us now.", "This camp has a spine now. I like it." },
+        cautious = { "Everything has a place, which means we notice what goes missing.", "Good stores and clear exits. That is how we keep this." },
+        caring = { "It feels like people live here, not just hide here.", "There is room for everyone now. Real room." },
+        practical = { "Storage, defenses, routines. The system is working.", "The camp layout finally supports the work." },
+        stressed = { "If everything stays in its place, maybe I can too.", "The order helps. I need the order today." },
+    },
+    ["joy.bold"] = {
+        common = {
+            "We have momentum. Let us use it without getting careless.", "I feel ready. Let's make today count.",
+            "For once, I like our chances.", "We can handle the next run. Smart and steady.",
+        },
+        brave = { "I woke up ready to take something back.", "Today, the dead can make room for us." },
+        cautious = { "Confidence is useful as long as we keep the exit plan.", "I feel good. I am still checking every corner." },
+        caring = { "I have enough courage to lend some out today.", "Stay close. We can make this a good day together." },
+        practical = { "Readiness is high. This is the time for the hard job.", "We have the supplies and the daylight. Let's use both." },
+        stressed = { "I feel brave. Please let it last.", "If I keep moving, maybe the confidence will stay." },
+    },
+    ["supply.answer.soon"] = { common = {
+        "All right. I will hold you to that.", "Okay. Soon, then. I can work with that.",
+        "Good. Just don't let it slip through the cracks.", "That is enough for now. Tell me when we leave.",
+    } },
+    ["supply.answer.join"] = { common = {
+        "Good. I will get my gear ready.", "All right, I am coming with you.",
+        "Works for me. Give me a moment to pack.", "Then we do it together. I'll be ready.",
+    } },
+    ["supply.answer.later"] = { common = {
+        "Fine. But we can't keep putting it off.", "Not now, then. Just remember that we still need it.",
+        "I can wait, but the shelves will not fill themselves.", "All right. I will ask again if our supplies get worse.",
+    } },
+    ["supply.answer.cannot"] = { common = {
+        "I understand. We make do with what we have.", "I don't like it, but I understand the reason.",
+        "Then we stretch the supplies and keep our eyes open.", "All right. We adapt until the situation changes.",
+    } },
+    ["supply.question"] = {
+        common = {
+            "When are we making the next supply run?", "Do we have another supply run planned?",
+            "The shelves are getting thin. When do we head out again?",
+            "We should talk about our next run. When are we going?",
+            "How long before we make another supply trip?", "Are we going out for supplies soon?",
+        },
+        cautious = { "Before stocks get critical, when is our next supply run?" },
+        practical = { "I checked our stores. We need to schedule another supply run." },
+        caring = { "Can we plan a supply run before anyone goes without?" },
+        brave = { "Say the word and I am ready for another supply run." },
+    },
+    ["status.grief"] = { common = {
+        "I am not all right yet. %1 is gone, and I need time.",
+        "I am managing, but I keep thinking about %1.", "Some moments are easier than others. I still miss %1.",
+        "I can do my job. I just haven't made peace with losing %1.",
+        "Honestly? I am still grieving %1.", "I keep expecting %1 to answer when someone calls out.",
+    } },
+    ["status.knox"] = { common = {
+        "I need you to know something is wrong. It feels like Knox symptoms.",
+        "Something is wrong with me. It could be the Knox infection.",
+        "I am showing symptoms, and I don't think this is ordinary sickness.",
+        "We need to talk somewhere private. I may be infected.",
+    } },
+    ["status.medical"] = { common = {
+        "I need treatment and a clean bandage.", "I am hurt. I need someone to look at this.",
+        "My wounds need attention before they get worse.", "I could use medical help and fresh bandages.",
+        "I am still functional, but I need treatment.",
+    }, brave = { "I can keep moving, but patch me up when we get a chance." },
+      cautious = { "This wound is a liability. We should treat it now." } },
+    ["medical.bandage.minor"] = { common = {
+        "Just a scratch. Hold still anyway.",
+        "Let me wrap that before the dirt gets in.",
+        "Easy now. This should do it.",
+        "A little blood looks worse than it is.",
+        "Keep your hand steady. I've got the bandage.",
+        "That's a small one. We can handle small ones.",
+        "You caught the edge of something. Sit tight.",
+        "Clean cloth, tight knot, then we move.",
+        "Don't pick at it once I cover it.",
+        "Here. The bleeding should stop in a minute.",
+        "I've seen worse on a fence post.",
+        "Hold that there while I tie it off.",
+        "We'll keep the Kentucky dust out of this one.",
+        "There. One less thing trying to kill us.",
+    } },
+    ["medical.bandage.serious"] = { common = {
+        { "Shit, that looks bad. Hold still.", clean = "Crap, that looks bad. Hold still." },
+        "That will need time to heal. First we stop the bleeding.",
+        "Look at me, not at the blood.",
+        "Press here. Hard. I need both hands.",
+        "Stay with me. I'm getting this wrapped.",
+        "That's deeper than I like. Keep pressure on it.",
+        "Don't try to walk that off. Let me work.",
+        "I need another second. Keep breathing.",
+        "The cloth is clean. I can't promise the rest.",
+        "We've got you. Let me stop the bleeding.",
+        "This is going to sting. Better than leaving it open.",
+        "I know it hurts. Keep still for me.",
+        "That's a hard hit. You're still here.",
+        "Give me room. I'm not losing you to this.",
+        "Blood first, fear later. Hold on.",
+        "The wound is ugly, but I can cover it.",
+    } },
+    ["medical.bandage.replace"] = { common = {
+        "That dressing's filthy. Let's change it.",
+        "Fresh cloth. The old one has done its time.",
+        "Hold still while I get this dirty wrap off.",
+        "This bandage has seen enough of Kentucky.",
+        "We'll clean the old cloth when we find water.",
+        "A dry, clean wrap will help this heal.",
+        "Don't pull at the wound. I'll lift the cloth.",
+        "There. That should breathe a little easier.",
+        "The old dressing is spent. I've got another.",
+        "Let's keep the grime out of this cut.",
+        "One clean bandage buys us another day.",
+        "Easy. The worst part is peeling it loose.",
+    } },
+    ["medical.splint"] = { common = {
+        "That leg needs a splint. Hold still.",
+        "Don't put weight on it yet. I'll brace it.",
+        "This will keep the bone steady while it heals.",
+        "I know it hurts. Let me tie this in place.",
+        "The brace is crude, but it'll hold.",
+        "Keep breathing. I've got the splint ready.",
+        "You aren't walking that off. Give me a minute.",
+        "We'll get it straight, then keep it still.",
+    } },
+    ["status.water"] = { common = {
+        "Water, if we can spare it. I am getting very thirsty.", "I need a drink soon.",
+        "My canteen is empty and I am running dry.", "Water is my first priority right now.",
+        "I can keep going, but not long without water.",
+    } },
+    ["status.food"] = { common = {
+        "Food would help. I am running on empty.", "I need something to eat soon.",
+        "I have not eaten enough. It is starting to slow me down.", "My first need is food.",
+        "I am hungry enough that it is getting hard to focus.",
+    } },
+    ["need.hunger.noted"] = {
+        common = {
+            "I'm starting to get hungry.", "I could eat when we get a safe minute.",
+            "My stomach is reminding me it exists.", "Food should be on the next short list.",
+            "I haven't eaten in a while.", "Not urgent yet, but I am getting hungry.",
+        },
+        brave = { "I can keep moving. Just remember food when we stop.", "Hunger can wait a little. Not forever." },
+        cautious = { "I am getting hungry. We should not let that become weakness.", "Food soon, before it starts costing us attention." },
+        caring = { "I'm getting hungry. Check whether anyone else is too.", "Food soon would be good, if there is enough for everyone." },
+        practical = { "Hunger is becoming noticeable.", "Food need is rising, but not critical yet." },
+    },
+    ["need.hunger.serious"] = {
+        common = {
+            "I need food soon.", "Hunger is making it hard to concentrate.",
+            "We need to find something I can eat.", "I'm running low. Really low.",
+            "I cannot keep putting off a meal.", "Food needs to become a priority.",
+        },
+        brave = { "I can fight hungry, but not well. Find me food.", "This is past an empty stomach. I need a meal." },
+        cautious = { "My attention is slipping. I need food before we take another risk.", "We should stop and eat before I make a bad mistake." },
+        caring = { "I need food. I don't want anyone giving up their last meal for me.", "Please tell me we have enough for a meal." },
+        practical = { "Hunger is impairing me. Food is now a priority.", "I need calories before the next demanding job." },
+        stressed = { "I can't think past how hungry I am.", "Please. I need something to eat." },
+    },
+    ["need.hunger.urgent"] = {
+        common = {
+            "I need food now.", "I'm starving. I cannot keep going like this.",
+            "Find me something edible before I drop.", "This is bad. I need to eat.",
+            "I have nothing left to run on.", "Food. Now, please.",
+        },
+        brave = { "I am still on my feet, but I need food now.", "No heroics until I eat. I mean it." },
+        cautious = { "Stop. I am too hungry to be safe out here.", "I need food before we move into any more danger." },
+        caring = { "I hate asking, but I need someone to help me find food.", "Please help me eat before I become another person to carry." },
+        practical = { "Critical food deficit. I need a meal immediately.", "I am no longer fit for work without food." },
+        stressed = { "I feel sick with hunger. Please find something.", "I can't do this on an empty body anymore." },
+    },
+    ["need.thirst.noted"] = {
+        common = {
+            "I'm starting to get thirsty.", "I could use water at the next stop.",
+            "My mouth is getting dry.", "We should keep an eye out for clean water.",
+            "I need a drink before too long.", "Not urgent yet, but I am getting thirsty.",
+        },
+        brave = { "I can wait a little. Water at the next safe stop.", "Dry mouth, steady feet. For now." },
+        cautious = { "I am getting thirsty. Let's not let it slow my judgement.", "Clean water soon, before this becomes a problem." },
+        caring = { "I need a drink soon. Does everyone else have water?", "Water at the next stop, for all of us if we can." },
+        practical = { "Thirst is becoming noticeable.", "Water need is rising, not critical yet." },
+    },
+    ["need.thirst.serious"] = {
+        common = {
+            "I need water soon.", "I'm too thirsty to ignore it now.",
+            "We need to find clean water.", "My head is starting to ache. I need a drink.",
+            "Water has to become a priority.", "I cannot keep moving without a drink much longer.",
+        },
+        brave = { "I can push through a lot. Thirst is winning.", "Find me water before the next fight." },
+        cautious = { "Dehydration is slowing me down. We need water before another risk.", "I need a drink while I can still think clearly." },
+        caring = { "I need water. Please don't give me someone else's last bottle.", "Can we find enough water without leaving anyone short?" },
+        practical = { "Thirst is impairing me. Water is now a priority.", "I need safe fluid before the next demanding job." },
+        stressed = { "My mouth is so dry I can barely talk.", "Please find water. I can't focus." },
+    },
+    ["need.thirst.urgent"] = {
+        common = {
+            "I need water now.", "I'm dangerously thirsty.",
+            "Stop. I need something safe to drink.", "I cannot keep going without water.",
+            "Water, please. Anything clean.", "I'm drying out. We have to find water.",
+        },
+        brave = { "I am done pretending I can push through this. Water now.", "No more ground until I get a drink." },
+        cautious = { "This is unsafe. I need water before we move.", "I am too dehydrated for another run." },
+        caring = { "Please help me find water. I really need it.", "I don't want to become a burden. I need a drink now." },
+        practical = { "Critical dehydration. I need water immediately.", "I am no longer fit for work without fluids." },
+        stressed = { "I can't swallow. Please, water.", "Everything hurts and I need a drink now." },
+    },
+    ["need.fatigue.noted"] = {
+        common = {
+            "I'm starting to feel tired.", "I could use rest when we get a safe chance.",
+            "My legs are getting heavy.", "A short rest should go on the plan.",
+            "I have been awake too long.", "Not done yet, but I am getting tired.",
+        },
+        brave = { "Still moving. I will need rest later.", "Tired, not beaten. Put sleep on the list." },
+        cautious = { "Fatigue causes mistakes. I should rest soon.", "I am getting tired enough to watch my footing." },
+        caring = { "I'm getting tired. We should make sure everyone gets a turn to rest.", "I need sleep soon, but check the others too." },
+        practical = { "Fatigue is becoming noticeable.", "Rest need is rising, but I remain functional." },
+    },
+    ["need.fatigue.serious"] = {
+        common = {
+            "I need to rest soon.", "I'm too tired to stay sharp.",
+            "We need somewhere safe enough to sleep.", "My eyes keep losing focus.",
+            "Rest has to become a priority.", "I cannot keep this pace much longer.",
+        },
+        brave = { "I can force another mile. I should not have to.", "Tired fighters make dead fighters. I need rest." },
+        cautious = { "My reactions are slowing. We need shelter before another risk.", "I need sleep before I miss something important." },
+        caring = { "I need rest. Someone else may have to take my watch.", "Please find us somewhere safe enough to stop." },
+        practical = { "Fatigue is impairing me. Rest is now a priority.", "I need a sleep cycle before the next demanding job." },
+        stressed = { "I can't keep my thoughts in order. I need sleep.", "I'm so tired everything feels dangerous." },
+    },
+    ["need.fatigue.urgent"] = {
+        common = {
+            "I need to sleep now.", "I can barely stay awake.",
+            "Stop. I am going to collapse if I keep moving.", "I cannot keep watch like this.",
+            "Find me somewhere safe to lie down.", "I am past tired. I need sleep.",
+        },
+        brave = { "I have hit my limit. I need sleep now.", "No more pushing. I can barely stand." },
+        cautious = { "I am too tired to be safe. We stop here.", "My reactions are gone. I need shelter and sleep." },
+        caring = { "Please take over for me. I cannot stay awake.", "I need help finding somewhere safe to sleep." },
+        practical = { "Critical fatigue. I am no longer operational.", "I need immediate rest before I become a liability." },
+        stressed = { "I can't keep my eyes open. Please stop.", "I am falling apart. I need sleep now." },
+    },
+    ["status.safety"] = { common = {
+        "I need a quiet minute somewhere safe.", "I am too wound up. I need somewhere secure to breathe.",
+        "Get me behind a locked door for a minute and I will be fine.",
+        "I need the pressure to stop for a moment.", "Somewhere safe and quiet. That is what I need.",
+    } },
+    ["status.bandages"] = { common = {
+        "We should find clean bandages before someone needs one.", "Our medical supplies are too low.",
+        "We need more clean bandages in reserve.", "First-aid stock is thin. We should fix that.",
+        "Nobody is bleeding yet, but we are out of clean bandages.",
+    } },
+    ["status.ammunition"] = { common = {
+        "I am short on ammunition. I will save what I have.", "My ammunition is nearly gone.",
+        "I need more rounds before the next serious fight.", "I am conserving ammunition until we restock.",
+        "This firearm will not help much without more ammunition.",
+    } },
+    ["status.ready"] = {
+        common = {
+            "I am all right for now. Ready when you are.", "Doing fine. Tell me what comes next.",
+            "No urgent problems. I am ready to move.", "I have what I need for now.",
+        },
+        brave = { "I am holding up. Point me where you need me.", "Ready. Let's not waste the daylight." },
+        cautious = { "I am holding up. I am still watching our exits.", "Fine for now. I would like to keep it that way." },
+        caring = { "I am all right. How are you holding up?", "I am okay. Let me know if anyone else needs help." },
+        practical = { "I am holding up. Our supplies and gear are in order for now.", "Everything important is accounted for. I am ready." },
+        hopeful = { "Better than yesterday. I will take that.", "Honestly? I feel pretty good today." },
+    },
+    ["status.shaken"] = { common = {
+        "Physically I am okay. I am still trying to settle my nerves.",
+        "Nothing is broken. My hands just need to stop shaking.",
+        "I am alive. Give me a little time to come down from that.",
+        "I can keep going, but I am not calm yet.", "Ask me again when my heart stops trying to climb out of my chest.",
+    } },
+    ["opinion.danger"] = { common = {
+        "We are pushing our luck. I want a clear way out before we go farther.",
+        "This is getting dangerous. We need an exit plan now.", "Too much pressure and not enough room. We should pull back.",
+        "I don't like this position. We are one surprise away from being trapped.",
+    } },
+    ["opinion.guard"] = { common = {
+        "This position can work, but I am keeping an eye on the exits.",
+        "I can hold here. The approach gives me enough warning.", "The spot is defensible, as long as nobody blocks the retreat.",
+        "I will guard it, but I want the doors and windows checked.",
+    } },
+    ["opinion.scavenge"] = { common = {
+        "I can search as we move. I will leave anything you have already claimed alone.",
+        "I will keep an eye out for useful supplies without slowing us down.",
+        "I can scavenge this route. I will avoid containers you already searched.",
+        "I will take essentials and leave the junk behind.",
+    } },
+    ["opinion.general"] = {
+        common = { "We choose useful risks and keep a way home.", "I think the plan works if we stay disciplined." },
+        brave = { "We can handle a fight, but only if it gets us somewhere.", "I am willing to take the risk if the goal matters." },
+        cautious = { "Slow and deliberate. I want a clear way back out.", "I would rather arrive late than walk blind into a room." },
+        caring = { "We stay together and avoid fights that put either of us at needless risk.", "Nobody gets left behind for a bag of supplies." },
+        practical = { "We conserve ammunition, keep our tools ready, and choose useful fights.", "The plan is sound if the cost stays lower than the reward." },
+    },
+    ["relationship.family"] = {
+        common = {
+            "You are family to me now. I am not walking away.", "Whatever happens next, you are not facing it alone.",
+            "I stopped thinking of this as an arrangement a long time ago. You are family.",
+            "I trust you like family. That is the truth of it.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "A dry room is shelter. You're why I'd come back to it.",
+            "Blood didn't do this. Staying did.",
+            "Whatever place we find, I want you there.",
+            "You're family. That's one thing this mess doesn't get to decide.",
+        },
+        brave = { "I'll argue with you. I'll still come for you." },
+        cautious = { "You're family. That means I get to tell you when you're being stupid." },
+        caring = { "You don't have to make yourself useful to matter to me." },
+        practical = { "Family, then. An unreasonable arrangement. I'm keeping it." },
+    },
+    ["relationship.close"] = {
+        common = {
+            "I trust you with my life. That is not something I say lightly.", "You have proven yourself to me more than once.",
+            "If things go bad, I know you will still be there.", "We have become close. Closer than I expected anyone to get.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "I think about tomorrow now. You're usually in it.",
+            "I don't like how much I'd notice you gone.",
+            "Somewhere along the way, this stopped being a deal.",
+            "I can be quiet around you without feeling alone.",
+        },
+        brave = { "I'd go back for you. I'd probably complain the whole way." },
+        cautious = { "You're close enough to hurt me. Don't." },
+        caring = { "You don't have to say anything. Just stay a minute." },
+        practical = { "I'm making plans that include you. Adjust accordingly." },
+    },
+    ["relationship.trusted"] = {
+        common = {
+            "We have been through enough that I know you will be there.", "You have earned my trust.",
+            "I don't agree with every call, but I trust you to make one.", "I know where I stand with you, and that matters.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "I don't need a speech from you. I need you to keep being you.",
+            "Your word has some weight with me now.",
+            "I still watch the door. I don't watch you the same way.",
+            "Bad days are easier when I don't have to face them alone.",
+        },
+        brave = { "I'll stand beside you. Don't mistake that for agreeing with every plan." },
+        cautious = { "I trust you. I'm still checking the way out." },
+        caring = { "You don't have to earn your place with me every morning." },
+        practical = { "I believe you'll pull your weight. Makes planning simpler." },
+    },
+    ["relationship.ally"] = {
+        common = {
+            "We work well together. Trust takes time, but we are getting there.", "You have been fair with me so far.",
+            "I think this partnership has a chance.", "We are still learning each other, but I trust you more than I did.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "I'm getting used to having you there. Don't make me regret saying it.",
+            "I don't trust easy. You're making it inconvenient.",
+            "We're not family. But you're not just another mouth to feed.",
+            "I reckon this could work. That's more than I'd have said before.",
+        },
+        brave = { "We've got a chance together. I'd rather take it than hide." },
+        cautious = { "I'll give you the benefit of the doubt. Not all of it." },
+        caring = { "It's easier hearing another person breathe. Especially you." },
+        practical = { "You do your share. That's a decent place to start." },
+    },
+    ["relationship.cautious"] = {
+        common = {
+            "I am still getting to know you. Give me time.", "I don't know you well enough to answer that yet.",
+            "Trust comes slowly for me now.", "We are not enemies. The rest still has to be earned.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "We can share a road. The rest takes longer.",
+            "I'm still deciding what your word is worth.",
+            "You haven't given me a reason to leave. Don't rush the rest.",
+            "Let's get through today before we start calling it trust.",
+        },
+        brave = { "You want my trust? Be there when it gets ugly." },
+        cautious = { "I still need to know I can say no to you." },
+        caring = { "I want to trust you. Wanting isn't the hard part." },
+        practical = { "We have an arrangement. I'll let you know when it's more than that." },
+    },
+    ["encourage.recent"] = { common = {
+        "I heard you. Give me a minute to breathe.", "I appreciate it. Let the words settle for a moment.",
+        "You already helped. I just need a little time now.", "I am listening. I can't turn it around all at once.",
+    } },
+    ["encourage.not_needed"] = { common = {
+        "I am good. Save that speech for when one of us really needs it.", "I am all right, but thank you for checking.",
+        "Keep that encouragement ready. Today I am doing fine.", "No need to worry about me right now.",
+    } },
+    ["encourage.accept"] = {
+        common = {
+            "Thank you. I needed to hear that.", "That helped more than I expected.",
+            "All right. I will keep trying.", "Thanks. I was getting lost in my own head.",
+            "I am not fixed, but I feel steadier. Thank you.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "I'm not better. I'm a little less alone with it.",
+            "All right. One thing at a time. I can try that.",
+            "Thanks. I needed a person, not a solution.",
+            "I can't promise a good day. I'll try for the next hour.",
+        },
+        brave = { "I've got a little fight left. Thanks for reminding me." },
+        cautious = { "Let's keep the next step small. I can manage small." },
+        caring = { "Stay with me a moment. That helps." },
+        practical = { "That helped. Not a miracle. Enough." },
+    },
+    ["praise.none"] = { common = {
+        "Thanks, but let us save the celebration until the work is done.", "I appreciate it, but I have not earned a victory speech yet.",
+        "Hold that thought until we have something real to celebrate.", "Thanks. For now, let's stay focused.",
+    } },
+    ["praise.accept"] = {
+        common = {
+            "That means more than you know.", "Thank you. I am proud that I could help.",
+            "I was just doing my part, but I appreciate you saying it.", "Thanks. It is good to know the effort mattered.",
+            "I will remember that. Thank you.",
+            -- Added 0.25.13: attachment and boundaries, said plainly.
+            "I wasn't sure anyone noticed.",
+            "We still know how to do something besides lose things.",
+            "Thanks. Let me have that one for a minute.",
+            "It's good to be useful without being used.",
+        },
+        brave = { "I'll take the compliment. Don't turn it into a speech." },
+        cautious = { "Thanks. Let's not make success an excuse to get careless." },
+        caring = { "You noticing matters. More than I'd like to admit." },
+        practical = { "A favorable review. I'll file it somewhere dry." },
+    },
+    ["memory.companion_died"] = { common = {
+        "%1 died. I keep thinking about the time we had together.",
+        "I still catch myself remembering %1 at the strangest moments.",
+        "Losing %1 changed this place. It has not felt the same since.",
+        "I remember %1. I don't want any of us to forget.",
+        "There are things I wish I had said to %1 while there was time.",
+    } },
+    ["plans.none"] = { common = {
+        "Nothing specific. I need a little time to think.", "No real plan yet. I am still working that out.",
+        "Ask me again later. Nothing has settled into a goal yet.", "Right now I am focused on getting through the day.",
+            "I don't have a goal beyond staying useful today.",
+            "I'm still deciding what I can promise myself.",
+            "For now, I want a quiet day and the strength for another.",
+        } },
+    ["plans.reserved"] = { common = {
+        "I am not ready to talk about that yet.", "That is personal. Give me a little more time.",
+        "I have something in mind, but I don't know you well enough yet.", "Not yet. I need to keep that to myself for now.",
+            "I need to understand it myself before I tell anyone.",
+            "Let me keep one thought private a little longer.",
+            "It matters to me. That's why I'm taking my time with it.",
+        } },
+    ["plans.keep_medical_ready"] = { common = {
+        "I would feel better if we kept two clean bandages ready.", "I want a proper reserve of clean bandages.",
+        "My priority is making sure a small wound never becomes a death sentence.", "Let's keep medical supplies ready before the next emergency.",
+            "I want clean bandages ready where anyone can find them.",
+            "I'd like us to prepare for injuries while everybody can still help.",
+            "We should have enough medical supplies that a cut doesn't become a crisis.",
+        } },
+    ["plans.find_something_to_read"] = { common = {
+        "I would like to find something worth reading when things are quiet.", "I miss having a good book for the quiet hours.",
+        "If we see anything worth reading, I would like to bring it home.", "My plan is simple: find a book and let my mind go somewhere else for a while.",
+            "I want a book I can come back to after a hard day.",
+            "I'd like to read something with an ending we didn't have to live through.",
+            "A few quiet pages would help me keep my thoughts in order.",
+        } },
+    ["plans.put_gear_in_order"] = { common = {
+        "I want to repair our worn gear before it fails us.", "We should put the equipment in order while it is still fixable.",
+        "My next job is checking every tool and repairing what I can.", "I want our gear ready before we depend on it again.",
+            "I want to check the worn straps and loose handles before we head out.",
+            "I'd like our tools to last. We can't count on finding replacements.",
+            "The equipment needs attention while there is still time to repair it.",
+        } },
+    ["plans.improve_shelter"] = { common = {
+        "I want to make this place a little harder for the dead to enter.", "This shelter needs another layer of defense.",
+        "I keep seeing weak points in the base. I want to fix them.", "My goal is to make this place safer before the next horde finds it.",
+            "I want to strengthen the openings we keep worrying about.",
+            "I'd like to sleep knowing we fixed the weakest parts of this place.",
+            "We need a shelter that gives us time to react when trouble comes.",
+        } },
+    ["plans.share_a_proper_meal"] = { common = {
+        "Would you keep me company while I eat? Just for a few minutes.",
+        "I'm tired of eating alone. Stay nearby next time?",
+        "If we get a quiet minute, I'd like to eat with you.",
+        "You don't have to talk. Just stay while I finish eating.",
+            "I'd like us to sit together for a meal without watching the clock.",
+            "I want a little company at supper. Ordinary company, for once.",
+            "Next time we eat, stay with me a while. It makes the place feel warmer.",
+        } },
+    ["plans.recover_keepsake"] = { common = {
+        "I am missing something personal. I would like it back.", "There is a keepsake I left behind. I still think about recovering it.",
+        "I lost something that mattered to me. I want to go back for it someday.", "My goal is to recover one piece of my old life.",
+            "I left a part of my life somewhere. I'd like to bring it home.",
+            "That keepsake reminds me who I was before all this.",
+            "I want to recover something that still feels like mine.",
+        } },
+    ["crisis.confess"] = { common = {
+        "I was bitten. We need to decide what happens next.", "There is something you need to see. It's a bite.",
+        "I can't hide this any longer. One of them bit me.", "I was bitten out there. I am sorry.",
+        "Listen to me. I have a bite, and we need a plan.",
+        "I need everyone to stay calm. I got bitten.", "It's a bite. I checked twice. It's a bite.",
+        "Before anyone hears it from somebody else: I was bitten.",
+        "I kept hoping it was a scratch. It isn't.",
+        "One of them got me. I'm telling you while I still can.",
+        "You should hear this from me. I've been bitten.", "I'm not going to pretend. That was a bite.",
+    } },
+    ["crisis.bleach.accept"] = { common = {
+        "All right. Let me do it myself.",
+        "I understand what you're offering. Leave it with me.",
+        "No one else has to do this for me.",
+        "Stay close until it's done. Please.",
+        "It's my decision. I want it that way.",
+        "Give me a moment. Then I'll take the bottle.",
+    } },
+    ["crisis.bleach.decline"] = { common = {
+        "No. I want another way.",
+        "Put it away. That isn't my choice.",
+        "I heard you. My answer is no.",
+        "Please don't ask me again. Let's talk about the other options.",
+        "Not like that. Let me keep what time I have.",
+        "I appreciate that you're asking, but no.",
+    } },
+    ["crisis.protective"] = { common = {
+        "We do not abandon our own. We watch them and keep them safe.",
+        "They are still one of us. Nobody makes a decision alone.",
+        "We keep them close, keep watch, and treat them like a person.",
+        "Nobody touches them without going through me first.",
+        "They'd do the same for any of us. We look after them.",
+        "We stay with them. Whatever comes, they won't face it alone.",
+        "Put the weapons down. This is still our friend.",
+        "If it were me, I'd want you to stay. So I'm staying.",
+    } },
+    ["crisis.compassionate"] = { common = {
+        "Give them a quiet room and a little dignity.", "Whatever happens, they should not face it alone.",
+        "Keep them comfortable. We can be careful without being cruel.",
+        "Sit down. Breathe. We're right here.", "Whatever time is left, let's make it kind.",
+        "Bring water and a blanket. They're scared too.",
+        "I'm sorry. I'm so sorry this happened to you.", "Talk to me. Tell me what you need.",
+    } },
+    ["crisis.pragmatic"] = { common = {
+        "Separate them, keep watch, and make an exit plan.", "We need a secure room and someone on watch.",
+        "No panic. Quarantine first, then we decide with clear heads.",
+        "We watch the fever, keep a door between us at night, and decide from facts.",
+        "Check the wound every hour. Write it down.",
+        "Nobody panics, and nobody sleeps alone near them. That's the plan.",
+        "Get the medkit and a chair. We do this properly.",
+        "Plan for both endings. Hope for the good one.",
+    } },
+    ["crisis.fearful"] = { common = {
+        "They cannot stay among us. It is too dangerous.", "Get them away from the sleeping area now.",
+        "One mistake and we all wake up dead. Move them out.",
+        "I'm sorry. I can't sleep in the same room. I just can't.",
+        "What if it happens tonight? While we're asleep?",
+        "Keep them back. Please. Just keep them back.",
+        "I've seen what comes after. I'm not seeing it again.",
+        "Don't look at me like that. Somebody has to say it.",
+    } },
+    ["crisis.authoritarian"] = { common = {
+        "We decide this now, before they turn.", "Secure them. Nobody opens that door without permission.",
+        "The risk is settled. Quarantine them immediately.",
+        "Hand over the weapon. Now. Nothing personal.",
+        "Rules are rules. Bitten means isolated. No exceptions.",
+        "Until this is settled, I make the calls.", "Lock it down. Two on watch, round the clock.",
+        "We don't vote on this one. We act.",
+    } },
+    ["crisis.confide"] = { common = {
+        "Keep your voice down. I got bit.", "I need to tell someone, and it's you. I was bitten.",
+        "Don't tell the others. Not yet. It's a bite.",
+        "Look at this. Just look. Then keep quiet about it.",
+        "You're the only one I'd tell. It's a bite.",
+        "I need a favor. A big one. Don't say anything yet.",
+        "Walk with me a second. Away from the others.",
+        "It happened out there. I'm scared. Don't tell them.",
+        "I trust you. That's why you're hearing this. I got bit.",
+    } },
+    ["crisis.confide.player"] = { common = {
+        "Boss. Just you and me. I got bit.", "I trust you, so you hear it first. I was bitten.",
+        "Don't make a scene. One of them got me.",
+        "I need you to know before anyone else. It's a bite.",
+        "Can we talk? Just us. It's bad.",
+        "I didn't want the others to hear it first. I've been bitten.",
+        "You've kept me alive this long. You should know. I got bit.",
+        "Please don't shout. It's a bite. I'm sorry.",
+        "I'll do whatever you decide. But first you need to know: I'm bitten.",
+    } },
+    ["crisis.keep"] = { common = {
+        "Okay. It stays between us. For now.", "I won't tell them. But I'm watching you.",
+        "Your secret. My problem now too.", "Fine. We handle this together. Quietly.",
+        "Not a word from me. But you tell me the second it gets worse.",
+        "I'll cover for you. For now.", "We keep it quiet, and I keep an eye on you. Deal?",
+        "Nobody hears it from me. Promise me you'll tell them yourself.",
+        "Okay. Breathe. I've got you.",
+    } },
+    ["crisis.urge"] = { common = {
+        "You have to tell them. Now. Or I will.", "This isn't a secret you get to keep.",
+        "They deserve to know. Go on. Tell them.", "No. Everyone hears this, right now.",
+        "I'm not carrying this for you. They need to know.",
+        "If you turn at night and nobody knew, that's on both of us.",
+        "Tell them yourself, or I will. Your choice, but make it now.",
+        "Secrets get people killed. Come on. Together.",
+        "I care about you. That's why the answer is no. We tell them.",
+    } },
+    ["crisis.reply"] = { common = {
+        "I know.", "Thanks for not running.", "I'm still me. For now.",
+        "I know what it means. Let's just be smart about it.",
+        "I know. I'm scared too.", "I appreciate it. I really do.",
+        "Don't make that face. I'm still here.", "Whatever you decide, I understand.",
+        "Thank you for coming over.", "I'd say the same, in your place.",
+    } },
+    -- The bitten companion's fear as the infection takes hold (SCInfectionCrisis):
+    -- dread and denial, then fever and cold, then the fear of losing themselves.
+    -- %1 is the player's first name.
+    ["crisis.fear.early"] = {
+        common = {
+            "It's just a bite. People survive bites. Right? Somebody tell me people survive bites.",
+            "I keep looking at it. Like if I stare long enough, it'll go away.",
+            "I'm not ready. I had plans. Stupid little plans, but they were mine.",
+            "How long do you think I've got? No. Don't answer that.",
+            "I keep thinking about my mom's kitchen. Isn't that stupid?",
+            "If I start acting strange, you tell me. Promise me.",
+            "I'm scared. I'm really, really scared.",
+            "I don't want to die out here. Not like this.",
+            "Maybe it didn't break the skin. Maybe. Maybe.",
+            "I can still feel my fingers. That's good, right? That's good.",
+            "I keep waiting to wake up.",
+            "%1, am I going to die? Just say it straight.",
+        },
+        brave = { "I'm not afraid of dying. I'm afraid of what gets up afterward.",
+            "Don't look at me like that. I'm still in here." },
+        cautious = { "I was careful. I was always careful. Why wasn't that enough?",
+            "Every itch, every shiver. I keep checking. I can't stop checking." },
+        caring = { "Who's going to look after all of you when I'm gone?",
+            "Don't worry about me. Okay. Worry a little." },
+        practical = { "Write down what I know. Where the supplies are. While I still remember.",
+            "Let's be sensible about this. I just can't make my hands stop shaking." },
+        stressed = { "I can't breathe. Is this it? Is this how it starts?",
+            "Why me? Why did it have to be me?" },
+    },
+    ["crisis.fear.mid"] = {
+        common = {
+            "I feel cold. Why am I so cold? It's the middle of summer.",
+            "My hands won't stop shaking.",
+            "Everything's so loud. Please... quieter.",
+            "I keep losing minutes. Did I already say that?",
+            "I'm burning up and freezing at the same time.",
+            "Talk to me. Keep talking. If you talk, I'm still here.",
+            "I had a dog once. His name was... I can't remember his name.",
+            "It hurts. It hurts all the way down in my bones.",
+            "Don't leave me alone tonight. Please.",
+            "I can taste metal. Nothing tastes right anymore.",
+            "Can somebody get me a blanket? I can't get warm.",
+            "%1, my head's full of fog. Say something so I know where I am.",
+        },
+        brave = { "I can still fight this. I can still... can I?",
+            "Don't count me out yet. Please don't count me out." },
+        cautious = { "The fever's climbing. I know what that means. I've read the notes.",
+            "Keep the door locked tonight. Just in case. Just in case." },
+        caring = { "If you ever find my family, tell them I tried. Tell them I tried so hard.",
+            "Don't sit so close. I don't want it to be you next." },
+        practical = { "Fever's up, hands are gone, eyes are going. I know how this ends.",
+            "My things are yours. Take the good boots. Don't argue with me." },
+        stressed = { "Make it stop. Please, make it stop.",
+            "I can hear my heart. It's too fast. It's too fast." },
+    },
+    ["crisis.fear.late"] = {
+        common = {
+            "I don't wanna lose myself. Please. I don't want to forget who I am.",
+            "I can't remember my mother's face. I had it this morning.",
+            "When it happens, it won't be me. Remember that. It won't be me.",
+            "I'm so tired. I'm so tired, and I'm so scared.",
+            "Stay with me. Just until I fall asleep. Then go.",
+            "Say my name. Keep saying it, so I don't forget it.",
+            "It's getting dark in my head. Like lights going out, room by room.",
+            "I don't want to hurt anybody. Promise me I won't hurt anybody.",
+            "I'm sorry. I'm sorry for all of it.",
+            "Is it cold in here, or is it just me? It's just me, isn't it.",
+            "Hold my hand. I can't feel it anymore, but hold it anyway.",
+            "%1, I was somebody before all this. Please remember I was somebody.",
+        },
+        brave = { "Don't wait too long. When it's time, don't wait. Please.",
+            "I held on as long as I could. I need you to know that." },
+        cautious = { "I keep forgetting where I am. Then I remember, and it's worse.",
+            "Check the door. Check it again. I don't trust me anymore." },
+        caring = { "Don't cry. Hey. Don't cry. You'll make me cry, and I don't have time.",
+            "You were good to me. All of you. Tell them I said so." },
+        practical = { "When I stop answering, it's done. Don't wait for me to come back.",
+            "Bury what's left of me somewhere with a view. If you can." },
+        stressed = { "I don't want to go. I don't want to go. I don't want to go.",
+            "Who am I? No. No, I know. I know. I know who I am." },
+    },
+    ["faction.warn.outer"] = { common = {
+        "Stay away. This house is occupied.", "Stop there. We don't trust strangers.",
+        "That is close enough. Turn around.", "Hold it. This place is claimed.",
+        "Keep your distance and nobody gets hurt.", "We see you. Do not approach the house.",
+    } },
+    ["faction.warn.inner"] = { common = {
+        "Do not come any closer.", "Stop right there.", "One more step and we have a problem.",
+        "Back up. Now.", "You are close enough. Stay where you are.",
+    } },
+    ["faction.warn.weapon"] = { common = {
+        "Lower your weapon!", "Put the weapon down!", "Muzzle down, stranger!",
+        "Hands where I can see them, weapon down!", "Ease off the trigger and back up!",
+        "Don't point that at us!", "Lower it now if you want to keep talking!",
+    } },
+    ["faction.warn.leave"] = { common = {
+        "Leave our house. Last warning.", "Out. You have been warned.",
+        "Get off our property before this turns ugly.", "This is your last chance to walk away.",
+    } },
+    ["faction.restitution"] = { common = {
+        "Leave the restitution where we can see it.", "Set the payment down and step away.",
+        "Put what you owe us on the ground. We will collect it.",
+        "Leave the restitution outside and keep your hands visible.",
+    } },
+    ["faction.hostile"] = { common = {
+        "You were warned!", "Get away from our home!", "Back off, now!",
+        "That is it! Get out!", "You chose this, stranger!",
+    } },
+    ["faction.bandit.challenge"] = { common = {
+        "Stop right there. Turn around.", "That's close enough. Walk away.",
+        "Hold it. Leave now and you keep what you have.",
+        "Wrong road, stranger. Back up.", "Don't take another step.",
+    } },
+    ["faction.recruit.candidate"] = { common = {
+        "I can try one run with you. Then I decide.", "One trip. I want to see how you handle yourself.",
+        "I will come for a trial run, nothing more yet.", "Let me test the road with you before I promise anything.",
+    } },
+    ["faction.recruit.trial"] = { common = {
+        "One run. I am still responsible for getting myself home.",
+        "I am coming, but my place here is not settled yet.", "This is a trial. We both get to judge how it goes.",
+        "All right. I have my gear. Let's see if this works.",
+    } },
+    ["faction.recruit.return"] = { common = {
+        "I am going home. This is where I belong.", "I gave it a fair try. My people need me here.",
+        "This life is not for me. I am returning to the house.", "No anger. I just know where I need to be.",
+    } },
+    ["faction.recruit.join"] = { common = {
+        "I have made my choice. I am staying with you.", "The trial is over. I want to remain with your group.",
+        "I trust you. From now on, I am one of yours.", "I talked it through with myself. I am staying.",
+    } },
+    ["faction.recruit.more_time"] = { common = {
+        "I need more time before I make that choice.", "I am not ready to decide yet. Give me another run.",
+        "Ask me again later. I need to see more.", "I am still weighing it. Do not push me yet.",
+    } },
+    -- Noise carries, and every companion who has lived through a horde knows
+    -- it. These are reactions to a sound they did not make and cannot stop:
+    -- an alarm that will ring until its battery dies, a horn somebody leaned
+    -- on deliberately, a door losing an argument. Kept short, because a
+    -- companion saying them is already listening for what comes next.
+    ["noise.alarm"] = { common = {
+        "That alarm is a dinner bell. Every one of them heard it.",
+        "Somebody's car is telling the whole county where we are.",
+        "It'll ring until the battery dies. We shouldn't be here when it does.",
+        "House alarm. Whoever set that off is already regretting it.",
+        "That noise carries a lot further than we can run.",
+        "Let it scream somewhere behind us.",
+    } },
+    ["noise.horn"] = { common = {
+        "Somebody leaned on a horn. On purpose, by the sound of it.",
+        "That was a person. People do that when they want company.",
+        "A horn means somebody's alive out there. Doesn't mean they're friendly.",
+        "Shh. Quiet. You want to get us all killed?",
+            "A horn. Somebody wants attention and hasn't priced it.",
+            "That horn will bring company. Let's avoid the welcoming committee.",
+            "Horn nearby. Living or dead, they'll all head that way.",
+            { "A horn. Hell of a way to advertise your pulse.", clean = "A horn. Heck of a way to advertise your pulse." },
+        } },
+    ["noise.breaking"] = { common = {
+        "Something's coming through a door. It isn't knocking.",
+        "That's wood giving way. Give it a minute and it won't be a door.",
+        "Breaking glass. Either somebody's desperate or something's hungry.",
+        "They're through. Whatever was holding, isn't.",
+        "That's a door losing an argument.",
+            "Something broke. Keep clear of the opening until we know what follows.",
+            "Glass or timber, it means an entrance just got easier.",
+            "That barrier's going. We should find a better place to stand.",
+        } },
+    ["noise.helicopter"] = { common = {
+        "Helicopter. It isn't here for us.",
+        "That thing's been circling for hours. Everything for miles is walking this way.",
+        "Look up if you want. It won't look back.",
+        "Somebody's still flying. I'd rather they weren't doing it over us.",
+        "It'll move on. What it drags behind it won't.",
+        "Every dead thing in the county just got a direction.",
+    } },
+    ["noise.loud"] = { common = {
+        "The dead can still hear.",
+        "Sound travels further than you'd think out here.",
+        "Every noise we make is an invitation.",
+        "Well. That's done now. Let's not be standing near it.",
+        "Quiet is the only thing keeping us alive. Mind it.",
+            "That carried. Let's move before the listeners arrive.",
+            "Loud enough to wake the whole county. Most of it already died.",
+            "We've announced ourselves. I'd rather relocate than meet the audience.",
+        } },
+    ["faction.life.greeting.Wary"] = {
+        common = {
+            "State your business from there.", "Keep your hands where I can see them.",
+            "We can hear you from where you are. Speak.", "Stop at the boundary and tell us what you want.",
+            -- Added 0.25.13: a boundary stated before a conversation starts.
+            "Stop there. We can hear you without opening anything.",
+            "Tell us what you need. Leave out the promises.",
+            "Keep your hands where we can see them. Then we talk.",
+            "A living face isn't a reference. Stay there.",
+        },
+        brave = { "Hold there. We can settle this with words." },
+        cautious = { "Don't come closer. Talk from where you are." },
+        caring = { "Stay back, please. We're trying to keep people alive here." },
+        practical = { "State your business. We can manage that without opening the house." },
+    },
+    ["faction.life.greeting.Tolerated"] = {
+        common = {
+            "We can talk here. Do not enter the house.", "All right. What do you need?",
+            "You can approach the gate, no farther.", "We remember you. Say what you came to say.",
+            -- Added 0.25.13: talking is not permission to come in.
+            "We know your face. The house is still private.",
+            "You can talk to us here. The door isn't part of the invitation.",
+            "All right. What brings you back?",
+            "Stay at the entry. You're welcome to a conversation.",
+        },
+        brave = { "Go on. Say what you came to say." },
+        cautious = { "We can talk. Keep to the same side of the boundary." },
+        caring = { "It's good to see you alive. We still need some distance." },
+        practical = { "Conversation is permitted. Entry is a separate discussion." },
+    },
+    ["faction.life.greeting.Trusted"] = {
+        common = {
+            "Good to see a familiar face.", "Come closer. We may have news for you.",
+            "You are welcome at the gate.", "Good, you made it back. What can we do for you?",
+            -- Added 0.25.13: recognition, without inventing a right of access.
+            "Good. A face I don't have to work out again.",
+            "You're welcome at the entry. Let's hear what you need.",
+            "I'm glad it's you. That's the whole speech.",
+            "Always easier when the visitor has a name we know.",
+        },
+        brave = { "Good to see you. What are we dealing with today?" },
+        cautious = { "We trust you. We still keep the house secure." },
+        caring = { "You're here. I was hoping you'd keep being here." },
+        practical = { "A known quantity. Those are getting scarce." },
+    },
+    ["faction.life.supply_crisis"] = {
+        common = {
+            "We are running out of %1.", "Our stock of %1 is almost gone.",
+            "We have a serious shortage of %1.", "If we cannot find %1 soon, this house is in trouble.",
+            -- Added 0.25.13: need, with the ceremony stripped off.
+            "We're short on %1. That's the part we can't talk around.",
+            "We need %1. More than we need another promise.",
+            "We don't have enough %1. That's our problem right now.",
+            "Our %1 won't stretch much further.",
+        },
+        brave = { "We need %1. Tell us whether you can help." },
+        cautious = { "We're short on %1. I'd rather say it before it gets worse." },
+        caring = { "We need %1. Pride isn't worth anybody suffering for." },
+        practical = { "Short on %1. No amount of counting improves it." },
+    },
+    ["faction.life.illness"] = {
+        common = {
+            "Someone inside is sick. Keep your distance.", "We have illness in the house. Do not come closer.",
+            "One of ours is unwell. We are limiting contact.", "Stay at the gate. We cannot risk spreading this.",
+            -- Added 0.25.13: a sick house, not a diagnosis.
+            "Someone here is sick. Keep your distance.",
+            "We've got illness in the house. Talk from there.",
+            "Please stay back. Someone inside isn't well.",
+            "Someone's sick. We'd rather ask for distance than need another bed.",
+        },
+        brave = { "We've got someone sick. Give us space to handle it." },
+        cautious = { "Someone inside is ill. Don't come any closer." },
+        caring = { "Someone's unwell. Please keep a little room between us." },
+        practical = { "Illness in the house. Visiting is a poor idea." },
+    },
+    ["faction.life.dispute"] = { common = {
+        "You said the last run was safe!", "Stop blaming me for every bad call.",
+        "We cannot keep wasting supplies like this.", "Lower your voice. We have enough trouble outside.",
+        "You never listen until something goes wrong!", "We agreed on the plan, and then you changed it!",
+        "This is not helping. We need an answer, not another argument.",
+    } },
+    ["faction.life.plan"] = { common = {
+        "We should review tomorrow's plan.", "Let's settle the next watch and supply jobs.",
+        "Before we sleep, we need to agree on tomorrow.", "Come here. I want to go over the plan again.",
+    } },
+    ["faction.life.need_rest"] = { common = {
+        "I need to sit down for a while.", "I am not feeling well. I need to rest.",
+        "Give me a quiet place to sit.", "I need a break before I can do anything else.",
+    } },
+    ["faction.life.check_supplies"] = { common = {
+        "Check every bag. We are short on supplies.", "Go through the stores again. We are missing something.",
+        "Count everything. We need to know exactly what is left.", "Search the containers. Our stock is too low.",
+    } },
+    ["faction.tone.Paranoid"] = { common = {
+        "Careful answer:", "Listen closely:", "This is all we are saying:", "Keep this between us:"
+    } },
+    ["faction.tone.Generous"] = { common = {
+        "Straight answer:", "Honestly:", "We can tell you this:", "Here is the truth:"
+    } },
+    ["faction.tone.Militarized"] = { common = {
+        "Situation report:", "Current assessment:", "Here is the position:", "Our status is this:"
+    } },
+    ["faction.tone.Desperate"] = { common = {
+        "We will be honest:", "There is no point hiding it:", "Truth is:", "What you need to understand is:"
+    } },
+    ["faction.tone.Isolationist"] = { common = {
+        "This stays at the gate:", "We will tell you this much:", "From there, listen:", "This does not buy you entry:"
+    } },
+    ["faction.tone.Resourceful"] = { common = {
+        "Here is what matters:", "The useful answer is:", "What we know is:", "The practical situation is:"
+    } },
+    ["faction.status.mourning"] = { common = {
+        "We lost %1. We are keeping watch, but give us time to grieve.",
+        "%1 died. The house is still secure, but nobody here is pretending it does not hurt.",
+        "We are mourning %1. Business can wait unless it is urgent.",
+        "The watch continues, even after losing %1. Keep this conversation brief.",
+    } },
+    ["faction.status.normal"] = { common = {
+        "We are %1. Supplies are %2.",
+        "As for you, we are %1. Our stores are %2.",
+        "Right now we are %1. Supply levels remain %2.",
+        "The house stands. We are %1, and our supplies are %2.",
+    } },
+    ["faction.access"] = { common = {
+        "Ask clearly and keep your weapon lowered. The household will decide.",
+        "Keep your hands visible, state your reason, and we will consider access.",
+        "Lower the weapon and make your request. Entry is the household's decision.",
+        "You can ask. Whether the door opens depends on how you behave.",
+    } },
+    ["nickname.intro"] = { common = {
+        "Name's %1. Everybody calls me %2.",
+        "%1 on paper. %2 to anybody who's met me.",
+        "Call me %2. Only my mother called me %1.",
+            "I'm %1. If you hear %2, that's me too.",
+            "%1 is the old name. %2 seems to have survived.",
+        } },
+    ["nickname.player.accept"] = { common = {
+        "%1? All right. I'll answer to it.",
+        "%1. Sure. You've earned a joke.",
+        "Fine. %1 it is. Don't wear it out.",
+            "%1 works. I'll try not to disgrace it.",
+            "All right, %1. Sounds like someone who might make it.",
+        } },
+    ["nickname.player.reject"] = { common = {
+        "I'm not answering to %1. Try again.",
+        "Call me that if you must. I won't like it.",
+            "%1? No. I've still got a name I can stand.",
+            "I'd rather answer to my own name than %1.",
+            "Keep %1 for somebody who enjoys it.",
+        } },
+    ["nickname.coin"] = { common = {
+        "%1, you know what? From now on you're %2.",
+        "That's it. You're %2 now. I don't make the rules.",
+        "Everybody out here needs a road name. Yours is %2.",
+            "%1, that settles it. %2 is going to stick.",
+            "After that performance, %1, I think we've found our %2.",
+        } },
+    ["nickname.coin.accept"] = { common = {
+        "%2. Huh. I've been called worse.",
+        "Fine. %2 it is. Don't wear it out.",
+        "%2. My mama would hate that. I love it.",
+            "%2 suits me. I'll leave it on for now.",
+            "I can live with %2. That's the important part.",
+        } },
+    ["nickname.coin.reject"] = { common = {
+        "Call me %2 again and see what happens.",
+        "No. My name is %1. Use it.",
+        { "Call me %2 one more time, you son of a bitch.",
+            clean = "Call me %2 one more time, you son of a gun." },
+            "%2 belongs on a different fool. Call me %1.",
+            "%1 will do. Save %2 for someone who asked.",
+        } },
+    ["nickname.grief"] = { common = {
+        "%1 would have laughed at this.",
+        "Nobody says %1 anymore. Feels wrong.",
+            "%1 made that sound funny. I can't get the voice right.",
+            "I almost called for %1 again. Habit hasn't caught up.",
+            "We keep saying %1 like there's still time for an answer.",
+        } },
+    ["nickname.namesake"] = { common = {
+        "Yeah. I've heard it.",
+        "You think you're the first to point that out?",
+            "Same name. Much worse circumstances.",
+            "The resemblance ends when somebody expects heroics.",
+            "That joke was old before the dead started walking.",
+        } },
+}
+
+local actorHistory = setmetatable({}, { __mode = "k" })
+local idHistory = {}
+local lastAmbientGroupAt = -math.huge
+local partyRecent = {}
+local missingArgumentWarnings = {}
+local missingArgumentWarningCount = 0
+
+local function U() return SC.GameplayUtil end
+
+local function actorId(actor)
+    local utility = U()
+    if utility and type(utility.idOf) == "function" then
+        local ok, value = pcall(utility.idOf, actor)
+        if ok and value then return tostring(value) end
+    end
+    return tostring(actor or "survivor")
+end
+
+local function runtimeFor(actor)
+    if actor ~= nil then
+        local runtime = actorHistory[actor]
+        if not runtime then
+            runtime = { sequence = 0, recent = {}, last = nil }
+            actorHistory[actor] = runtime
+        end
+        return runtime
+    end
+    local id = "survivor"
+    idHistory[id] = idHistory[id] or { sequence = 0, recent = {}, last = nil }
+    return idHistory[id]
+end
+
+local function commandState(actor, supplied)
+    if type(supplied) == "table" then return supplied end
+    if SC.Commands and type(SC.Commands.peek) == "function" then
+        local ok, state = pcall(SC.Commands.peek, actor)
+        if ok and type(state) == "table" then return state end
+    end
+    return {}
+end
+
+local function styleFor(state, options)
+    options = type(options) == "table" and options or {}
+    local profile = type(state.personalityProfile) == "table" and state.personalityProfile or {}
+    local voice = tostring(options.voice or profile.archetype or state.personality or "practical")
+    if voice ~= "brave" and voice ~= "cautious" and voice ~= "caring" and voice ~= "practical" then
+        voice = "practical"
+    end
+    local mood = options.mood
+    if mood == nil then
+        local stress = tonumber(state.stress) or 0
+        local morale = tonumber(state.morale) or 55
+        if stress >= 65 then mood = "stressed"
+        elseif morale <= 28 then mood = "low"
+        elseif morale >= 72 then mood = "hopeful"
+        else mood = "steady" end
+    end
+    return voice, tostring(mood)
+end
+
+local function lineKey(value)
+    if type(value) == "string" then return value ~= "" and value or nil end
+    if type(value) == "table" and type(value[1]) == "string"
+        and value[1] ~= "" and type(value.clean) == "string"
+        and value.clean ~= "" then return value[1] end
+    return nil
+end
+
+local function lineText(value)
+    if type(value) == "string" then return value end
+    if type(value) ~= "table" then return nil end
+    if U() and U().config("profanityEnabled") == false then return value.clean end
+    return value[1]
+end
+
+local function appendUnique(target, source, seen)
+    if type(source) == "string" then source = { source } end
+    if type(source) ~= "table" then return end
+    for _, value in ipairs(source) do
+        local key = lineKey(value)
+        if key and not seen[key] then
+            target[#target + 1] = value
+            seen[key] = true
+        end
+    end
+end
+
+local function candidatesFor(specification, voice, mood, includeRegisters)
+    if type(specification) == "string" then return { specification } end
+    if type(specification) ~= "table" then return {} end
+    if #specification > 0 then
+        local result, seen = {}, {}
+        appendUnique(result, specification, seen)
+        return result
+    end
+    local result, seen = {}, {}
+    appendUnique(result, specification.common or specification.all, seen)
+    appendUnique(result, specification[voice], seen)
+    appendUnique(result, specification[mood], seen)
+    -- A register is an intersection of the existing voice and mood axes, not
+    -- a new personality or mood key. This lets a brave, steady survivor use
+    -- gallows humour without making the same corpse jokes available to a
+    -- caring voice in the same mood.
+    if includeRegisters ~= false and type(specification.registers) == "table" then
+        local voiceRegisters = specification.registers[voice]
+        if type(voiceRegisters) == "table" then
+            appendUnique(result, voiceRegisters[mood], seen)
+        end
+    end
+    return result
+end
+
+local function commonLookup(specification)
+    local lookup, count = {}, 0
+    if type(specification) ~= "table" or #specification > 0 then return lookup, count end
+    local common = specification.common or specification.all
+    if type(common) == "string" then common = { common } end
+    if type(common) ~= "table" then return lookup, count end
+    for _, line in ipairs(common) do
+        local key = lineKey(line)
+        if key and lookup[key] ~= true then
+            lookup[key], count = true, count + 1
+        end
+    end
+    return lookup, count
+end
+
+local function sharesPartyRecent(topic)
+    if type(topic) ~= "string" then return false end
+    if string.sub(topic, 1, 7) == "danger." or string.sub(topic, 1, 7) == "signal." then
+        return true
+    end
+    local stem = string.match(topic, "^(combat%.[^.]+)")
+    return stem == "combat.engage" or stem == "combat.retreat"
+        or stem == "combat.struggle" or stem == "combat.kill"
+end
+
+local function partyExclusions(topic, actor)
+    local result = {}
+    if not sharesPartyRecent(topic) then return result end
+    local utility, rows = U(), partyRecent[topic]
+    if not utility or type(utility.position) ~= "function" or type(rows) ~= "table" then
+        return result
+    end
+    local x, y, z = utility.position(actor)
+    if x == nil then return result end
+    local radius = tonumber((utility.config("combatBarkSoundRadius"))) or 8
+    local radiusSq = radius * radius
+    for _, row in ipairs(rows) do
+        if math.floor(tonumber(row.z) or 0) == math.floor(tonumber(z) or 0) then
+            local dx, dy = x - (tonumber(row.x) or x), y - (tonumber(row.y) or y)
+            if dx * dx + dy * dy <= radiusSq then result[row.line] = true end
+        end
+    end
+    return result
+end
+
+local function rememberPartyLine(topic, actor, line, commonCount, recentLimit)
+    if not sharesPartyRecent(topic) or commonCount <= 1 then return end
+    local utility = U()
+    if not utility or type(utility.position) ~= "function" then return end
+    local x, y, z = utility.position(actor)
+    if x == nil then return end
+    local maximum = math.max(0, math.min(tonumber(recentLimit) or 3, commonCount - 1))
+    if maximum == 0 then return end
+    local rows = partyRecent[topic] or {}
+    rows[#rows + 1] = { line = line, x = x, y = y, z = z or 0 }
+    while #rows > maximum do table.remove(rows, 1) end
+    partyRecent[topic] = rows
+end
+
+local function interpolate(value, arguments)
+    local result = tostring(value or "")
+    local supplied = type(arguments) == "table" and arguments or {}
+    local parts, cursor = {}, 1
+    while true do
+        local at, after, marker = string.find(result, "%%(%d+)", cursor)
+        if at == nil then break end
+        parts[#parts + 1] = string.sub(result, cursor, at - 1)
+        local argument = supplied[tonumber(marker)]
+        if argument == nil or (type(argument) == "string"
+                and string.match(argument, "^%s*$")) then
+            return nil, "dialogue_argument_missing"
+        end
+        local fill = tostring(argument)
+        if string.find(fill, "%%[0-9]") then
+            return nil, "dialogue_argument_missing"
+        end
+        local before = string.sub(result, 1, at - 1)
+        if string.match(before, "^%s*$")
+            or string.match(before, "^%*[^*]+%*%s*$")
+            or string.match(before, "[%.!?]%s*$") then
+            fill = string.gsub(fill, "^([a-z])", string.upper, 1)
+        end
+        parts[#parts + 1] = fill
+        cursor = after + 1
+    end
+    parts[#parts + 1] = string.sub(result, cursor)
+    return table.concat(parts)
+end
+
+local function recentlyUsed(value, recent)
+    for _, prior in ipairs(recent or {}) do if prior == value then return true end end
+    return false
+end
+
+-- The authored specification for a topic, and the lines one voice/mood would
+-- actually be offered from it. Authored pool size is not one speaker's eligible
+-- pool: the selector combines common lines with that speaker's archetype only.
+function Dialogue._poolForTests(topic) return pools[topic] end
+function Dialogue._allPoolsForTests() return pools end
+function Dialogue._interpolateForTests(value, arguments)
+    return interpolate(value, arguments)
+end
+function Dialogue._candidatesForTests(specification, voice, mood, includeRegisters)
+    return candidatesFor(specification, voice, mood, includeRegisters)
+end
+
+function Dialogue.register(topic, specification)
+    if type(topic) ~= "string" or topic == "" or type(specification) ~= "table" then
+        return false, "invalid_dialogue_pool"
+    end
+    pools[topic] = specification
+    return true, "dialogue_pool_registered"
+end
+
+function Dialogue.has(topic)
+    return type(topic) == "string" and type(pools[topic]) == "table"
+end
+
+function Dialogue.threatBand(count)
+    local amount = math.max(0, math.floor(tonumber(count) or 0))
+    if amount <= 1 then return "one", 1 end
+    if amount == 2 then return "pair", 2 end
+    if amount <= 4 then return "group", 3 end
+    if amount <= 8 then return "crowd", 4 end
+    return "horde", 5
+end
+
+function Dialogue.threatTopic(prefix, count)
+    local band, rank = Dialogue.threatBand(count)
+    local topic = tostring(prefix or "danger") .. "." .. band
+    if Dialogue.has(topic) then return topic, band, rank end
+    return tostring(prefix or "danger"), band, rank
+end
+
+function Dialogue.choose(actor, topic, specification, arguments, options)
+    if type(topic) ~= "string" or topic == "" then return nil, "invalid_dialogue_topic" end
+    options = type(options) == "table" and options or {}
+    local runtime = runtimeFor(actor)
+    local state = commandState(actor, options.state)
+    local voice, mood = styleFor(state, options)
+    local source = specification or pools[topic]
+    local candidates = candidatesFor(source, voice, mood, options.includeRegisters)
+    local sharedCommon, commonCount = commonLookup(source)
+    if #candidates == 0 then
+        if type(options.fallback) ~= "string" or options.fallback == "" then
+            return nil, "dialogue_pool_empty"
+        end
+        candidates[1] = options.fallback
+    end
+    local eligible = {}
+    local excluded = type(options.excludedLines) == "table" and options.excludedLines or nil
+    for _, line in ipairs(candidates) do
+        local key = lineKey(line)
+        if key and (not excluded or excluded[key] ~= true)
+            and interpolate(lineText(line), arguments) ~= nil then
+            eligible[#eligible + 1] = line
+        end
+    end
+    if #eligible == 0 and type(options.fallback) == "string"
+        and options.fallback ~= ""
+        and interpolate(options.fallback, arguments) ~= nil then
+        eligible[1] = options.fallback
+    end
+    if #eligible == 0 and excluded then return nil, "dialogue_recent_exhausted" end
+    if #eligible == 0 then
+        if not missingArgumentWarnings[topic]
+            and missingArgumentWarningCount < 32 then
+            missingArgumentWarnings[topic] = true
+            missingArgumentWarningCount = missingArgumentWarningCount + 1
+            local utility = U()
+            if utility and type(utility.diagnostic) == "function" then
+                utility.diagnostic("dialogue", actor,
+                    "argument_missing topic=" .. topic)
+            end
+        end
+        return nil, "dialogue_argument_missing"
+    end
+    candidates = eligible
+    local recent = runtime.recent[topic] or {}
+    local sharedRecent = partyExclusions(topic, actor)
+    local available = {}
+    for _, line in ipairs(candidates) do
+        local key = lineKey(line)
+        if not recentlyUsed(key, recent) and key ~= runtime.last
+            and (sharedCommon[key] ~= true or sharedRecent[key] ~= true) then
+            available[#available + 1] = line
+        end
+    end
+    if #available == 0 then
+        -- A party list may never starve a small pool. Fall back to the actor's
+        -- own bounded memory before allowing an immediate self-repeat.
+        for _, line in ipairs(candidates) do
+            local key = lineKey(line)
+            if not recentlyUsed(key, recent) and key ~= runtime.last then
+                available[#available + 1] = line
+            end
+        end
+    end
+    if #available == 0 then
+        for _, line in ipairs(candidates) do
+            if lineKey(line) ~= runtime.last or #candidates == 1 then
+                available[#available + 1] = line
+            end
+        end
+    end
+    if #available == 0 then available = candidates end
+    runtime.sequence = runtime.sequence + 1
+    local current = U() and type(U().nowMs) == "function" and U().nowMs() or 0
+    local salt = actorId(actor) .. ":" .. topic .. ":" .. tostring(runtime.sequence)
+        .. ":" .. tostring(options.salt or "") .. ":" .. tostring(math.floor(current / 250))
+    local hash = U() and type(U().stableHash) == "function" and U().stableHash(salt) or #salt * 7919
+    local selected = available[(math.abs(hash) % #available) + 1]
+    local selectedKey = lineKey(selected)
+    recent[#recent + 1] = selectedKey
+    local maximum = math.max(1, math.min(tonumber(options.recentLimit) or 3, #candidates - 1))
+    while #recent > maximum do table.remove(recent, 1) end
+    runtime.recent[topic], runtime.last = recent, selectedKey
+    if sharedCommon[selectedKey] == true then
+        rememberPartyLine(topic, actor, selectedKey, commonCount, options.recentLimit)
+    end
+    return interpolate(lineText(selected), arguments), {
+        topic = topic, voice = voice, mood = mood, poolSize = #candidates,
+        sequence = runtime.sequence, lineKey = selectedKey,
+    }
+end
+
+-- Resolved direct replies must use the same speech history as selected barks.
+-- A transcript receipt is valid only after Interaction.finish has accepted it;
+-- an overhead failure on its own never claims that a line was spoken.
+function Dialogue.emitResolved(actor, topic, line, options)
+    if type(topic) ~= "string" or topic == "" or type(line) ~= "string"
+        or line == "" then return false, "invalid_resolved_speech" end
+    options = type(options) == "table" and options or {}
+    local utility = U()
+    local resolvedLine = line
+    if SolDialogueArabic and type(SolDialogueArabic.localize) == "function" then
+        local localizedOk, localized = pcall(SolDialogueArabic.localize, topic, line)
+        if localizedOk and type(localized) == "string" and localized ~= "" then
+            resolvedLine = localized
+        end
+    end
+    -- Native PZ ChatElement cannot draw Arabic glyphs. For Sol the line above her head is the
+    -- Arabic one: its translation, a short line for this topic, or nothing (SolSpeechAR). Other
+    -- companions keep the authored line.
+    local overheadLine = line
+    if SolSpeechAR and type(SolSpeechAR.resolve) == "function" and SolSpeechAR.isSol(actor) then
+        overheadLine = SolSpeechAR.resolve(actor, topic, resolvedLine)
+        if overheadLine then resolvedLine = overheadLine else return false, "no_arabic" end       -- not even in the transcript
+    end
+    local overhead = overheadLine ~= nil and utility and type(utility.say) == "function"
+        and utility.say(actor, overheadLine) == true
+    local transcript = options.transcriptAccepted == true
+    if not overhead and not transcript then return false, "speech_rejected" end
+    local current = utility and type(utility.nowMs) == "function"
+        and utility.nowMs() or 0
+    local duration = utility and type(utility.speechDisplayMillis) == "function"
+        and utility.speechDisplayMillis((string.gsub(resolvedLine, "\\u%x%x%x%x", "x"))) or 8000     -- \uXXXX is one letter on the bubble
+    local runtime = runtimeFor(actor)
+    runtime.lastSpokenAt = current
+    runtime.lastSpokenTopic = topic
+    runtime.lastDisplayUntil = overhead and current + duration or current
+    return true, resolvedLine, {
+        channel = overhead and "overhead" or "transcript",
+        spokenAt = current, displayUntil = runtime.lastDisplayUntil,
+    }
+end
+
+function Dialogue.say(actor, topic, specification, arguments, options)
+    local line, detail = Dialogue.choose(actor, topic, specification, arguments, options)
+    if not line then return false, detail end
+    local spoken, result, receipt = Dialogue.emitResolved(actor, topic, line)
+    if spoken and type(detail) == "table" then
+        detail.channel = receipt.channel
+        detail.displayUntil = receipt.displayUntil
+    end
+    return spoken, result, detail
+end
+
+local toolRequestNext = setmetatable({}, { __mode = "k" })
+local nextPartyToolRequestAt = -math.huge
+
+function Dialogue.missingToolKind(reason)
+    local lowered = string.lower(tostring(reason or ""))
+    local chefTool = string.match(lowered, "^chef_tool_missing:([a-z_]+)$")
+    if chefTool and pools["work.missing." .. chefTool] then return chefTool end
+    if lowered == "chef_heat_source_missing" then return "heat_source" end
+    if lowered == "chef_soup_bowls_missing" then return "bowl" end
+    if lowered == "fishing_rod_missing" then return "rod" end
+    if lowered == "fishing_bait_missing" then return "bait" end
+    if not (string.find(lowered, "missing_tool:", 1, true)
+        or string.find(lowered, "missing_build_supply:", 1, true)
+        or string.find(lowered, "need", 1, true)) then return nil end
+    if string.find(lowered, "choptree", 1, true)
+        or string.find(lowered, "axe", 1, true) then return "axe" end
+    if string.find(lowered, "diggrave", 1, true)
+        or string.find(lowered, "shovel", 1, true) then return "shovel" end
+    for _, kind in ipairs({ "saw", "hammer", "screwdriver", "blowtorch" }) do
+        if string.find(lowered, kind, 1, true) then return kind end
+    end
+    if string.find(lowered, "pry", 1, true)
+        or string.find(lowered, "crowbar", 1, true) then return "pry" end
+    return nil
+end
+
+-- Positioning owns the approach and face-to-face pose. A failed work attempt
+-- only stages this conversation; the complaint is spoken after arrival.
+function Dialogue.requestMissingTool(actor, player, kind, snapshot, onSpoken,
+    stillMissing)
+    if not pools["work.missing." .. tostring(kind)] then return false, "unknown_tool" end
+    local utility = U()
+    if not utility or not utility.isValidActor(actor)
+        or not utility.isValidActor(player) then return false, "tool_partner_unavailable" end
+    if not utility.sameFloor(actor, player) or utility.distance(actor, player) > 16 then
+        return false, "tool_partner_too_far"
+    end
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    if (tonumber(snapshot.threatCount) or 0) > 0
+        or (tonumber(snapshot.immediateCount) or 0) > 0
+        or (tonumber(snapshot.pressure) or 0) > 0 then
+        return false, "tool_conversation_unsafe"
+    end
+    local current = utility.nowMs()
+    if current < (toolRequestNext[actor] or -math.huge)
+        or current < nextPartyToolRequestAt then return false, "tool_request_cooldown" end
+    if not SC.Positioning or type(SC.Positioning.beginConversation) ~= "function"
+        or type(SC.Positioning.activeConversation) ~= "function" then
+        return false, "positioning_unavailable"
+    end
+    if SC.Positioning.activeConversation(actor) then return false, "conversation_active" end
+    local accepted, reason = SC.Positioning.beginConversation(actor, player, {
+        action = "missing_tool", emote = "shrug", stress = 55,
+        timeoutMs = 30000,
+        onReady = function()
+            if not utility.isValidActor(actor) or not utility.isValidActor(player)
+                or not utility.sameFloor(actor, player) then return false end
+            if type(stillMissing) == "function" and not stillMissing() then
+                return false
+            end
+            local spoken = Dialogue.say(actor, "work.missing." .. kind)
+            if spoken then
+                toolRequestNext[actor] = utility.nowMs() + 300000
+                if type(onSpoken) == "function" then pcall(onSpoken) end
+            end
+            return spoken == true
+        end,
+    })
+    if accepted == true then
+        -- A failed path or danger cancellation can retry shortly. A delivered
+        -- request waits five minutes before this worker complains again.
+        toolRequestNext[actor] = current + 15000
+        nextPartyToolRequestAt = current + 12000
+    end
+    return accepted == true, reason
+end
+
+function Dialogue.lastSpokenAt(actor)
+    return tonumber(runtimeFor(actor).lastSpokenAt) or -math.huge
+end
+
+function Dialogue.lastDisplayUntil(actor)
+    return tonumber(runtimeFor(actor).lastDisplayUntil) or -math.huge
+end
+
+function Dialogue.lastSpokenTopic(actor)
+    return runtimeFor(actor).lastSpokenTopic
+end
+
+local lastWordTopics = {
+    pinned = "lastwords.pinned",
+    zombies = "lastwords.zombies",
+    health = "lastwords.health",
+    turning = "lastwords.turning",
+}
+
+local function lastWordsPlayer(player)
+    if player ~= nil then return player end
+    if type(getPlayer) ~= "function" then return nil end
+    local ok, value = pcall(getPlayer)
+    return ok and value or nil
+end
+
+local function lastWordsPlayerName(player)
+    if player ~= nil and U() then
+        local descriptor = select(1, U().call(player, "getDescriptor"))
+        local forename = descriptor and select(1, U().call(descriptor, "getForename")) or nil
+        if forename ~= nil and tostring(forename) ~= "" then return tostring(forename) end
+        local name = U().nameOf(player)
+        if name and name ~= "" and name ~= "Survivor" then return tostring(name) end
+    end
+    return "my friend"
+end
+
+local function mortalityState(actor)
+    local runtime = runtimeFor(actor)
+    runtime.mortality = type(runtime.mortality) == "table" and runtime.mortality or {}
+    return runtime.mortality
+end
+
+local function lastWordCandidates(topic, state)
+    local voice, mood = styleFor(state, {})
+    local result = candidatesFor(pools[topic], voice, mood)
+    local seen = {}
+    for _, line in ipairs(result) do seen[line] = true end
+    local tier
+    if SC.Relationship and type(SC.Relationship.tier) == "function" then
+        local ok, value = pcall(SC.Relationship.tier, state)
+        if ok then tier = value end
+    end
+    if tier == nil then
+        local trust, bond = tonumber(state.trust) or 0, tonumber(state.bond) or 0
+        local score = trust * 0.55 + bond * 0.45
+        tier = score >= 80 and "family" or score >= 55 and "close"
+            or score >= 30 and "trusted" or score >= 10 and "ally" or "cautious"
+    end
+    appendUnique(result, pools[topic] and pools[topic]["bond_" .. tostring(tier)], seen)
+    return result, tier
+end
+
+-- Speak while the native actor is still alive, because once permanent-death
+-- cleanup starts the actor can no longer reliably own a chat bubble. Pinned
+-- pleas use a cooldown; terminal lines are one per critical episode, with a
+-- separate one-time turning line when Knox infection becomes irreversible.
+function Dialogue.sayLastWords(actor, circumstance, player, options)
+    local topic = lastWordTopics[circumstance]
+    if actor == nil or topic == nil then return false, "invalid_last_words" end
+    local state = commandState(actor)
+    if state.recruited ~= true then return false, "not_recruited" end
+    options = type(options) == "table" and options or {}
+    local current = U() and U().nowMs() or 0
+    local mortality = mortalityState(actor)
+    if circumstance == "pinned" then
+        local cooldown = U().config("lastWordsPinnedCooldownMs") or 30000
+        if current - (tonumber(mortality.lastPinnedAt) or -math.huge) < cooldown then
+            return false, "pinned_words_on_cooldown"
+        end
+    elseif circumstance == "turning" then
+        if mortality.turningSpoken == true then return false, "turning_words_already_spoken" end
+    elseif options.force ~= true and mortality.criticalEpisodeSpoken == true then
+        return false, "critical_words_already_spoken"
+    elseif options.force == true and current - (tonumber(mortality.lastFinalAt) or -math.huge)
+        < (U().config("lastWordsFinalRepeatGuardMs") or 6000) then
+        return false, "final_words_repeat_guard"
+    end
+    player = lastWordsPlayer(player)
+    local candidates, relationshipTier = lastWordCandidates(topic, state)
+    local spoken, line = Dialogue.say(actor, topic, candidates,
+        { lastWordsPlayerName(player) }, {
+            state = state, recentLimit = circumstance == "pinned" and 8 or 12,
+            salt = tostring(current) .. ":" .. tostring(circumstance),
+        })
+    if spoken ~= true then return false, line end
+    if circumstance == "pinned" then
+        mortality.lastPinnedAt = current
+    else
+        mortality.lastFinalAt = current
+        if circumstance == "turning" then mortality.turningSpoken = true
+        else mortality.criticalEpisodeSpoken = true end
+    end
+    return true, line, {
+        topic = topic,
+        relationshipTier = relationshipTier,
+        poolSize = #candidates,
+    }
+end
+
+-- Called from the one-second vitals lane and immediately after a companion is
+-- wounded by a zombie. Recovery opens a future critical episode; terminal Knox
+-- infection never resets and therefore receives exactly one farewell.
+function Dialogue.monitorMortality(actor, player, source)
+    if actor == nil or not U() or U().isDead(actor) then return false, "actor_unavailable" end
+    local state = commandState(actor)
+    if state.recruited ~= true then return false, "not_recruited" end
+    local current = U().nowMs()
+    local mortality = mortalityState(actor)
+    if source == "zombie" then mortality.lastZombieWoundAt = current end
+    -- Ask the medical assessment rather than reading the body directly:
+    -- getApparentInfectionLevel() is max(fever, zombie infection, food sickness),
+    -- so a badly food-poisoned companion used to speak its turning last words.
+    local infected, infectionLevel = false, 0
+    if SC.Medical and type(SC.Medical.assess) == "function" then
+        local ok, assessment = pcall(SC.Medical.assessCached or SC.Medical.assess, actor)
+        if ok and type(assessment) == "table" then
+            infected = assessment.knoxInfected == true
+            infectionLevel = tonumber(assessment.infectionLevel) or 0
+        end
+    end
+    if infected and infectionLevel >= (U().config("lastWordsTurningThreshold") or 97) then
+        return Dialogue.sayLastWords(actor, "turning", player)
+    end
+    local health = tonumber((U().nativeHealth(actor))) or 100
+    if health >= (U().config("lastWordsRecoveryThreshold") or 35) then
+        mortality.criticalEpisodeSpoken = false
+    end
+    if health > (U().config("lastWordsHealthThreshold") or 15) then
+        return false, "health_not_terminal"
+    end
+    local recentZombie = current - (tonumber(mortality.lastZombieWoundAt) or -math.huge)
+        <= (U().config("lastWordsZombieMemoryMs") or 12000)
+    return Dialogue.sayLastWords(actor, recentZombie and "zombies" or "health", player)
+end
+
+local function ambientWorldState()
+    local hour, age
+    if type(getGameTime) == "function" then
+        local ok, gameTime = pcall(getGameTime)
+        if ok and gameTime ~= nil then
+            local value, called = U().call(gameTime, "getTimeOfDay")
+            if called then hour = tonumber(value) end
+            value, called = U().call(gameTime, "getWorldAgeHours")
+            if called then age = tonumber(value) end
+        end
+    end
+    hour = hour and hour % 24 or nil
+    age = age or (hour and hour or 0)
+
+    local rain, fog = 0, 0
+    if type(getClimateManager) == "function" then
+        local ok, climate = pcall(getClimateManager)
+        if ok and climate ~= nil then
+            local value, called = U().call(climate, "getPrecipitationIntensity")
+            if called then rain = math.max(0, tonumber(value) or 0) end
+            value, called = U().call(climate, "getFogIntensity")
+            if called then fog = math.max(0, tonumber(value) or 0) end
+        end
+    end
+    return hour, math.floor(age / 24), rain, fog
+end
+
+local function ambientTopic(runtime, hour, day, rain, fog)
+    runtime.ambient = type(runtime.ambient) == "table" and runtime.ambient or {
+        spoken = {}, rainEpisode = 0, fogEpisode = 0,
+        rainActive = false, fogActive = false,
+    }
+    local ambient = runtime.ambient
+    local raining = rain >= 0.15
+    local foggy = fog >= 0.40
+    if raining and not ambient.rainActive then ambient.rainEpisode = ambient.rainEpisode + 1 end
+    if foggy and not ambient.fogActive then ambient.fogEpisode = ambient.fogEpisode + 1 end
+    ambient.rainActive, ambient.fogActive = raining, foggy
+
+    local candidates = {}
+    if foggy then candidates[#candidates + 1] = {
+        topic = "ambient.fog", key = "fog:" .. tostring(ambient.fogEpisode), priority = 4,
+    } end
+    if raining then candidates[#candidates + 1] = {
+        topic = "ambient.rain", key = "rain:" .. tostring(ambient.rainEpisode), priority = 3,
+    } end
+    if hour and hour >= 6 and hour < 9.5 then candidates[#candidates + 1] = {
+        topic = "ambient.morning", key = "morning:" .. tostring(day), priority = 2,
+    } end
+    if hour and hour >= 18 and hour < 21 then candidates[#candidates + 1] = {
+        topic = "ambient.dusk", key = "dusk:" .. tostring(day), priority = 1,
+    } end
+    table.sort(candidates, function(first, second) return first.priority > second.priority end)
+    for _, candidate in ipairs(candidates) do
+        if ambient.spoken[candidate.key] ~= true then return candidate end
+    end
+    return nil
+end
+
+-- Low-frequency observations make companions acknowledge the world without
+-- stealing control from combat, work or navigation. Time remarks are once per
+-- game day; rain and fog are once per continuous weather episode. A party-wide
+-- cooldown prevents several companions from speaking over one another.
+function Dialogue.ambientPulse(actor, player, snapshot, suppliedCommands, current)
+    local utility = U()
+    if actor == nil or player == nil or not utility
+        or utility.isDead(actor) or utility.isDead(player) then return false, "ambient_invalid_actor" end
+    local commands = commandState(actor, suppliedCommands)
+    if commands.recruited ~= true then return false, "ambient_not_recruited" end
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    local threatCount = tonumber(snapshot.threatCount) or #(snapshot.threats or {})
+    local immediate = tonumber(snapshot.immediateCount) or #(snapshot.immediateAttackers or {})
+    local playerDanger = type(snapshot.player) == "table"
+        and tonumber(snapshot.player.danger) or 0
+    if threatCount > 0 or immediate > 0 or (tonumber(snapshot.pressure) or 0) > 0
+        or playerDanger > 0 then return false, "ambient_unsafe" end
+    if utility.distance(actor, player) > (utility.config("ambientDialogueDistance") or 10) then
+        return false, "ambient_too_far"
+    end
+    current = tonumber(current) or utility.nowMs()
+    if not utility.isDue(actor, "ambient_dialogue",
+        utility.config("ambientDialoguePulseMs") or 5000, current) then
+        return false, "ambient_not_due"
+    end
+    local runtime = runtimeFor(actor)
+    if current - (tonumber(runtime.lastSpokenAt) or -math.huge)
+        < (utility.config("ambientDialogueActorCooldownMs") or 90000) then
+        return false, "ambient_actor_cooldown"
+    end
+    if current - lastAmbientGroupAt
+        < (utility.config("ambientDialogueGroupCooldownMs") or 30000) then
+        return false, "ambient_group_cooldown"
+    end
+    local hour, day, rain, fog = ambientWorldState()
+    local candidate = ambientTopic(runtime, hour, day, rain, fog)
+    if not candidate then return false, "ambient_nothing_new" end
+    if candidate.topic == "ambient.dusk" and SC.BaseLife
+        and type(SC.BaseLife.isInside) == "function"
+        and SC.BaseLife.isInside(actor) == true then
+        candidate.topic = "ambient.dusk.camp"
+    end
+    local spoken, line = Dialogue.say(actor, candidate.topic, nil, nil, { state = commands })
+    if spoken == true then
+        runtime.ambient.spoken[candidate.key] = true
+        lastAmbientGroupAt = current
+        return true, candidate.topic, line
+    end
+    return false, line or "ambient_speech_rejected"
+end
+
+function Dialogue.reset(actor)
+    if actor ~= nil then
+        actorHistory[actor] = nil
+        toolRequestNext[actor] = nil
+    else
+        actorHistory = setmetatable({}, { __mode = "k" })
+        idHistory = {}
+        lastAmbientGroupAt = -math.huge
+        partyRecent = {}
+        toolRequestNext = setmetatable({}, { __mode = "k" })
+        nextPartyToolRequestAt = -math.huge
+    end
+    return true
+end
+
+function Dialogue.poolSize(topic, actor, state, options)
+    options = type(options) == "table" and options or {}
+    local voice, mood = styleFor(commandState(actor, state), options)
+    return #candidatesFor(pools[topic], voice, mood, options.includeRegisters)
+end
+
+function Dialogue.topics()
+    local result = {}
+    for topic in pairs(pools) do result[#result + 1] = topic end
+    table.sort(result)
+    return result
+end
+
+SC.Modules = SC.Modules or {}
+SC.Modules.dialogue = true
+return Dialogue

@@ -1,0 +1,206 @@
+package sol.bridge;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+import zombie.characters.IsoGameCharacter;
+import zombie.characters.IsoPlayer;
+import zombie.characters.SurvivorDesc;
+import zombie.iso.IsoCell;
+
+public final class SolIsoPlayerShell extends IsoPlayer {
+    private static final Method GENERIC_CHARACTER_UPDATE = resolveGenericCharacterUpdate();
+
+    private boolean solPathActive = false;
+    private long solUpdateCount = 0L;
+    private long solPathExecuteAttempts = 0L;
+    private long solPathExecuteSuccesses = 0L;
+    private long solPathExecuteSkippedCurrentState = 0L;
+
+    private static Method resolveGenericCharacterUpdate() {
+        try {
+            Method method = IsoGameCharacter.class.getDeclaredMethod("updateInternal");
+ method.setAccessible(true);
+ return method;
+ } catch (ReflectiveOperationException | RuntimeException failure) {
+ return null;
+ }
+ }
+
+ private void updateGenericCharacter() {
+ if (GENERIC_CHARACTER_UPDATE == null) {
+            throw new IllegalStateException("generic IsoGameCharacter update is unavailable");
+ }
+ try {
+ GENERIC_CHARACTER_UPDATE.invoke(this);
+ } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("generic IsoGameCharacter update is inaccessible", failure);
+ } catch (InvocationTargetException failure) {
+ Throwable cause = failure.getCause();
+ if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+ if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("generic IsoGameCharacter update failed", cause);
+ }
+ }
+
+    private void advanceSolPath() {
+        if (!solPathActive) return;
+        try {
+            Class<?> pathFindStateClass = Class.forName("zombie.ai.states.PathFindState");
+            Object state = pathFindStateClass.getMethod("instance").invoke(null);
+            Method getStateMachine = getClass().getMethod("getStateMachine");
+            Object stateMachine = getStateMachine.invoke(this);
+            Object currentState = null;
+            if (stateMachine != null) {
+                Method getCurrent = stateMachine.getClass().getMethod("getCurrent");
+                currentState = getCurrent.invoke(stateMachine);
+            }
+            if (currentState == state) {
+                solPathExecuteSkippedCurrentState++;
+                return;
+            }
+            Method execute = pathFindStateClass.getMethod("execute", IsoGameCharacter.class);
+            solPathExecuteAttempts++;
+            execute.invoke(state, this);
+            solPathExecuteSuccesses++;
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("reflective PathFindState execute failed", failure);
+        }
+    }
+
+    private void reconcileSolPathState() {
+        if (!solPathActive) return;
+        try {
+            Method getBehavior = getClass().getMethod("getPathFindBehavior2");
+            Object behavior = getBehavior.invoke(this);
+            Method getVarBool = getClass().getMethod("getVariableBoolean", String.class);
+            boolean requested = Boolean.TRUE.equals(getVarBool.invoke(this, "bPathfind"));
+            boolean cancelled = false;
+            if (behavior != null) {
+                Method cancelledMethod = behavior.getClass().getMethod("getIsCancelled");
+                Object value = cancelledMethod.invoke(behavior);
+                cancelled = Boolean.TRUE.equals(value);
+            }
+            if (!requested || cancelled) {
+                solPathActive = false;
+                super.setMoving(false);
+            }
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("path terminal reconciliation failed", failure);
+        }
+    }
+
+    public long getSolUpdateCount() {
+        return solUpdateCount;
+    }
+
+    public long getSolPathExecuteAttempts() {
+        return solPathExecuteAttempts;
+    }
+
+    public long getSolPathExecuteSuccesses() {
+        return solPathExecuteSuccesses;
+    }
+
+    public long getSolPathExecuteSkippedCurrentState() {
+        return solPathExecuteSkippedCurrentState;
+    }
+
+    public SolIsoPlayerShell(IsoCell cell, SurvivorDesc descriptor, int x, int y, int z, boolean remote) {
+        super(cell, descriptor, x, y, z, remote);
+    }
+
+    @Override
+    public boolean isLocalPlayer() {
+        return false;
+    }
+
+    @Override
+    public void updateLOS() {
+        // Non-local companions must never own or write a local-player LOS channel.
+    }
+
+    @Override
+    public void setTargetAlpha(int playerIndex, float targetAlpha) {
+        // Keep Sol's render opacity actor-local when the local player's LOS pass requests a fade.
+        super.setTargetAlpha(playerIndex, 1.0f);
+    }
+
+    @Override
+    public boolean isPlayerMoving() {
+        return solPathActive;
+    }
+
+    @Override
+    public void setMoving(boolean moving) {
+        super.setMoving(moving);
+    }
+
+    public void stopSolPathOwnership() {
+        solPathActive = false;
+        try { setVariable("bPathfind", false); } catch (RuntimeException ignored) {}
+ super.setMoving(false);
+ }
+
+    private void forceSolPathOwner() {
+        solPathActive = true;
+        setVariable("bPathfind", true);
+        super.setMoving(false);
+    }
+
+    @Override
+    public void pathToLocationF(float x, float y, float z) {
+        super.pathToLocationF(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToLocation(int x, int y, int z) {
+        super.pathToLocation(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToCharacter(IsoGameCharacter target) {
+        super.pathToCharacter(target);
+        if (target != null) forceSolPathOwner();
+    }
+
+    private void synchronizeSolLocomotion() {
+        super.setMoving(solPathActive);
+        try {
+            Class<?> type = getClass();
+            while (type != null) {
+                try {
+                    Method method = type.getDeclaredMethod("updateMovementRates");
+ method.setAccessible(true);
+ method.invoke(this);
+ return;
+ } catch (NoSuchMethodException missing) {
+ type = type.getSuperclass();
+ }
+ }
+ throw new NoSuchMethodException("updateMovementRates");
+ } catch (ReflectiveOperationException failure) {
+ throw new IllegalStateException("reflective updateMovementRates failed", failure);
+ }
+ }
+
+    @Override
+    public void update() {
+        solUpdateCount++;
+        IsoPlayer local = IsoPlayer.getInstance();
+        try {
+            synchronizeSolLocomotion();
+            updateGenericCharacter();
+            setAlphaAndTarget(1.0f);
+            advanceSolPath();
+            reconcileSolPathState();
+        } finally {
+            IsoPlayer.setInstance(local);
+        }
+    }
+}
+
+
+

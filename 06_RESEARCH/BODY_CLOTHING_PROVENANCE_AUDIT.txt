@@ -1,0 +1,147 @@
+========== SOL BODY/CLOTHING PROVENANCE AUDIT ==========
+WORK=C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol
+
+--- SOL MOD.INFO FILES ---
+MODINFO=C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol\mod.info
+  name=Sol
+  id=Sol
+  require=\ZombieBuddy
+  javaJarFile=media/java/SurvivorCompanionBridge.jar
+  javaPkgName=survivorcompanion.bridge
+MODINFO=C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol\42\mod.info
+  name=Sol
+  id=Sol
+  require=\ZombieBuddy
+  javaJarFile=media/java/SolCombined.jar
+  javaPkgName=localplayerbody
+
+--- SOL JARS ---
+JAR=C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol\42\media\java\SolCombined.jar
+  SHA256=45CAFC1D95460F45CBF73F12D331478B8C00455EE1DEFB65F44E2C51AE9F0F97
+JAR=C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol\42\media\java\SurvivorCompanionBridge.jar
+  SHA256=04567303035A689DAF4744C7521637EEAEC4E7F6CBFAE99BC4B5C481BB520F3E
+
+--- SOURCE -> SOL EXACT PROVENANCE ---
+
+### VSGIRL_EXTENSION
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3820897273\mods\VSGirlBodyExtension\42
+SOURCE_FILES=4558
+EXACT_MATCH=4497
+PRESENT_BUT_DIFFERENT=4
+ABSENT_FROM_SOL=57
+MATCH_SAMPLES:
+  media\sandbox-options.txt
+  media\clothing\clothingItems\PinkBunny_er_nan.xml
+  media\clothing\clothingItems\PinkBunny_nan.xml
+  media\clothing\clothingItems\PinkBunny_nan_c.xml
+  media\clothing\clothingItems\PinkBunny_so_nan.xml
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+  media\lua\shared\Translate\EN\Sandbox.json
+  media\lua\shared\Translate\EN\UI.json
+
+### VSGIRL_CLOTHING_COMPAT
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3820917070\mods\VSGirlBodyExtensionClothingCompatibility\42
+SOURCE_FILES=1913
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=4
+ABSENT_FROM_SOL=1909
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+  media\sandbox-options.txt
+  media\lua\shared\Translate\EN\Sandbox.json
+
+### TOMB_BODY_COMMON
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3429790870\mods\Tomb's Player Body\common
+SOURCE_FILES=0
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=0
+ABSENT_FROM_SOL=0
+
+### TOMB_BODY_42_13
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3429790870\mods\Tomb's Player Body\42.13
+SOURCE_FILES=5
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=2
+ABSENT_FROM_SOL=3
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+
+### TOMB_COMPAT_COMMON
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3431734923\mods\Tomb's Player Body - Compatability\common
+SOURCE_FILES=107
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=0
+ABSENT_FROM_SOL=107
+
+### TOMB_COMPAT_42
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3431734923\mods\Tomb's Player Body - Compatability\42.0
+SOURCE_FILES=8
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=2
+ABSENT_FROM_SOL=6
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+
+### TOMBFIT
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3809968144\mods\TombFit - Gear & Hair Compatibility\common
+SOURCE_FILES=618
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=2
+ABSENT_FROM_SOL=616
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+
+### SPNCC_COMMON
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3414634809\mods\SpongieCharacterCustomisation\common
+SOURCE_FILES=83
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=2
+ABSENT_FROM_SOL=81
+DIFFERENT_SAMPLES:
+  media\lua\shared\Translate\EN\Sandbox.json
+  media\lua\shared\Translate\EN\UI.json
+
+### SPNCC_42_19
+SOURCE=C:\Program Files (x86)\Steam\steamapps\workshop\content\108600\3414634809\mods\SpongieCharacterCustomisation\42.19
+SOURCE_FILES=55
+EXACT_MATCH=0
+PRESENT_BUT_DIFFERENT=3
+ABSENT_FROM_SOL=52
+DIFFERENT_SAMPLES:
+  mod.info
+  poster.png
+  media\sandbox-options.txt
+
+--- CRITICAL CLOTHING / OUTFIT / MASK INVENTORY IN SOL ---
+clothingItems=15
+models_X=2857
+textures\Body\Masks=0
+Outfit=0
+Distributions=0
+Procedural=0
+Hair=3
+
+--- JAVA PACKAGE PRESENCE IN SOL JARS ---
+JAR_SCAN=SolCombined.jar
+  localplayerbody/=687
+  vsclothingcompat/=0
+  survivorcompanion/=62
+  me/zed_0xff/zombie_buddy/=0
+JAR_SCAN=SurvivorCompanionBridge.jar
+  localplayerbody/=0
+  vsclothingcompat/=0
+  survivorcompanion/=62
+  me/zed_0xff/zombie_buddy/=0
+
+--- SAFETY ---
+WORK_CHANGED=False
+STABLE_CHANGED=False
+LIVE_CHANGED=False
+STEAM_CHANGED=False
+ONLY_RESEARCH_REPORT_WRITTEN=True

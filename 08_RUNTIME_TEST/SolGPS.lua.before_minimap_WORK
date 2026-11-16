@@ -1,0 +1,408 @@
+-- SolGPS.lua - Sol drives you to a destination, with a Sol-styled GPS panel.
+-- Driving is Living Fellows' own (SCDriving.lua): the native bridge presses the car's pedals and wheel, follows
+-- the street route of SCExpeditionRoute, slides round wrecks, stops for blocked lanes and re-plans up to 3 times.
+--   SC.Driving.takeWheel(actor, vehicle, intent)  -> Sol takes the driver's seat (SC.Vehicle.boardDriver)
+--   SC.Driving.drive(actor, {x, y, z = 0}, { speedKmh <= 30 })
+--   SC.Driving.jobStatus(actor) / SC.Driving.status(actor) / SC.Driving.stop(actor, reason)
+-- Destinations: the newest symbol you placed on the world map, home, a remembered place, or Sol Mind's request.
+require "ISUI/ISPanel"
+require "SolText"
+SolUI = SolUI or {}
+local U = SolUI
+local T = SolText
+U.GPS_VERSION = "0.5.0"
+local REQ, STATE = "SolGPS_Request.txt", "SolGPS_State.txt"
+local SPEEDS = { slow = 10, normal = 20, fast = 30 }          -- LF caps companion driving at 30 km/h
+local W, H = 330, 236
+local function log(m) print("[SolGPS] " .. tostring(m)) end
+local function nowMs() return getTimestampMs and getTimestampMs() or os.time() * 1000 end
+local function LF() local sc = SurvivorCompanion; return type(sc) == "table" and sc or nil end
+local function call(o, name, ...)
+    if o == nil then return nil end
+    local f = o[name]; if f == nil then return nil end
+    local ok, v = pcall(f, o, ...); if ok then return v end; return nil
+end
+local function isAr() return not (U.lang and U.lang() == "en") end
+
+U.gps = U.gps or { dest = nil, speed = "normal", lastResult = nil, reason = nil }
+local G = U.gps
+if G.solo == nil then G.solo = false end
+
+-- ---------------------------------------------------------------- destinations
+function U.gpsMapMarker()
+    local wm = ISWorldMap_instance
+    local api = wm and wm.mapAPI and call(wm.mapAPI, "getSymbolsAPI")
+    if not api then return nil, "map_not_opened" end
+    local n = tonumber(call(api, "getSymbolCount")) or 0
+    if n <= 0 then return nil, "no_marker" end
+    local s = call(api, "getSymbolByIndex", n - 1)
+    local x, y = tonumber(call(s, "getWorldX")), tonumber(call(s, "getWorldY"))
+    if not x or not y then return nil, "no_marker" end
+    return { x = math.floor(x), y = math.floor(y), name = isAr() and "\\u0627\\u0644\\u0639\\u0644\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u062E\\u0631\\u064A\\u0637\\u0629" or "Map marker" }
+end
+function U.gpsSetDestination(d) if d and d.x and d.y then G.dest = { x = math.floor(d.x), y = math.floor(d.y), name = d.name or "" }; return true end return false end
+
+-- ---------------------------------------------------------------- driving
+local function sol() return U.solActor and U.solActor() or nil end
+local function playerVehicle() local p = getSpecificPlayer and getSpecificPlayer(0); return p and call(p, "getVehicle") or nil end
+local function nearestCar()
+    local p = getSpecificPlayer and getSpecificPlayer(0)
+    local anchor = sol() or p
+    if not anchor then return nil end
+    local sc = LF()
+    local service = sc and sc.Vehicle
+    if type(service) ~= "table" or type(service.loadedVehicles) ~= "function" then return nil end
+    local ok, vehicles = pcall(service.loadedVehicles)
+    if not ok or type(vehicles) ~= "table" then return nil end
+    local ax, ay = tonumber(call(anchor, "getX")), tonumber(call(anchor, "getY"))
+    if not ax or not ay then return nil end
+    local best, bd = nil, 12 * 12
+    for _, v in ipairs(vehicles) do
+        local vx, vy = tonumber(call(v, "getX")), tonumber(call(v, "getY"))
+        if vx and vy then
+            local d = (vx - ax)^2 + (vy - ay)^2
+            if d < bd then best, bd = v, d end
+        end
+    end
+    return best
+end
+-- Native driving ownership must be armed while the player is still outside.
+-- Once armed, the player can board as passenger and the prepared job is promoted
+-- to a route without calling the native driveStart bridge a second time.
+local function prepareDriver(D, s)
+    if not D or type(D.start) ~= "function" then
+        G.lastResult, G.reason = "failed", "driving_unavailable"
+        return false, G.reason
+    end
+    local goal = G.dest and { x = G.dest.x, y = G.dest.y, z = 0 } or nil
+    local ok, why = D.start(s, goal)
+    if not ok then
+        G.lastResult, G.reason = "failed", tostring(why or "cannot_prepare_drive")
+        return false, G.reason
+    end
+    if G.dest then
+        G.lastResult, G.reason = "failed", "board_passenger"
+        return true, "board_passenger"
+    end
+    G.lastResult, G.reason = "ready", "await_destination"
+    return true, "await_destination"
+end
+
+-- Sol takes the driver's seat.  If she is already a passenger she first exits
+-- and re-enters through SCVehicle's verified driver-seat transaction; no direct
+-- switchSeat shortcut is used.
+function U.gpsTakeWheel()
+    local SC = LF(); local D = SC and SC.Driving
+    if not D or type(D.takeWheel) ~= "function" or type(D.start) ~= "function" then
+        G.lastResult, G.reason = "failed", "driving_unavailable"; return false, G.reason
+    end
+    local s = sol(); if not s then G.lastResult, G.reason = "failed", "no_sol"; return false, G.reason end
+    if D.isDriver and D.isDriver(s) then return prepareDriver(D, s) end
+    local inside = call(s, "getVehicle")
+    local pv = playerVehicle()
+    if pv then
+        G.lastResult, G.reason = "failed", "player_aboard"
+        G.retryWhenOut = true
+        return false, G.reason
+    end
+    if inside then
+        G.wheelCar, G.wheelWaitSince = inside, nowMs()
+        if U.issueLF then
+            if U.extractPage then pcall(U.extractPage, "orders") end
+            pcall(U.issueLF, "exit_vehicle")
+        end
+        G.lastResult, G.reason = "failed", "moving_to_wheel"
+        return true, "moving_to_wheel"
+    end
+    local veh = G.wheelCar or nearestCar()
+    if not veh then G.lastResult, G.reason = "failed", "no_vehicle_near"; return false, G.reason end
+    local ok, why = D.takeWheel(s, veh, "sol_gps")
+    if not ok then
+        G.lastResult, G.reason = "failed", tostring(why or "cannot_take_wheel")
+        return false, G.reason
+    end
+    G.wheelCar = veh
+    return prepareDriver(D, s)
+end
+
+function U.gpsStart(speedKey, soloMode)
+    local SC = LF(); local D = SC and SC.Driving
+    if not D or type(D.drive) ~= "function" or type(D.start) ~= "function" then
+        G.lastResult, G.reason = "failed", "driving_unavailable"; return false, G.reason
+    end
+    if not G.dest then G.lastResult, G.reason = "failed", "no_destination"; return false, G.reason end
+    local s = sol(); if not s then G.lastResult, G.reason = "failed", "no_sol"; return false, G.reason end
+    if speedKey and SPEEDS[speedKey] then G.speed = speedKey end
+    if soloMode ~= nil then G.solo = soloMode == true end
+
+    if not (D.isDriver and D.isDriver(s)) then
+        local ok, why = U.gpsTakeWheel()
+        if not ok then return false, why end
+        if why == "moving_to_wheel" then return true, why end
+    else
+        local prepared, why = prepareDriver(D, s)
+        if not prepared then return false, why end
+    end
+
+    -- Normal trips wait for the local player to board. Emergency/rescue plans
+    -- may explicitly arm solo driving so Sol can travel to a remote player.
+    local pv = playerVehicle()
+    local sv = call(s, "getVehicle")
+    if not G.solo then
+        if not pv then
+            G.awaitPlayer = true
+            G.lastResult, G.reason = "failed", "board_passenger"
+            return true, "board_passenger"
+        end
+        if pv ~= sv then G.lastResult, G.reason = "failed", "wrong_vehicle"; return false, G.reason end
+    end
+
+    G.awaitPlayer = false
+    local ok, why = D.drive(s, { x = G.dest.x, y = G.dest.y, z = 0 }, { speedKmh = SPEEDS[G.speed] })
+    G.lastResult, G.reason = ok and "driving" or "failed", ok and nil or tostring(why)
+    G.startedAt = nowMs()
+    log((ok and "driving to " or "drive refused: ") .. G.dest.x .. "," .. G.dest.y
+        .. " at " .. SPEEDS[G.speed] .. " km/h " .. tostring(why or ""))
+    return ok, why
+end
+function U.gpsStop()
+    G.retryWhenOut, G.awaitPlayer, G.wheelWaitSince = false, false, nil
+    G.solo = false
+    local SC = LF(); local s = sol()
+    if SC and SC.Driving and s then pcall(SC.Driving.stop, s, "player_stop") end
+    G.lastResult, G.reason = "stopped", nil
+    return true
+end
+function U.gpsStatus()
+    local SC = LF(); local s = sol()
+    local st = { dest = G.dest, speed = G.speed, result = G.lastResult, reason = G.reason, solo = G.solo == true }
+    if SC and SC.Driving and s then
+        local okJ, js = false, nil
+        if type(SC.Driving.jobStatus) == "function" then okJ, js = pcall(SC.Driving.jobStatus, s) end
+        if okJ and type(js) == "table" then st.phase = js.phase; st.result = js.result or st.result; st.reason = js.reason or st.reason; if js.reason == "no_route" and js.detail then st.reason = "no_route:" .. tostring(js.detail) end end
+    end
+    local veh = playerVehicle() or (s and call(s, "getVehicle"))
+    if veh then
+        local vx, vy = tonumber(call(veh, "getX")), tonumber(call(veh, "getY"))
+        if vx and G.dest then st.distance = math.floor(math.sqrt((vx - G.dest.x) ^ 2 + (vy - G.dest.y) ^ 2) + 0.5) end
+        st.kmh = tonumber(call(veh, "getCurrentSpeedKmHour"))
+        local gas = call(veh, "getPartById", "GasTank")
+        local amt, cap = tonumber(call(gas, "getContainerContentAmount")), tonumber(call(gas, "getContainerCapacity"))
+        if amt and cap and cap > 0 then st.fuel = amt / cap end
+    end
+    st.inVehicle = veh ~= nil
+    return st
+end
+
+-- Living Fellows' runtime normally ticks SC.Driving; if nothing ticks it while Sol drives, Sol does.
+local lfTicks, lastSeen, lastOwnTick = 0, 0, 0
+local function wrapTick()
+    local SC = LF(); local D = SC and SC.Driving
+    if not D or D.solTickWrapped or type(D.tick) ~= "function" then return end
+    local orig = D.tick
+    D.solTickOrig = orig
+    D.tick = function(...) lfTicks = lfTicks + 1; return orig(...) end
+    D.solTickWrapped = true
+end
+
+-- ---------------------------------------------------------------- Sol Mind channel (drive_to / stop from chat)
+local lastId = 0
+local function readRequest()
+    local ok, r = pcall(getFileReader, REQ, false)
+    if not ok or not r then return nil end
+    local t, line = {}, r:readLine()
+    while line ~= nil do local k, v = string.match(line, "^([^=]+)=(.*)$"); if k then t[k] = v end; line = r:readLine() end
+    r:close()
+    return t
+end
+local function writeState()
+    local st = U.gpsStatus()
+    local okw, w = pcall(getFileWriter, STATE, true, false)
+    if not okw or not w then return end
+    w:write("ack=" .. tostring(lastId) .. "\nresult=" .. tostring(st.result or "") .. "\nphase=" .. tostring(st.phase or "") ..
+        "\nreason=" .. tostring(st.reason or "") .. "\ndistance=" .. tostring(st.distance or "") .. "\nspeed=" .. tostring(st.speed or "") ..
+        "\ninVehicle=" .. tostring(st.inVehicle) .. "\nfuel=" .. tostring(st.fuel and math.floor(st.fuel * 100) or "") ..
+        "\nsolo=" .. tostring(st.solo == true) .. "\n")
+    w:close()
+end
+function U.gpsPollRequest()
+    local r = readRequest()
+    local id = r and tonumber(r.id) or 0
+    if id <= lastId then return false end
+    lastId = id
+    if r.action == "stop" then U.gpsStop()
+    elseif r.action == "take_wheel" then U.gpsTakeWheel()
+    else
+        G.solo = r.solo == "1" or r.solo == "true"
+        if r.target == "marker" then local m, why = U.gpsMapMarker(); if m then U.gpsSetDestination(m) else G.lastResult, G.reason = "failed", why end
+        elseif r.x and r.y then U.gpsSetDestination({ x = tonumber(r.x), y = tonumber(r.y), name = r.name }) end
+        if G.dest and G.reason ~= "map_not_opened" and G.reason ~= "no_marker" then U.gpsStart(r.speed, G.solo) end
+    end
+    writeState()
+    return true
+end
+
+-- ---------------------------------------------------------------- the GPS panel
+local Panel = ISPanel:derive("SolGPS")
+U.GPSClass = Panel
+function Panel:new(x, y) local o = ISPanel:new(x, y, W, H); setmetatable(o, self); self.__index = self; o.background = false; return o end
+local function tex(n) return getTexture("media/textures/SolUI/" .. n .. ".png") end
+local function txt(ui, s, x, y, w, scale, align, c, a) T.drawLine(ui, s, x, y, w, { scale = scale, align = align or "right", r = c and c[1] or 0.94, g = c and c[2] or 0.96, b = c and c[3] or 0.98, a = a or 1 }) end
+local PH_AR = { planning = "\\u062A\\u062E\\u0637\\u0637 \\u0627\\u0644\\u0637\\u0631\\u064A\\u0642", following = "\\u062A\\u0642\\u0648\\u062F", replanning = "\\u062A\\u0639\\u064A\\u062F \\u0627\\u0644\\u062A\\u062E\\u0637\\u064A\\u0637", blocked = "\\u0627\\u0644\\u0637\\u0631\\u064A\\u0642 \\u0645\\u0633\\u062F\\u0648\\u062F \\u2014 \\u062A\\u0646\\u062A\\u0638\\u0631", streaming_wait = "\\u062A\\u0646\\u062A\\u0638\\u0631 \\u062A\\u062D\\u0645\\u064A\\u0644 \\u0627\\u0644\\u0637\\u0631\\u064A\\u0642", arrived = "\\u0648\\u0635\\u0644\\u0646\\u0627", turning = "\\u062A\\u0633\\u062A\\u062F\\u064A\\u0631" }
+local REASON_AR = {
+    map_not_opened = "\\u0627\\u0641\\u062A\\u062D \\u0627\\u0644\\u062E\\u0631\\u064A\\u0637\\u0629 \\u0645\\u0631\\u0629 \\u0623\\u0648\\u0644\\u064B\\u0627\\u060C \\u0623\\u0648 \\u0627\\u062E\\u062A\\u0631 \\u0627\\u0644\\u0648\\u062C\\u0647\\u0629 \\u0628\\u0627\\u0644\\u0632\\u0631 \\u0627\\u0644\\u0623\\u064A\\u0645\\u0646 \\u0639\\u0644\\u064A\\u0647\\u0627",
+    no_marker = "\\u0644\\u0627 \\u062A\\u0648\\u062C\\u062F \\u0639\\u0644\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u062E\\u0631\\u064A\\u0637\\u0629",
+    not_in_vehicle = "\\u0644\\u0633\\u0646\\u0627 \\u0641\\u064A \\u0633\\u064A\\u0627\\u0631\\u0629",
+    no_destination = "\\u0627\\u062E\\u062A\\u0631 \\u0648\\u062C\\u0647\\u0629 \\u0623\\u0648\\u0644\\u064B\\u0627",
+    driving_unavailable = "\\u0627\\u0644\\u0642\\u064A\\u0627\\u062F\\u0629 \\u063A\\u064A\\u0631 \\u0645\\u062A\\u0627\\u062D\\u0629 \\u0627\\u0644\\u0622\\u0646",
+    cannot_take_wheel = "\\u0644\\u0645 \\u0623\\u0633\\u062A\\u0637\\u0639 \\u0627\\u0644\\u062C\\u0644\\u0648\\u0633 \\u062E\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0642\\u0648\\u062F",
+    moving_to_wheel = "\\u0623\\u0646\\u062A\\u0642\\u0644 \\u0625\\u0644\\u0649 \\u0645\\u0642\\u0639\\u062F \\u0627\\u0644\\u0633\\u0627\\u0626\\u0642...",
+    player_aboard = "\\u0627\\u0646\\u0632\\u0644 \\u0644\\u062D\\u0638\\u0629 \\u0644\\u0623\\u062C\\u0644\\u0633 \\u062E\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0642\\u0648\\u062F\\u060C \\u062B\\u0645 \\u0627\\u0631\\u0643\\u0628 \\u0628\\u062C\\u0627\\u0646\\u0628\\u064A",
+    board_passenger = "\\u0627\\u0631\\u0643\\u0628 \\u0645\\u0646 \\u0628\\u0627\\u0628 \\u0627\\u0644\\u0631\\u0627\\u0643\\u0628\\u060C \\u0648\\u0646\\u0646\\u0637\\u0644\\u0642",
+    await_destination = "\\u0623\\u0646\\u0627 \\u062e\\u0644\\u0641 \\u0627\\u0644\\u0645\\u0642\\u0648\\u062f\\u060c \\u0642\\u0644 \\u0644\\u064a \\u0625\\u0644\\u0649 \\u0623\\u064a\\u0646 \\u0646\\u0630\\u0647\\u0628",
+    no_vehicle_near = "\\u0644\\u0627 \\u062A\\u0648\\u062C\\u062F \\u0633\\u064A\\u0627\\u0631\\u0629 \\u0642\\u0631\\u064A\\u0628\\u0629",
+    no_sol = "\\u0633\\u0648\\u0644 \\u0644\\u064A\\u0633\\u062A \\u0647\\u0646\\u0627",
+    drive_already_owned = "\\u0623\\u0646\\u0627 \\u0623\\u0642\\u0648\\u062F \\u0627\\u0644\\u0622\\u0646\\u060C \\u0623\\u0648\\u0642\\u0641\\u0646\\u064A \\u0623\\u0648\\u0644\\u064B\\u0627",
+}
+local RS_AR = { failed = "\\u062A\\u0639\\u0630\\u0651\\u0631", stopped = "\\u062A\\u0648\\u0642\\u0641\\u062A", driving = "\\u062A\\u0642\\u0648\\u062F", arrived = "\\u0648\\u0635\\u0644\\u0646\\u0627" }
+function Panel:prerender()
+    local st = U.gpsStatus()
+    self.st = st
+    local t = tex("pg_btn"); if t then self:drawTextureScaled(t, 0, 0, W, H, 0.97, 1, 1, 1) end
+    self:drawRectBorder(0, 0, W, H, 1, 0.16, 0.56, 0.85)
+    txt(self, "GPS  " .. (isAr() and "\\u0633\\u0648\\u0644" or "Sol"), 10, 6, W - 20, 0.6, "right", { 0.42, 0.72, 1.0 })
+    local dest = st.dest and ((st.dest.name ~= "" and st.dest.name or (st.dest.x .. ", " .. st.dest.y))) or (isAr() and "\\u0644\\u0627 \\u0648\\u062C\\u0647\\u0629" or "No destination")
+    txt(self, (isAr() and "\\u0627\\u0644\\u0648\\u062C\\u0647\\u0629: " or "To: ") .. dest, 10, 36, W - 20, 0.5, "right")
+    local line2 = (st.distance and ((isAr() and "\\u0627\\u0644\\u0645\\u0633\\u0627\\u0641\\u0629: " or "Distance: ") .. st.distance .. (isAr() and " \\u062E\\u0627\\u0646\\u0629" or " tiles")) or "")
+        .. (st.kmh and ("   " .. math.floor(math.abs(st.kmh) + 0.5) .. " km/h") or "")
+    txt(self, line2, 10, 60, W - 20, 0.48, "right", { 0.62, 0.71, 0.78 })
+    local state = (st.phase and PH_AR[st.phase]) or (st.result and RS_AR[st.result]) or ""
+    if not isAr() then state = tostring(st.phase or st.result or "") end
+    if st.reason and st.result == "failed" then
+        local r = isAr() and REASON_AR[tostring(st.reason)]
+        state = r or (state .. ": " .. tostring(st.reason))
+    end
+    txt(self, state, 10, 84, W - 20, 0.48, "right", st.result == "failed" and { 0.94, 0.47, 0.43 } or { 0.18, 0.83, 0.39 })
+    if st.fuel then
+        local c = st.fuel < 0.2 and { 0.94, 0.47, 0.43 } or (st.fuel < 0.4 and { 0.93, 0.74, 0.19 } or { 0.18, 0.83, 0.39 })
+        txt(self, (isAr() and "\\u0627\\u0644\\u0648\\u0642\\u0648\\u062F " or "Fuel ") .. math.floor(st.fuel * 100) .. "%", 10, 108, 110, 0.46, "left", c)
+        self:drawRect(10, 132, W - 20, 6, 1, 0.05, 0.12, 0.18); self:drawRect(10, 132, (W - 20) * math.min(1, st.fuel), 6, 1, c[1], c[2], c[3])
+    end
+    self.hits = {}
+    local function btn(label, x, y, w, on, action, arg)
+        local b = tex(on and "pg_tab_on" or "pg_tab_off"); if b then self:drawTextureScaled(b, x, y, w, 30, 1, 1, 1, 1) end
+        txt(self, label, x, y + 1, w, 0.46, "center")
+        self.hits[#self.hits + 1] = { r = { x, y, w, 30 }, action = action, arg = arg }
+    end
+    local sw = (W - 32) / 3
+    btn(isAr() and "\\u0628\\u0637\\u064A\\u0621" or "Slow", W - 10 - sw, 148, sw, G.speed == "slow", "speed", "slow")
+    btn(isAr() and "\\u0645\\u062A\\u0648\\u0633\\u0637" or "Normal", W - 16 - 2 * sw, 148, sw, G.speed == "normal", "speed", "normal")
+    btn(isAr() and "\\u0633\\u0631\\u064A\\u0639" or "Fast", 10, 148, sw, G.speed == "fast", "speed", "fast")
+    local hw = (W - 26) / 2
+    btn(isAr() and "\\u0627\\u0644\\u0639\\u0644\\u0627\\u0645\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u062E\\u0631\\u064A\\u0637\\u0629" or "Map marker", W - 10 - hw, 186, hw, false, "marker")
+    local driving = st.phase == "following" or st.phase == "planning" or st.phase == "replanning" or st.phase == "blocked" or st.phase == "streaming_wait"
+    btn(driving and (isAr() and "\\u062A\\u0648\\u0642\\u0641\\u064A" or "Stop") or (isAr() and "\\u0642\\u0648\\u062F\\u064A" or "Drive"), 10, 186, hw, driving, driving and "stop" or "drive")
+end
+function Panel:onMouseUp(x, y)
+    for _, h in ipairs(self.hits or {}) do
+        local r = h.r
+        if x >= r[1] and y >= r[2] and x < r[1] + r[3] and y < r[2] + r[4] then
+            if h.action == "speed" then G.speed = h.arg; if self.st and self.st.phase == "following" then U.gpsStop(); U.gpsStart(h.arg) end
+            elseif h.action == "marker" then local m, why = U.gpsMapMarker(); if m then U.gpsSetDestination(m) else G.lastResult, G.reason = "failed", why end
+            elseif h.action == "drive" then U.gpsStart()
+            elseif h.action == "stop" then U.gpsStop() end
+            return true
+        end
+    end
+    return true
+end
+function Panel:onMouseDown(x, y) self.drag = { x, y }; return true end
+function Panel:onMouseMove() if self.drag and isMouseButtonDown and isMouseButtonDown(0) then self:setX(self:getX() + self:getMouseX() - self.drag[1]); self:setY(self:getY() + self:getMouseY() - self.drag[2]) end end
+
+-- shown automatically while the player sits in a vehicle (and Sol exists)
+local last = 0
+local function onTick()
+    local t = nowMs()
+    wrapTick()
+    -- if nobody else ticks LF driving while Sol drives, tick it here
+    local SC = LF(); local D = SC and SC.Driving
+    if D and D.solTickOrig and G.lastResult == "driving" and t - lastOwnTick >= 250 then
+        if lfTicks == lastSeen then pcall(D.solTickOrig, t) end
+        lastSeen, lastOwnTick = lfTicks, t
+    end
+    if t - last < 1000 then return end
+    last = t
+    pcall(U.gpsPollRequest)
+    -- refused while the player was aboard: as soon as the player is out, carry on by itself
+    if G.retryWhenOut and not playerVehicle() then
+        G.retryWhenOut = false
+        if G.dest then pcall(U.gpsStart) else pcall(U.gpsTakeWheel) end
+    end
+    -- She stepped out of her passenger seat: now enter seat zero through the
+    -- verified transaction and arm native ownership before the player boards.
+    if G.wheelWaitSince and sol() and not call(sol(), "getVehicle") then
+        G.wheelWaitSince = nil
+        if not playerVehicle() then
+            if G.dest then pcall(U.gpsStart) else pcall(U.gpsTakeWheel) end
+        else
+            G.lastResult, G.reason = "failed", "player_aboard"
+        end
+    elseif G.wheelWaitSince and t - G.wheelWaitSince > 15000 then
+        G.wheelWaitSince = nil; G.lastResult, G.reason = "failed", "cannot_take_wheel"
+    end
+    if G.awaitPlayer and G.dest then
+        local pv, s = playerVehicle(), sol()
+        if pv and s and pv == call(s, "getVehicle") then G.awaitPlayer = false; pcall(U.gpsStart) end
+    end
+    local inVeh = playerVehicle() ~= nil and sol() ~= nil
+    if inVeh and not U.gpsPanel then
+        U.gpsPanel = Panel:new(getCore():getScreenWidth() - W - 20, 120)
+        U.gpsPanel:initialise(); U.gpsPanel:instantiate(); U.gpsPanel:addToUIManager()
+    end
+    if U.gpsPanel then U.gpsPanel:setVisible(inVeh) end
+    if G.lastResult then
+        local st = U.gpsStatus()
+        local sig = tostring(st.result) .. tostring(st.phase) .. tostring(st.distance and math.floor(st.distance / 5)) .. tostring(st.reason)
+        if sig ~= G.lastSig then G.lastSig = sig; pcall(writeState) end
+    end
+end
+-- the world map's own right-click menu (ISWorldMap.lua 907: onRightMouseUp builds it, mapAPI:uiToWorldX/Y)
+-- gets two entries. The game's menus use the game font, so the labels are English (Arabic is for Sol's windows).
+function U.gpsMapChoose(wx, wy, mode)
+    G.solo = false
+    local dest = { x = math.floor(wx), y = math.floor(wy), name = (isAr() and "\\u0646\\u0642\\u0637\\u0629 \\u0639\\u0644\\u0649 \\u0627\\u0644\\u062E\\u0631\\u064A\\u0637\\u0629" or "Map point") }
+    U.gpsSetDestination(dest)
+    if mode == "walk" then
+        if U.solGoto then return U.solGoto(dest.x, dest.y, 0) end
+        return false, "walking_unavailable"
+    end
+    return U.gpsStart()
+end
+local function hookMap()
+    if not ISWorldMap or ISWorldMap.solHooked or type(ISWorldMap.onRightMouseUp) ~= "function" then return end
+    local orig = ISWorldMap.onRightMouseUp
+    ISWorldMap.onRightMouseUp = function(self, x, y)
+        local r = orig(self, x, y)
+        local ok = pcall(function()
+            local api = self.mapAPI
+            local wx, wy = api:uiToWorldX(x, y), api:uiToWorldY(x, y)
+            local pn = 0
+            local menu = getPlayerContextMenu and getPlayerContextMenu(pn)
+            if not (menu and menu.isVisible and menu:isVisible() and menu.numOptions and menu.numOptions > 1) then
+                menu = ISContextMenu.get(pn, x + self:getAbsoluteX(), y + self:getAbsoluteY())
+            end
+            menu:addOption("Sol: drive here", self, function() U.gpsMapChoose(wx, wy, "drive") end)
+            menu:addOption("Sol: walk here", self, function() U.gpsMapChoose(wx, wy, "walk") end)
+        end)
+        return r
+    end
+    ISWorldMap.solHooked = true
+end
+U.gpsHookMap = hookMap
+if Events and Events.OnGameStart then Events.OnGameStart.Add(hookMap) end
+pcall(hookMap)
+
+if Events and Events.OnTick then Events.OnTick.Add(onTick) end
+U.gpsTick = onTick
+log("ready v" .. U.GPS_VERSION)
+

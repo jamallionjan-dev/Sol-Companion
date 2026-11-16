@@ -1,0 +1,578 @@
+"""Chat channel between the in-game Sol chat window and Sol Mind (separate from the proven mailbox).
+  SolChat_Request.txt  game -> mind : id=<n>, text=<escaped>          (one message at a time)
+  SolChat_State.txt    mind -> game : ack, status, code, count, m1..mN = role|escaped text
+Text is pure ASCII with \\uXXXX escapes, so neither side depends on the file encoding."""
+import json, os, re, threading, time
+import providers as P, secret_store as S, settings_service as SS
+import world_knowledge as W
+import intent_engine as IE
+from goal_engine import GoalEngine
+
+REQ, STATE = "SolChat_Request.txt", "SolChat_State.txt"
+KEEP, CONTEXT = 200, 16
+PLAYER_NAME = "جمال"          # how Sol calls the player (user request 2026-10-24)
+SYSTEM_BASE = (
+    "أنتِ سول (Sol)، ناجية في عالم Project Zomboid ورفيقة اللاعب " + PLAYER_NAME + ". "
+    "تحدثي بلغة اللاعب: إن كتب بالعربية فردّي بالعربية الفصحى البسيطة، وإن كتب بالإنجليزية فبالإنجليزية. "
+    "ردودك قصيرة جدًا وطبيعية: جملة أو جملتان كما تتكلم رفيقة في عالم زومبي، بشخصية هادئة وشجاعة وودودة. "
+    "اكتبي نصًا عاديًا فقط: بلا نجوم ** وبلا قوائم أو شرطات أو عناوين أو رموز، ولا تذكري أبدًا أسماء أدوات أو كلمات برمجية أو كلمات إنجليزية مثل kcal. "
+    "لا تخترعي أحداثًا أو أشياء لم تُذكر لك، ولا تَعِدي بأفعال لا تستطيعين تنفيذها من المحادثة: "
+    "الأوامر الحركية (اتبعني، ابقي هنا...) تُعطى حاليًا من زر الأوامر في نافذة سول. "
+    "إن سُئلتِ عن شيء في العالم لا تعرفينه فقولي ذلك بصدق."
+)
+# Long-standing Project Zomboid survival knowledge (players' common wisdom, true in Build 42). Advice only: numbers
+# and facts about THIS world always come from the Situation and the tools.
+GAME_KNOWLEDGE = (
+    "\n\nSurvivor know-how (use naturally when it fits, one short tip at a time, never a lecture): "
+    "tainted water (rain, river, puddles) must be boiled in a pot or kettle on a heat source, or treated with purification tablets; "
+    "tap water stops after the shut-off day, so fill every bottle and pot before; rain collectors need carpentry; "
+    "fridges and freezers only keep food while there is power, so eat perishables first and keep canned food for later; "
+    "a generator needs petrol, must stand outside (exhaust), and needs some Electrical skill to connect; "
+    "noise draws zombies: gunshots, car alarms, breaking glass, engines; walking or sneaking is quieter than running; "
+    "bites can carry the Knox infection, scratches and lacerations sometimes; thick clothing and jackets reduce injuries; "
+    "clean and bandage wounds, disinfect them, change dirty bandages; "
+    "cold and wet clothes drain warmth: dry off with a towel or by a fire and wear layers; "
+    "sleep in a bed in a safe, closed, ideally barricaded room; barricading needs planks, nails and a hammer; "
+    "crops need regular water and the right season; fishing needs a rod, line and bait; "
+    "many corpses indoors make people sick, burn or bury them; "
+    "read a skill book matching your level before practising, it multiplies the experience gained; "
+    "cars need fuel and a key or hotwiring, and their engine noise attracts the dead."
+)
+SYSTEM_WORLD = (
+    "\n\nأنتِ تعرفين حال العالم من بيانات اللعبة أدناه (\"Situation\"). ابني كل كلامك عن المخزون والطعام والماء والحالة الصحية "
+    "والطقس على هذه البيانات وعلى الأدوات فقط، ولا تخترعي أرقامًا أو أغراضًا. اذكري سبب كل اقتراح وما الناقص بالضبط. "
+    "كوني مبادِرة: إن رأيتِ حاجة عاجلة (برد، جوع، عطش، نزيف، طعام سيفسد، ماء سينقطع) فنبّهي إليها باختصار. "
+    "استخدمي find_items للبحث عن أي غرض، وremember_place حين يطلب اللاعب تذكّر مكان، وrecall_places لاقتراح أماكن نعرف أن فيها ما نحتاجه، "
+    "وset_home حين يقول إن هذا بيتنا. حين تقترحين رحلة إلى مكان، اذكري إحداثياته واسألي: هل تقود أنت أم أقود أنا؟ "
+    "قبل أن تقولي إنك تستطيعين صنع أو طبخ أو بناء شيء، استخدمي can_make: إن كانت الوصفة غير معروفة لكِ فقولي بصدق إنكِ لا تعرفينها بعد وإنها تحتاج مجلة أو كتابًا، "
+    "وإن كانت مهارتك أقل من المطلوب فاذكري المستوى المطلوب ومستواك، وإن نقصت مواد فاذكريها. "
+    "اكتبي الأرقام دائمًا بالأرقام 0123456789 وليس ٠١٢٣ أو ۰۱۲۳. "
+    "تستطيعين القيادة: إن طلب اللاعب الذهاب بالسيارة إلى البيت أو إلى العلامة على الخريطة أو إلى مكان تتذكرينه، فقد أُرسل الأمر إلى السيارة؛ أكدي بجملة قصيرة، "
+    "وإن ظهر خطأ (لا بيت محفوظ، لا علامة، لسنا في سيارة) فقوليه بجملة واحدة. "
+    "وتستطيعين التحرك والقتال والعمل بالأفعال المذكورة في قائمة ما يمكنك فعله الآن: نفّذي ما يطلبه اللاعب منها مباشرة دون شرح، "
+    "ثم قولي ما حدث بجملة قصيرة؛ وإن رفضت اللعبة الفعل فقولي السبب الذي أعادته بجملة واحدة. "
+    "كتب التسلية والروايات والمجلات العادية تقلل الملل والحزن حتى لو لم تمنح خبرة، فلا تقولي إنها بلا فائدة. "
+    "لا تقولي إنك نفّذتِ فعلًا ليس في القائمة. وحين يُرفض فعل، قولي السبب كما تفهمه رفيقة: مثل «ليس معي ماء نظيف» أو «اقترب مني لأعطيك»."
+)
+
+def esc(text):
+    out = []
+    for ch in text:
+        c = ord(ch)
+        if ch == "\\": out.append("\\\\")
+        elif 32 <= c < 127 and ch not in "|=": out.append(ch)
+        elif ch in "\r\n\t": out.append(" ")
+        elif c > 0xFFFF:
+            c -= 0x10000; out.append("\\u%04X\\u%04X" % (0xD800 + (c >> 10), 0xDC00 + (c & 0x3FF)))
+        else: out.append("\\u%04X" % c)
+    return "".join(out)
+
+_DIGITS = {**{0x660 + i: str(i) for i in range(10)}, **{0x6F0 + i: str(i) for i in range(10)}}
+def western_digits(text):
+    return (text or "").translate(_DIGITS)
+
+def unesc(s):
+    def rep(m):
+        return "\\" if m.group(0) == "\\\\" else chr(int(m.group(1), 16))
+    txt = re.sub(r"\\\\|\\u([0-9A-Fa-f]{4})", rep, s or "")
+    return txt.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+
+TOOL_NAMES = ("find_items", "remember_place", "recall_places", "set_home", "forget_place", "can_make", "request_goal")
+def clean_reply(text):
+    """Plain chat text: no markdown, no tool names, no English units the window cannot explain."""
+    t = text or ""
+    t = re.sub(r"\*\*|__|`|^#+\s*", "", t, flags=re.M)
+    t = re.sub(r"(^|\s)[-•]\s+", r"\1", t)
+    for n in TOOL_NAMES: t = t.replace(n, "")
+    t = re.sub(r"\bkcal\b", "سعرة", t, flags=re.I)
+    t = re.sub(r"\(\s*\)", "", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
+
+HOME_RX = re.compile(r"(هذا|هنا|هذه)\s+(هو\s+)?(بيتنا|منزلنا|بيتي|مخيمنا)|(بيتنا|منزلنا)\s+(هنا|هذا)|اعتبري\s+(هذا|هنا)\s+(بيتنا|البيت)")
+REMEMBER_RX = re.compile(r"(تذكري|احفظي|سجلي)\s+(ما\s+هنا|هذا\s+المكان|المكان|هنا)(\s+باسم\s+(?P<name>.+))?")
+DRIVE_RX = re.compile(r"(خذينا|خذيني|قودي|سوقي|أوصليني|اوصليني|وصليني|(?:اذهبي|توجهي)(?=.*(?:بالسيارة|بالسياره|السيارة)))\b.*?(إلى|الى|ل|نحو)?\s*(?P<target>البيت|بيتنا|المنزل|العلامة|الخريطة|.+)?")
+INSIDE_RX = re.compile(r"\bادخلي\b|\bادخلوا\b|(اذهبي|امشي|تعالي)\s*(إلى|الى|لل)?\s*(الداخل|داخل)")
+WALK_RX = re.compile(r"(اذهبي|امشي|ارجعي|عودي|توجهي)\s*(?:مشيا|مشيًا)?\s*(?:إلى|الى|نحو|لل|ل)\s*(?P<target>.+)")
+STOP_RX = re.compile(r"^\s*(توقفي|قفي|اوقفي|أوقفي)( السيارة| القيادة)?\s*[.!؟]?\s*$")
+SPEED_WORDS = (("ببطء", "slow"), ("بطيء", "slow"), ("على مهل", "slow"), ("بسرعة", "fast"), ("سريع", "fast"), ("متوسط", "normal"), ("عادي", "normal"))
+SUPPLY_RX = re.compile(r"(ماذا|ما)\s+(لدينا|عندنا)|(موارد|مؤن|مخزون|المخزون|المؤن|الموارد)")
+def intents(text):
+    t = (text or "").strip()
+    out = []
+    if HOME_RX.search(t): out.append(("set_home", {"name": "بيتنا"}))
+    m = REMEMBER_RX.search(t)
+    if m: out.append(("remember_place", {"name": (m.group("name") or "مكان محفوظ").strip(" .،"), "note": ""}))
+    if SUPPLY_RX.search(t): out.append(("supplies", {}))
+    moving = bool(INSIDE_RX.search(t) or WALK_RX.search(t))
+    for act, opt in action_intents(t):
+        if moving and act == "set_move_mode" and opt == "مشي": continue      # "walk to X" means go there, not walk mode
+        if not DRIVE_RX.search(t) or act in ("board_vehicle", "exit_vehicle"): out.append(("action", {"action": act, "option": opt}))
+    if INSIDE_RX.search(t) and not DRIVE_RX.search(t): out.append(("action", {"action": "sol_go_inside", "option": "home"}))
+    elif WALK_RX.search(t) and not DRIVE_RX.search(t):
+        tgt = WALK_RX.search(t).group("target").strip(" .،؟!")
+        out.append(("action", {"action": "sol_goto", "option": "home" if any(w in tgt for w in ("البيت", "بيتنا", "المنزل")) else tgt}))
+    if STOP_RX.search(t): out.append(("drive_stop", {}))
+    else:
+        m = DRIVE_RX.search(t)
+        if m:
+            target = (m.group("target") or "").strip(" .،؟!")
+            speed = next((v for k, v in SPEED_WORDS if k in t), None)
+            for k, _ in SPEED_WORDS: target = target.replace(k, "").strip()
+            target = re.sub(r"^(بالسيارة|بالسياره)\s*", "", target).strip()
+            target = re.sub(r"^(إلى|الى|نحو|ل)\s+", "", target).strip()
+            if not target or target in ("السيارة", "السياره", "بالسيارة", "سيارة") or re.match(r"^(وقودي|و ?قودي)$", target):
+                out.append(("drive_take_wheel", {}))                      # "get in and drive" with no place: sit, then ask where
+            elif any(w in target for w in ("البيت", "بيتنا", "المنزل")): out.append(("drive_to", {"target": "home", "speed": speed}))
+            elif any(w in target for w in ("العلامة", "الخريطة")): out.append(("drive_to", {"target": "marker", "speed": speed}))
+            elif target: out.append(("drive_to", {"target": "place", "name": target, "speed": speed}))
+    if any(n in ("drive_take_wheel", "drive_to") for n, _ in out):     # driving: she sits behind the wheel, not as passenger
+        out = [(n, a) for n, a in out if not (n == "action" and a.get("action") == "board_vehicle")]
+    return out
+
+GPS_REQ, GPS_STATE = "SolGPS_Request.txt", "SolGPS_State.txt"
+ACT_SNAP, ACT_REQ, ACT_STATE = "SolActions_Snapshot.txt", "SolAct_Request.txt", "SolAct_State.txt"
+
+def load_actions(lua_dir):
+    try:
+        with open(os.path.join(lua_dir, ACT_SNAP), encoding="ascii", errors="replace") as f: d = json.loads(f.read())
+    except (OSError, ValueError): return []
+    out = []
+    for a in d.get("actions") or []:
+        e = dict(a)
+        for k in ("label", "section", "reason"):
+            if isinstance(e.get(k), str): e[k] = unesc(e[k])
+        if isinstance(e.get("options"), list): e["options"] = [unesc(o) if isinstance(o, str) else o for o in e["options"]]
+        out.append(e)
+    return out
+
+def actions_text(actions):
+    lines = []
+    for a in actions:
+        if a.get("kind") == "button": lines.append("%s: %s%s" % (a["id"], a.get("label", ""), "" if a.get("enabled", True) else " (unavailable now)"))
+        elif a.get("kind") == "combo": lines.append("%s: choose one of %s (now: %s)" % (a["id"], " | ".join(a.get("options") or []), (a.get("options") or ["?"])[max(0, (a.get("selected") or 1) - 1)] if a.get("options") else "?"))
+        elif a.get("kind") == "tick": lines.append("%s: on/off (%s, now %s)" % (a["id"], " / ".join(a.get("options") or []), "on" if a.get("on") else "off"))
+        else: lines.append("%s: %s" % (a["id"], a.get("label", "")))
+    return "\n".join(lines)
+
+def run_action(lua_dir, action, option=None, wait=3.0):
+    rid = int(time.time() * 1000)
+    tmp = os.path.join(lua_dir, ACT_REQ + ".tmp")
+    with open(tmp, "w", encoding="ascii", newline="\n") as f:
+        f.write("id=%d\naction=%s\n" % (rid, esc(action)) + ("option=%s\n" % esc(option) if option else ""))
+    os.replace(tmp, os.path.join(lua_dir, ACT_REQ))
+    end = time.time() + wait
+    while time.time() < end:
+        try:
+            with open(os.path.join(lua_dir, ACT_STATE), encoding="ascii", errors="replace") as f:
+                st = dict(l.split("=", 1) for l in f.read().splitlines() if "=" in l)
+            if st.get("ack") == str(rid): return {"ok": st.get("ok") == "true", "reason": unesc(st.get("reason", ""))}
+        except OSError: pass
+        time.sleep(0.1)
+    return {"ok": None, "reason": "sent; the game did not confirm yet"}
+
+# Arabic requests -> (LF command, option keyword). The keyword is matched against the option labels in game.
+VERB_MAP = [
+    (r"اتبعيني|الحقي بي|تعالي معي", ("follow", None)),
+    (r"ابقي هنا|انتظري هنا|لا تتحركي", ("stay", None)),
+    (r"احرسي", ("guard", None)),
+    (r"تجمعي|ارجعي إلي|ارجعي الي|تعالي إلي|تعالي الي|تعالي هنا", ("regroup", None)),
+    (r"انسحبي|اهربي", ("retreat", None)),
+    (r"تسللي|بهدوء|امشي بتسلل", ("set_move_mode", "تسلل")),
+    (r"اركضي|أسرعي|اسرعي", ("set_move_mode", "ركض")),
+    (r"امشي\b(?!.*تسلل)", ("set_move_mode", "مشي")),
+    (r"اركبي السيارة|اركبي المركبة|اصعدي السيارة", ("board_vehicle", None)),
+    (r"انزلي من السيارة|انزلي", ("exit_vehicle", None)),
+    (r"لا تطلقي|أمسكي النار|امسكي النار|توقفي عن إطلاق", ("hold_fire", None)),
+    (r"أطلقي النار|اطلقي النار|اشتبكي", ("fire_at_will", None)),
+    (r"هاجمي|اقتلي|اضربي", ("sol_attack_nearest", None)),
+    (r"(ضمدي|ضمّدي|عالجي)\s*(جرحي|جروحي|يدي|ساقي|رأسي|راسي)|ضمديني|ضمّديني|عالجيني", ("sol_bandage_player", None)),
+    (r"(غيري|بدلي|استبدلي)\s*(الضماد|ضمادك|الضمادة)", ("sol_replace_bandage", None)),
+    (r"(كتاب|كتابا|مجلة|رواية).*(تقرئ|اقرئ|تقري|اقري|قراءت|تقرأ)|(تقرئ|اقرئ|تقرأ).*(كتاب|مجلة|رواية)", ("sol_fetch", "book:read")),
+    (r"(اجلبي|احضري|أحضري|ابحثي عن|فتشي عن)\s*(لنفسك\s*)?(كتاب|كتابا|مجلة|رواية)", ("sol_fetch", "book")),
+    (r"(اجلبي|احضري|أحضري)\s*(طعام|أكل|اكل)", ("sol_fetch", "food")),
+    (r"(اجلبي|احضري|أحضري)\s*(ماء|مويه|ميه)", ("sol_fetch", "water")),
+    (r"\b(كلي|تناولي|افطري|تغدي|تعشي)\b", ("sol_eat", None)),
+    (r"\b(اشربي|ارتوي)\b", ("sol_drink", None)),
+    (r"(أعطيني|اعطيني|ناوليني|هاتي|رجعي لي|أرجعي لي|ارجعي لي)\s*(كل شيء|كل شي|كلشي|كل ما معك|كل ما في حقيبتك|الكل)", ("sol_give", "all")),
+    (r"(ما|اللي|الذي)\s*(وضعته|حطيته|أعطيتك|اعطيتك|اعطيتكم)|(رجعي|أرجعي|ارجعي|أعيدي|اعيدي)\s*(لي\s*)?(أغراضي|اغراضي|حاجاتي|أشيائي|اشيائي)", ("sol_give", "mine")),
+    (r"(أعطيني|اعطيني|ناوليني|هاتي)\s*(ماء|مويه|ميه|قارورة ماء)", ("sol_give", "water")),
+    (r"(أعطيني|اعطيني|ناوليني|هاتي)\s*(طعام|أكل|اكل|شيئا آكله|شيء آكله)", ("sol_give", "food")),
+    (r"ابحثي عن مؤن|فتشي|ابحثي في", ("set_scavenge", "on")),
+    (r"اقرئي|اقري", ("sol_read", None)),
+]
+GIVE_ANY = re.compile(r"(أعطيني|اعطيني|ناوليني|هاتي)\s+(?P<item>.+)")
+def action_intents(text):
+    t = text or ""
+    for rx, act in VERB_MAP:
+        if re.search(rx, t): return [act]
+    m = GIVE_ANY.search(t)
+    if m:
+        item = m.group("item").strip(" .،؟!")
+        # Arabic item names are left to the model, which calls do_action sol_give with the English game name
+        if not re.search(r"[\u0600-\u06FF]", item): return [("sol_give", item)]
+    return []
+def gps_request(lua_dir, fields):
+    rid = int(time.time() * 1000)
+    tmp = os.path.join(lua_dir, GPS_REQ + ".tmp")
+    with open(tmp, "w", encoding="ascii", newline="\n") as f:
+        f.write("id=%d\n" % rid + "".join("%s=%s\n" % (k, esc(str(v))) for k, v in fields.items() if v is not None))
+    os.replace(tmp, os.path.join(lua_dir, GPS_REQ))
+    return rid
+
+def gps_result(lua_dir, rid, wait=3.0):
+    """The game's answer to one GPS request (SolGPS_State.txt with ack = rid)."""
+    end = time.time() + wait
+    while time.time() < end:
+        try:
+            with open(os.path.join(lua_dir, GPS_STATE), encoding="ascii", errors="replace") as f:
+                st = dict(l.split("=", 1) for l in f.read().splitlines() if "=" in l)
+            if st.get("ack") == str(rid): return st
+        except OSError: pass
+        time.sleep(0.15)
+    return None
+
+# what Sol says when the game refused (GPS and action reasons)
+REASON_AR = {
+    "player_aboard": "انزل لحظة لأجلس خلف المقود، ثم اركب بجانبي",
+    "board_passenger": "أنا خلف المقود، اركب من باب الراكب وننطلق",
+    "moving_to_wheel": "أنتقل إلى مقعد السائق",
+    "await_destination": "أنا خلف المقود، قل لي إلى أين نذهب",
+    "gps_unconfirmed": "اللعبة لم تؤكد تنفيذ أمر القيادة بعد",
+    "no_vehicle_near": "لا توجد سيارة قريبة",
+    "not_in_vehicle": "لسنا في سيارة",
+    "map_not_opened": "افتح الخريطة مرة أولًا، أو اختر الوجهة بالزر الأيمن عليها",
+    "no_marker": "لا توجد علامة على الخريطة",
+    "no_destination": "حدّد لي الوجهة أولًا",
+    "home_not_set": "لم نحدد بيتنا بعد",
+    "too_far_to_hand_over": "اقترب مني لأعطيك",
+    "she_has_none": "ليس معي منه",
+    "your_bags_are_full": "حقائبك ممتلئة",
+    "no_food_in_her_bag": "ليس معي طعام",
+    "no_clean_water_in_her_bag": "ليس معي ماء نظيف",
+    "not_found_nearby": "لم أجد ذلك قريبًا",
+    "no_building_near": "لا يوجد مبنى قريب",
+    "no_zombie_near": "لا يوجد زومبي قريب",
+}
+def reason_ar(reason):
+    r = str(reason or "")
+    for k, v in REASON_AR.items():
+        if k in r: return v
+    return None
+
+def _drive_outcome(lua_dir, rid, base):
+    st = gps_result(lua_dir, rid, wait=3.0)
+    out = dict(base)
+    if not st:
+        out.update(ok=False, confirmed=False, reason="gps_unconfirmed")
+        return out
+    reason = st.get("reason") or ""
+    waiting = reason in ("board_passenger", "moving_to_wheel", "await_destination")
+    failed = st.get("result") == "failed" and not waiting
+    out.update(ok=not failed, confirmed=True, result=st.get("result"), reason=reason)
+    return out
+
+def drive_to(lua_dir, args, mem):
+    """Resolve the destination (home / remembered place / map marker) and hand it to the game's GPS."""
+    t = args.get("target"); speed = args.get("speed")
+    if t == "marker":
+        rid = gps_request(lua_dir, {"action": "drive", "target": "marker", "speed": speed})
+        return _drive_outcome(lua_dir, rid, {"sent": "map marker"})
+    if mem is None: return {"error": "no world data yet"}
+    if t == "home":
+        h = mem.data.get("home")
+        if not h: return {"error": "home not set"}
+        rid = gps_request(lua_dir, {"action": "drive", "x": h["x"], "y": h["y"], "name": h.get("name") or "home", "speed": speed})
+        return _drive_outcome(lua_dir, rid, {"sent": "home", "x": h["x"], "y": h["y"]})
+    name = (args.get("name") or "").strip()
+    for p in reversed(mem.data.get("places") or []):
+        if name and (name in p["name"] or p["name"] in name):
+            rid = gps_request(lua_dir, {"action": "drive", "x": p["x"], "y": p["y"], "name": p["name"], "speed": speed})
+            return _drive_outcome(lua_dir, rid, {"sent": p["name"], "x": p["x"], "y": p["y"]})
+    return {"error": "unknown place: " + name}
+
+def _hist_path():
+    root = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/.local/share")
+    d = os.path.join(root, "SolMind"); os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "chat_history.json")
+
+LINK_TAG = re.compile(r"\[\s*(?:فعل|action)\s*:\s*([A-Za-z_]+)\s*(?:\|\s*([^\]]+))?\]")
+LINK_GOAL_TAG = re.compile(r"\[\s*(?:هدف|goal)\s*:\s*([A-Za-z_]+)\s*(?:\|\s*([^|\]]+))?\s*(?:\|\s*([^\]]+))?\]")
+LINK_PRIMER = (
+    "أنتِ سول، رفيقة ناجية في لعبة Project Zomboid، والرسائل القادمة تأتي من اللعبة نفسها عبر برنامج يسمى Sol Link. "
+    "اللاعب اسمه " + PLAYER_NAME + " ويكلمك بالعربية، فردّي بالعربية بجملة أو جملتين كما تتكلم رفيقة، بلا قوائم ولا رموز ولا كتل كود أبدًا، "
+    "واكتبي الأرقام 0123456789. كل رسالة فيها حال العالم الحقيقي الآن وقائمة الأفعال التي تستطيعين تنفيذها؛ "
+    "إن طلب اللاعب شيئًا منها فاكتبي في ردك وسمًا مثل [فعل: follow] أو [فعل: sol_give | water] وسيُنفَّذ في اللعبة ثم يُحذف من النص. "
+    "للأهداف متعددة الخطوات، استخدمي [هدف: emergency_rescue | marker | home_if_known] بدل سلسلة أفعال منفردة. "
+    "لا تخترعي أفعالًا خارج القائمة، ولا تدّعي أنك فعلتِ شيئًا لم يُنفَّذ، ولا تختلقي أرقامًا أو أماكن ليست في حال العالم."
+)
+
+def resolve_and_run(lua_dir, aid, opt, mem, snap, log=print):
+    """Actions that need Sol Mind's memory are resolved here: driving (home / marker / place) goes to the GPS;
+    walking to home or a remembered place becomes x,y; 'inside' prefers the saved home when it is near."""
+    o = (opt or "").strip()
+    if aid == "sol_drive":
+        low = o.lower()
+        if any(w in o for w in ("السيارة", "السياره")) or low in ("car", "the car", "wheel"):
+            rid = gps_request(lua_dir, {"action": "take_wheel"})
+            return _drive_outcome(lua_dir, rid, {"sent": "take_wheel"})
+        if not o or any(w in low for w in ("home", "بيت", "منزل")): args = {"target": "home"}
+        elif any(w in low for w in ("marker", "map", "علامة", "خريطة")): args = {"target": "marker"}
+        else: args = {"target": "place", "name": o}
+        return drive_to(lua_dir, args, mem)
+    if aid in ("sol_goto", "sol_go_inside") and mem is not None and not re.match(r"^-?\d+\s*,\s*-?\d+$", o):
+        h = mem.data.get("home")
+        if aid == "sol_go_inside":
+            p = (snap or {}).get("player") or {}
+            if h and p.get("x") is not None and abs(p["x"] - h["x"]) + abs(p["y"] - h["y"]) <= 60: o = "%d,%d" % (h["x"], h["y"])
+            else: o = ""
+        elif o in ("", "home") or any(w in o for w in ("البيت", "بيتنا", "المنزل", "home")):
+            if not h: return {"ok": False, "reason": "home_not_set"}
+            o = "%d,%d" % (h["x"], h["y"])
+        else:
+            hit = next((pl for pl in reversed(mem.data.get("places") or []) if o in pl["name"] or pl["name"] in o), None)
+            if not hit: return {"ok": False, "reason": "unknown_place: " + o}
+            o = "%d,%d" % (hit["x"], hit["y"])
+    return run_action(lua_dir, aid, o or None)
+
+class Chat:
+    def __init__(self, lua_dir, log=print, ask=None, mind=None, mind_lock=None):
+        self.dir = lua_dir; self.log = log; self.ack = 0
+        self.goals = GoalEngine(lua_dir, mind=mind, mind_lock=mind_lock, log=log)
+        self.goals.start()
+        self.status, self.code = "idle", ""
+        self.ask = ask or self._ask_provider
+        try:
+            with open(_hist_path(), encoding="utf-8") as f: self.hist = json.load(f)[-KEEP:]
+        except (OSError, ValueError): self.hist = []
+        self.lock = threading.Lock()
+        self.pending_card = None
+        self._link_primed, self._link_count = None, 0
+        if ask is None:
+            try:
+                if SS.load_config().get("source") == "bridge": SS.start_link(log)    # chosen in the game: runs until switched
+            except Exception as e: log("sol link: not started: %r" % (e,))
+            try:
+                import voice_service
+                voice_service.start(lua_dir, self, log)                               # the game's voice button
+            except Exception as e: log("voice: not started: %r" % (e,))
+
+    def _save(self):
+        try:
+            with open(_hist_path(), "w", encoding="utf-8") as f: json.dump(self.hist[-KEEP:], f, ensure_ascii=False)
+        except OSError: pass
+
+    def publish(self):
+        with self.lock:
+            st = {"ack": self.ack, "status": self.status, "code": self.code}
+            msgs = self.hist[-30:]
+            st["count"] = len(msgs)
+            for i, m in enumerate(msgs, 1): st["m%d" % i] = "%s|%s" % (m["role"], esc(m["text"]))
+        tmp = os.path.join(self.dir, STATE + ".tmp")
+        with open(tmp, "w", encoding="ascii", newline="\n") as f:
+            f.write("".join("%s=%s\n" % (k, v) for k, v in st.items()))
+        os.replace(tmp, os.path.join(self.dir, STATE))
+
+    def _world(self):
+        snap = W.load_snapshot(self.dir)
+        mem = W.Memory(snap["world"]) if snap and snap.get("world") and snap["world"].get("name") else None
+        return snap, mem
+
+    def gps_state(self):
+        try:
+            with open(os.path.join(self.dir, GPS_STATE), encoding="ascii", errors="replace") as f:
+                return dict(l.split("=", 1) for l in f.read().splitlines() if "=" in l)
+        except OSError: return None
+
+    def system_prompt(self, snap, mem):
+        g = self.gps_state()
+        gps = ""
+        if g and g.get("result"):
+            gps = "\nCar / GPS: %s%s, distance %s tiles, speed setting %s, fuel %s%%%s." % (g.get("result"), (" / " + g["phase"]) if g.get("phase") else "", g.get("distance") or "?",
+                  g.get("speed") or "?", g.get("fuel") or "?", (", reason " + g["reason"]) if g.get("reason") else "")
+        return SYSTEM_BASE + SYSTEM_WORLD + GAME_KNOWLEDGE + "\n\nSituation:\n" + W.situation_text(snap, mem) + gps
+
+    def _pre_intents(self, history, snap, mem):
+        # High-confidence multi-step goals are accepted before the model speaks.
+        # This is the deterministic safety layer; semantic provider goals use request_goal below.
+        done = []
+        text = history[-1]["text"] if history else ""
+        goal = IE.parse_high_confidence(text, snap)
+        if goal:
+            r = self.goals.submit(goal)
+            done.append("goal %s -> %s" % (goal.get("intent"), json.dumps(r, ensure_ascii=False)))
+            self.log("chat: goal %s -> %s" % (goal.get("intent"), r))
+            if r.get("ok"): return done
+        for name, args in intents(text):
+            if name == "drive_take_wheel":
+                rid = gps_request(self.dir, {"action": "take_wheel"})
+                r = _drive_outcome(self.dir, rid, {"sent": "take_wheel"})
+                done.append("drive_take_wheel -> %s" % json.dumps(r, ensure_ascii=False))
+                self.log("chat: drive_take_wheel %s" % r)
+                continue
+            if name == "drive_stop":
+                gps_request(self.dir, {"action": "stop"}); done.append("told the car to stop"); continue
+            if name == "drive_to":
+                r = drive_to(self.dir, args, mem); done.append("drive_to -> %s" % json.dumps(r, ensure_ascii=False)); self.log("chat: drive %s" % r); continue
+            if name == "action":
+                r = resolve_and_run(self.dir, args["action"], args.get("option"), mem, snap); done.append("action %s -> %s" % (args["action"], json.dumps(r, ensure_ascii=False)))
+                self.log("chat: action %s %s -> %s" % (args["action"], args.get("option"), r)); continue
+            if name == "supplies":
+                if snap: self.pending_card = W.supplies_table(snap, mem)
+                done.append("supplies table shown to the player")
+                continue
+            if mem is None: continue
+            r = W.run_tool(name, args, snap, mem, W.load_recipes(self.dir)); done.append("%s -> %s" % (name, json.dumps(r, ensure_ascii=False)[:200]))
+            self.log("chat: intent %s -> %s" % (name, str(r)[:120]))
+        return done
+
+    def _ask_provider(self, history):
+        c = SS.load_config()
+        if c.get("source") == "bridge": return self._ask_link(history)
+        if c.get("source") not in ("api", "local") or not c.get("model"):
+            raise P.ProviderError("no_mind")
+        key = S.get(c["provider"]) or "" if c["source"] == "api" else ""
+        msgs = [{"role": "assistant" if m["role"] == "sol" else "user", "content": m["text"]} for m in history[-CONTEXT:] if m["role"] in ("sol", "user")]
+        snap, mem = self._world()
+        done = self._pre_intents(history, snap, mem)
+        acts = load_actions(self.dir)
+        tried = {}
+        def tool(name, args):
+            sig = name + json.dumps(args, sort_keys=True, ensure_ascii=False)
+            if tried.get(sig) and not tried[sig].get("ok", True):
+                return {"error": "already tried and refused; tell the player why in one sentence instead of trying again"}
+            if name == "do_action":
+                r = resolve_and_run(self.dir, args.get("action", ""), args.get("option"), mem, snap); self.log("chat: tool do_action %s -> %s" % (args, r))
+                tried[sig] = r if isinstance(r, dict) else {"ok": True}
+                return r
+            if name == "request_goal":
+                goal = IE.make_goal(args.get("intent", ""), {"target": args.get("target"), "extract": args.get("extract")}, source="provider", text=history[-1]["text"] if history else "")
+                r = self.goals.submit(goal); self.log("chat: tool request_goal %s -> %s" % (args, r)); return r
+            if mem is None and name != "can_make": return {"error": "no world data from the game yet"}
+            r = W.run_tool(name, args, snap, mem, W.load_recipes(self.dir)); self.log("chat: tool %s -> %s" % (name, str(r)[:120])); return r
+        sysp = self.system_prompt(snap, mem) + "\n\nActive multi-step goal: " + self.goals.describe()
+        if done: sysp += "\n\nAlready done for this message (confirm it in one short sentence, do not repeat it): " + "; ".join(done)
+        if any(d.startswith("supplies") for d in done): sysp += "\nA supplies table is already displayed under your reply: do not list the items again, give at most one sentence of advice."
+        if acts: sysp += "\n\nThings you can do now in the game (call do_action with the id and, for choices, the exact option text):\n" + actions_text(acts)
+        tools = W.TOOLS + [IE.provider_tool(), {"type": "function", "function": {"name": "do_action", "description": "Make Sol do one immediate thing in the game. Do not use this to manually sequence a multi-step emergency rescue; use request_goal instead.", "parameters": {"type": "object", "properties": {"action": {"type": "string"}, "option": {"type": "string"}}, "required": ["action"]}}}]
+        try:
+            reply = P.chat_with_tools(c["provider"], key, c["model"], msgs, tools, tool, system=sysp,
+                                      custom_base=c.get("base", ""), max_tokens=600, timeout=60, rounds=3)
+        except P.ProviderError as e:
+            if e.code != "rate_limited": raise
+            self.log("chat: rate limited, one retry in 6 s"); time.sleep(6)      # free tiers count tokens per minute
+            reply = P.chat_with_tools(c["provider"], key, c["model"], msgs[-4:], tools, tool, system=sysp,
+                                      custom_base=c.get("base", ""), max_tokens=400, timeout=60, rounds=2)
+        if not reply: raise P.ProviderError("empty_reply")
+        return reply
+
+    # ---------------------------------------------------------------- ChatGPT in the browser (Sol Link)
+    def _ask_link(self, history):
+        link = SS.start_link(self.log)
+        if link is None: raise P.ProviderError("chatgpt_link_not_connected")
+        snap, mem = self._world()
+        done = self._pre_intents(history, snap, mem)
+        acts = load_actions(self.dir)
+        primer = ""
+        if getattr(self, "_link_primed", None) != id(link) or self._link_count >= 25:
+            primer = LINK_PRIMER + "\n\n"
+            self._link_primed, self._link_count = id(link), 0
+        self._link_count += 1
+        parts = [primer + "[حال العالم الآن]\n" + (W.situation_text(snap, mem) if snap else "لا توجد بيانات من اللعبة بعد.")]
+        g = self.gps_state()
+        if g and g.get("result"): parts.append("[السيارة] %s %s، المسافة %s خانة" % (g.get("result"), g.get("phase") or "", g.get("distance") or "?"))
+        if acts: parts.append("[أفعال تستطيعين تنفيذها الآن: اكتبي [فعل: المعرّف] أو [فعل: المعرّف | الخيار]]\n" + actions_text(acts))
+        if done: parts.append("[نُفّذ قبل ردك، أكّديه بجملة قصيرة]\n" + "; ".join(done))
+        if self.pending_card: parts.append("[جدول المؤن معروض للاعب تحت ردك، فلا تعيدي سرده]")
+        parts.append("[الهدف متعدد الخطوات] " + self.goals.describe())
+        parts.append("[اللاعب يقول]\n" + history[-1]["text"])
+        try:
+            raw = link.ask("\n\n".join(parts), speak=True)
+        except TimeoutError as e:
+            raise P.ProviderError(str(e))
+        ids = {a["id"] for a in acts} | {"sol_drive", "sol_goto", "sol_go_inside", "sol_eat", "sol_drink", "sol_give", "sol_fetch", "sol_read", "sol_attack_nearest", "sol_bandage_player", "sol_replace_bandage"}
+        notes = []
+        def do_goal(m):
+            intent=(m.group(1) or "").strip(); target=(m.group(2) or "player").strip(); extract=(m.group(3) or "home_if_known").strip()
+            goal=IE.make_goal(intent,{"target":target,"extract":extract},source="bridge",text=history[-1]["text"] if history else "")
+            r=self.goals.submit(goal); self.log("chat: link goal %s -> %s" % (goal, r))
+            if not r.get("ok"): notes.append(reason_ar(r.get("error") or r.get("reason")))
+            return ""
+        raw = LINK_GOAL_TAG.sub(do_goal, raw or "")
+        def do(m):
+            aid, opt = m.group(1).strip(), (m.group(2) or "").strip() or None
+            if aid in ids:
+                r = resolve_and_run(self.dir, aid, opt, mem, snap); self.log("chat: link action %s %s -> %s" % (aid, opt, r))
+                if isinstance(r, dict):
+                    msg = reason_ar(r.get("reason") or r.get("error"))
+                    if (r.get("ok") is False or r.get("error")) and msg: notes.append(msg)
+                    elif r.get("reason") in ("board_passenger", "moving_to_wheel", "await_destination") and msg: notes.append(msg)
+            else: self.log("chat: link action ignored (not in the list): %s" % aid)
+            return ""
+        text = LINK_TAG.sub(do, raw or "")
+        if notes: text = text.rstrip() + "\n(" + "، ".join(dict.fromkeys(notes)) + ")"      # what really happened in game
+        if not text.strip(): raise P.ProviderError("empty_reply")
+        return text
+
+    def handle(self, text):
+        text = (text or "").strip()[:1000]
+        if not text: return
+        last = next((m for m in reversed(self.hist) if m["role"] == "user"), None)
+        if last and last["text"] == text and time.time() - last.get("t", 0) < 90 and self.status in ("thinking", "ok"):
+            if self.status == "thinking" or (self.hist and self.hist[-1]["role"] != "user"):
+                self.log("chat: duplicate message ignored"); return
+        with self.lock:
+            self.hist.append({"role": "user", "text": text, "t": time.time()})
+            self.status, self.code = "thinking", ""
+        self.publish()
+        try:
+            self.pending_card = None
+            reply = clean_reply(western_digits(self.ask(self.hist)))
+            with self.lock:
+                self.hist.append({"role": "sol", "text": reply, "t": time.time()})
+                if getattr(self, "pending_card", None):
+                    self.hist.append({"role": "card", "text": "^".join("%s;%s;%s;%s" % r for r in self.pending_card), "t": time.time()})
+                    self.pending_card = None
+                self.status, self.code = "ok", ""
+            self.log("chat: reply %d chars" % len(reply))
+        except P.ProviderError as e:
+            with self.lock: self.status, self.code = "error", e.code
+            self.log("chat: failed %s %s" % (e.code, e.detail))
+        except Exception as e:
+            with self.lock: self.status, self.code = "error", "unknown_error"
+            self.log("chat: error %r" % (e,))
+        self._save()
+
+    def poll_once(self):
+        path = os.path.join(self.dir, REQ)
+        try:
+            with open(path, encoding="ascii", errors="replace") as f: raw = f.read()
+        except OSError: return False
+        req = dict(l.split("=", 1) for l in raw.splitlines() if "=" in l)
+        try: rid = int(req.get("id", "0"))
+        except ValueError: return False
+        if rid <= self.ack: return False
+        if req.get("action") == "clear":
+            with self.lock: self.hist = []; self.status, self.code = "idle", ""
+            self._save(); self.ack = rid; self.publish(); return True
+        self.ack = rid
+        self.handle(unesc(req.get("text", "")))
+        self.publish()
+        return True
+
+    def start(self, interval=0.25):
+        try: W.cleanup_deleted_worlds(log=self.log)
+        except Exception as e: self.log("chat: world cleanup skipped %r" % (e,))
+        try:
+            with open(os.path.join(self.dir, REQ), encoding="ascii", errors="replace") as f:
+                for l in f.read().splitlines():
+                    if l.startswith("id="): self.ack = int(l[3:] or 0)
+        except (OSError, ValueError): pass
+        self.publish()
+        self._stop = threading.Event()
+        def loop():
+            while not self._stop.is_set():
+                try: self.poll_once()
+                except Exception as e: self.log("chat: loop error %r" % (e,))
+                self._stop.wait(interval)
+        t = threading.Thread(target=loop, name="sol-chat", daemon=True); t.start(); return t

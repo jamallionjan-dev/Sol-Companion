@@ -1,0 +1,198 @@
+ambient.dusk	Evening already. Keep an eye on the shadows.
+ambient.dusk	It is getting dark. I'd rather have everyone inside.
+ambient.dusk	It will be dark soon. Time to think about shelter.
+ambient.dusk.camp	Let's count heads before we settle in for the night.
+ambient.morning	Good morning. It is almost strange how normal that sounds.
+ambient.morning	Good morning. Let's see what today gives us.
+ambient.morning	New day. Same rules: stay sharp and stay alive.
+ambient.morning	New day. We should review our supplies.
+ambient.rain	Here comes the rain. Watch the corners; hearing will be worse.
+ambient.rain	I don't like what this does to our hearing.
+ambient.rain	Rain's setting in. The noise will hide more than our footsteps.
+ambient.rain	We're getting wet. Let's keep an eye out for somewhere dry.
+ambient.rain	You're getting soaked. Let's find cover when we can.
+banter.distraction.self	Attention! Free brains at the Muldraugh water tower!
+banter.distraction.self	Behind you! It's the tax man!
+banter.distraction.self	HEY! Is that a Spiffo's coupon on the ground?!
+banter.distraction.self	Hey! Somebody out there misses you! Go find them!
+banter.distraction.self	Look over there! A mule in a hospital gown!
+banter.distraction.self	Look, a way out! For you! Over there! Please!
+banter.distraction.verdict	Worth a try. Wasn't worth much.
+banter.follow	A Kentucky mile always was longer than it looks.
+banter.follow	I'm counting the turns, in case we need to come back fast.
+banter.follow	If the army's holding the county line, they're doing it real quiet.
+banter.follow	If we stop, I'll take the side you're not watching.
+banter.follow	Keep going. I've got your back.
+banter.follow	Knox County never looked this empty on a weekday.
+banter.follow	Mind the cars. Something always hides behind one.
+banter.follow	Nobody's paying bills anymore. Silver lining, I reckon.
+banter.follow	Scenic route again? You spoil me.
+banter.follow	Slow is fine. Slow is alive.
+banter.follow	Walking the county like a census taker. Head count's way down.
+banter.idle.first	I'll just stand here and age, then.
+banter.idle.first	Is this a strategy, or are we lost?
+banter.idle.first	Quiet is good. Quiet is fine. I'll keep an eye out.
+banter.idle.vehicle	At this rate, the tires will retire before we do.
+banter.idle.vehicle	Dashboard clock's wrong. Still making better progress than us.
+banter.idle.vehicle	Do we need gas, or a written invitation?
+banter.idle.vehicle	Engine's not gonna fix itself. Neither is my mood.
+banter.idle.vehicle	I could walk faster than this. Sitting down.
+banter.idle.vehicle	I've counted every crack in the windshield. Want the report?
+banter.idle.vehicle	Parked this long, I'd like to know which way we're leaving.
+banter.intrusive.camp	Picture the mailman showing up. I'd hug him. Then check for bites.
+banter.intrusive.passenger	Every tree we pass, my brain asks what if.
+banter.refusal.directional_pressure	One side's all teeth. I'm taking the quieter direction.
+banter.refusal.directional_pressure	Pressure's building too fast. I'm giving ground.
+banter.refusal.directional_pressure	That side's pouring dead people. I'm moving across the flow.
+banter.routine	Dry county jokes hit different when clean water's scarce.
+banter.routine	Feels almost like an ordinary day. Don't tell anybody.
+banter.routine	Funny how a room can feel crowded with nobody in it.
+banter.routine	Funny thing, the end of the world. Still got chores.
+banter.routine	Give it a year, maybe we'll have the only porch light in Kentucky.
+banter.routine	Good news, no commute. Bad news, the reason why.
+banter.routine	Hard to picture a Derby with nobody in the stands.
+banter.routine	I'd trade every dollar in this county for cold sweet tea.
+banter.routine	I'll keep looking. You keep watch.
+banter.routine	If anybody asks, I'm on break. Have been since July.
+banter.routine	If we split up, keep your voice low and close.
+banter.routine	If you see trouble first, say it plain.
+banter.routine	Keep an ear on the doors. I'll mind this side.
+banter.routine	Keeping busy at the end of the world. Mama would be proud.
+banter.routine	Kentucky weather never cared who was left to complain about it.
+banter.routine	Maybe a radio's still promising help. Bless its heart.
+banter.routine	Mind the mess. Civilization left in a hurry.
+banter.routine	Nothing like routine to keep the screaming on the inside.
+banter.routine	Remember to drink some water when you can.
+banter.routine	Somebody used to have a normal day here.
+banter.routine	Take a breath if you need one. I'll keep going.
+banter.routine	The road outside looks calm. I don't trust it yet.
+banter.routine	This used to count as a work party. Minus the potluck.
+banter.routine	Tobacco farmers knew the secret: keep your hands busy.
+banter.routine	We have time. Let's use it carefully.
+banter.routine	Work quiet when we can. Noise draws them like hogs to a bucket.
+banter.routine	You holding up? You don't have to answer right away.
+combat.engage.group	I'm engaging. Don't get surrounded!
+combat.engage.group	Several walkers. Focus the nearest!
+combat.engage.one	I'll handle this one!
+combat.engage.one	One contact. I'm taking it!
+combat.engage.one	Out of my county!
+combat.engage.pair	Two contacts. Keep them from flanking us.
+combat.engage.pair	Two contacts. Take them one at a time!
+combat.retreat.crowd	Big pack! Stop fighting and move!
+combat.retreat.crowd	Six-plus on us. Withdraw!
+combat.retreat.group	Break contact with the group!
+combat.retreat.one	Back away from it!
+combat.retreat.one	Back up! This one's too close!
+combat.retreat.one	Move back and make it follow!
+combat.retreat.pair	Two on us! Pull back!
+combat.struggle	Go down!
+crisis.fear.early	Don't worry about me. Okay. Worry a little.
+crisis.fear.early	Fernando, am I going to die? Just say it straight.
+crisis.fear.early	How long do you think I've got? No. Don't answer that.
+crisis.fear.early	I can still feel my fingers. That's good, right? That's good.
+crisis.fear.early	I don't want to die out here. Not like this.
+crisis.fear.early	I keep looking at it. Like if I stare long enough, it'll go away.
+crisis.fear.early	I keep thinking about my mom's kitchen. Isn't that stupid?
+crisis.fear.early	I'm not ready. I had plans. Stupid little plans, but they were mine.
+crisis.fear.early	I'm scared. I'm really, really scared.
+crisis.fear.early	If I start acting strange, you tell me. Promise me.
+crisis.fear.early	It's just a bite. People survive bites. Right? Somebody tell me people survive bites.
+crisis.fear.early	Maybe it didn't break the skin. Maybe. Maybe.
+crisis.fear.early	Who's going to look after all of you when I'm gone?
+crisis.fear.late	Don't cry. Hey. Don't cry. You'll make me cry, and I don't have time.
+crisis.fear.late	Fernando, I was somebody before all this. Please remember I was somebody.
+crisis.fear.late	Hold my hand. I can't feel it anymore, but hold it anyway.
+crisis.fear.late	I can't remember my mother's face. I had it this morning.
+crisis.fear.late	I don't wanna lose myself. Please. I don't want to forget who I am.
+crisis.fear.late	I don't want to hurt anybody. Promise me I won't hurt anybody.
+crisis.fear.late	I'm so tired. I'm so tired, and I'm so scared.
+crisis.fear.late	I'm sorry. I'm sorry for all of it.
+crisis.fear.late	Is it cold in here, or is it just me? It's just me, isn't it.
+crisis.fear.late	It's getting dark in my head. Like lights going out, room by room.
+crisis.fear.late	Say my name. Keep saying it, so I don't forget it.
+crisis.fear.late	When it happens, it won't be me. Remember that. It won't be me.
+crisis.fear.late	You were good to me. All of you. Tell them I said so.
+crisis.fear.mid	Can somebody get me a blanket? I can't get warm.
+crisis.fear.mid	Don't leave me alone tonight. Please.
+crisis.fear.mid	Don't sit so close. I don't want it to be you next.
+crisis.fear.mid	Fernando, my head's full of fog. Say something so I know where I am.
+crisis.fear.mid	I can taste metal. Nothing tastes right anymore.
+crisis.fear.mid	I feel cold. Why am I so cold? It's the middle of summer.
+crisis.fear.mid	I had a dog once. His name was... I can't remember his name.
+crisis.fear.mid	I keep losing minutes. Did I already say that?
+crisis.fear.mid	I'm burning up and freezing at the same time.
+crisis.fear.mid	If you ever find my family, tell them I tried. Tell them I tried so hard.
+crisis.fear.mid	My hands won't stop shaking.
+crisis.fear.mid	Talk to me. Keep talking. If you talk, I'm still here.
+danger.crowd	Crowd of deadheads. Watch the sides.
+danger.crowd	Crowd of zombies ahead.
+danger.crowd	I count at least six.
+danger.crowd	I've got at least half a dozen.
+danger.group	Four walkers, give or take one.
+danger.group	Four walkers. Nobody goes in alone.
+danger.group	Several ahead. Stay together and don't rush.
+danger.group	Three or four zombies ahead.
+danger.group	We've got a cluster of them ahead.
+danger.heard	*goes quiet* Something dead is moving nearby.
+danger.heard	*listens* I heard a walker.
+danger.horde	Horde ahead!
+danger.horde	Horde! Stay together and follow me out.
+danger.horde	Huge horde in front of us.
+danger.horde	Mass of dead ahead. Do not go that way.
+danger.horde	Nobody gets left behind. Move away from them.
+danger.horde	That road is lost. Horde.
+danger.horde	The dead own that whole block.
+danger.horde	The whole street is moving.
+danger.horde	They're everywhere up there.
+danger.horde	Wall of walkers ahead.
+danger.one	Contact. One zombie.
+danger.one	I see one. Keep your eyes on it.
+danger.one	Just one in sight. Watch yourself.
+danger.one	Just one zombie in sight.
+danger.one	One body moving. Not alive.
+danger.one	One deadhead, out ahead.
+danger.one	One of them, straight ahead.
+danger.one	One walker. I've got it.
+danger.one	One zombie ahead.
+danger.one	One zombie ahead. Stay close to me.
+danger.one	Single contact ahead - nothing we can't handle.
+danger.one	Single walker, up ahead.
+danger.one	We've got a single contact.
+danger.pair	I count two.
+danger.pair	I've got two moving together.
+danger.pair	Not one. Two of them.
+danger.pair	Pair of walkers, front.
+danger.pair	There's a pair up ahead.
+danger.pair	Two ahead. Stay where I can see you.
+danger.pair	Two bodies moving our way.
+danger.pair	Two contacts in sight.
+danger.pair	Two zombies ahead.
+danger.pair	Two zombies. Don't let them come side by side.
+danger.pair	Watch it. Two zombies.
+danger.sitting	Seated walker. Waiting doesn't make it harmless.
+danger.sitting	Sitting walker. I'll deal with it.
+gestures.workout.idle	Waiting is just resting, but boring. Let's move.
+gift.weapon.thanks	I appreciate it. I'll keep it ready.
+gift.weapon.thanks	I'll take care of it. And I'll use it when it counts.
+grab.escaped	Got loose!
+lastwords.pinned	Fernando, I don't want our last moment to be this!
+player_hit.warning	Easy there. I bruise same as you.
+recognition.local	Bobby Givens? No. Couldn't be. Still, watch that walker.
+recognition.local	For half a second I thought that was Darlene McCrary. Half a second too long.
+recognition.local	I knew a neighbor named Darlene Ratliff. That dead thing stole her face.
+recognition.local	Same coat, same walk. Could be Marlene Givens from Brandenburg. Contact ahead.
+recognition.local	Tammy Givens used to wave from across the road. Now that walker is crossing it dead.
+recognition.local	That looks like Dillard Hensley. He used to be the neighbor back in Brandenburg.
+scavenge.loot.excited	Found some comfrey seeds. The shelves had one secret left.
+signal.group	*holds up four fingers: small group ahead*
+signal.group	*shows four, then pairs two fingers: team up*
+signal.horde	*draws a line across their throat and points away from the horde*
+signal.horde	*makes a wide crowd signal, then urgently motions everyone back*
+signal.one	*points low, then shows one finger*
+signal.pair	*holds two fingers low, then points forward*
+signal.pair	*raises two fingers: two walkers ahead*
+signal.pair	*shows two fingers, then motions to split them apart*
+signal.pair	*signals two contacts near each other*
+signal.pair	*two fingers, then a chopping motion: split them*
+traversal.wall.fail	Too high, bad grip. Pick another route.
+traversal.wall.struggle	That fence collected its toll in dignity.

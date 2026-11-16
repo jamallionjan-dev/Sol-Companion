@@ -1,0 +1,14 @@
+-Duser.home=C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile
+-Djava.awt.headless=true
+--enable-native-access=ALL-UNNAMED
+--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED
+-Dzomboid.steam=1
+-Dzomboid.znetlog=1
+-XX:-CreateCoredumpOnCrash
+-XX:-OmitStackTraceInFastThrow
+-Xmx4096m
+-Djava.library.path=win64/;.
+-cp
+C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\SolNativePrototype\build_locomotionsync_20261020_092325\SolNativeBridge.jar;pzopt/aot/pzopt.jar;projectzomboid.jar
+sol.bridge.SolLauncher
+-debug

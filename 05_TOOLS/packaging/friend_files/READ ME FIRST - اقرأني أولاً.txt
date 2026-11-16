@@ -1,0 +1,28 @@
+﻿اقرأني أولاً: سول 0.28.3
+
+١) اكبس مرتين على "PLAY SOL.bat". هو بيركّب المود، وبيفعّلو، وبيشغّل عقل سول بالخفا، وبيفتح اللعبة.
+   (إذا ZombieBuddy مش عندك، بتنفتح صفحتو عالـWorkshop، اشترك فيه وبعدين اكبس مرة تانية.)
+٢) أول مرة باللعبة: ZombieBuddy بيسألك توافق على ملف الجافا تبع سول. وافق.
+٣) باللعبة افتح إعدادات سول، وروح على API key، واختار Groq. خود مفتاح مجاني من https://console.groq.com/keys، حطّو واكبس Apply key، واختار موديل، وبعدين Save وTest. النقطة لازم تصير خضرا.
+   أو موديل على هاتفك (آيفون أو أندرويد) بدل Groq: شغّل السيرفر بتطبيق الهاتف، والهاتف والكمبيوتر على نفس الواي فاي.
+   بإعدادات سول اختار "Phone / own server"، اكتب العنوان اللي بيعرضو التطبيق (بيكفي متل 192.168.1.20:11434) والمفتاح، واكبس Apply key وبعدين Test.
+   إذا نجح بينحفظ لحالو (العنوان والمفتاح والموديل)، وما بتحتاج تكتب شي المرة الجاية. وإذا تغيّر عنوان الهاتف، سول بتلاقيه لحالها.
+   أسهل: انسخ العنوان والمفتاح (ودبوس TLS إذا التطبيق بيعرضو) مع بعض على الكمبيوتر واكبس Paste.
+بعد هيك، كل مرة بدك تلعب: بس اكبس على "PLAY SOL.bat".
+
+إذا في مشكلة: النقطة حمرا؟ شغّل "FIX - اصلاح.bat". بيفتح شباك أسود وبيشغّل العقل، والخطأ بيبيّن فيه. خلّيه مفتوح، وإذا طلع خطأ صوّرو وابعتو مع الملفات: sol_launcher_log.txt وSolMind\sol_mind_service.log وSolMind\sol_mind_log.txt.
+
+------------------------------------------------------------
+READ ME FIRST: Sol 0.28.3
+
+1) Double-click "PLAY SOL.bat". It installs and enables the mod, starts Sol's mind hidden, and launches the game.
+   (If you don't have ZombieBuddy, its Workshop page opens: subscribe, then double-click again.)
+2) First time in game: ZombieBuddy asks you to approve Sol's Java file. Approve it.
+3) In game open Sol settings, go to API key and pick Groq. Get a free key at https://console.groq.com/keys, paste it, press Apply key, pick a model, then Save and Test. The dot turns green.
+   Or a model on your phone (iPhone or Android) instead of Groq: start the server in the phone app, phone and PC on the same Wi-Fi.
+   In Sol settings pick "Phone / own server", type the address the app shows (192.168.1.20:11434 is enough) and the key, press Apply key, then Test.
+   When it works it is saved by itself (address, key, model): nothing to type next time. If the phone's address changes, Sol finds it again.
+   Easier: copy the address and the key (and the TLS pin if the app shows one) together on the PC and press Paste.
+After that, every time you want to play: just double-click "PLAY SOL.bat".
+
+Trouble: red dot? Run "FIX - اصلاح.bat". It runs the mind in a visible window so errors show; keep it open. Send a screenshot plus sol_launcher_log.txt, SolMind\sol_mind_service.log and SolMind\sol_mind_log.txt.

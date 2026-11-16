@@ -1,0 +1,225 @@
+"""Sol Mind brain providers: key detection, model listing, free/paid labels, chat.
+Standard library only (urllib). Every network call has a timeout and never logs the key."""
+import json, time, urllib.request, urllib.error
+
+# kind: anthropic | openai (OpenAI-compatible chat/completions) | ollama
+# tier: label used when the provider does not publish per-model prices
+PROVIDERS = {
+    "anthropic":  {"name": "Anthropic (Claude)", "kind": "anthropic", "base": "https://api.anthropic.com/v1",
+                   "prefixes": ["sk-ant-"], "tier": "paid", "key_page": "https://platform.claude.com/settings/keys"},
+    "openai":     {"name": "OpenAI", "kind": "openai", "base": "https://api.openai.com/v1",
+                   "prefixes": ["sk-proj-", "sk-svcacct-"], "tier": "paid", "key_page": "https://platform.openai.com/api-keys"},
+    "gemini":     {"name": "Google Gemini", "kind": "openai", "base": "https://generativelanguage.googleapis.com/v1beta/openai",
+                   "prefixes": ["AIza"], "tier": "tier", "key_page": "https://aistudio.google.com/apikey"},
+    "openrouter": {"name": "OpenRouter", "kind": "openai", "base": "https://openrouter.ai/api/v1",
+                   "prefixes": ["sk-or-"], "tier": "priced", "key_page": "https://openrouter.ai/settings/keys"},
+    "groq":       {"name": "Groq", "kind": "openai", "base": "https://api.groq.com/openai/v1",
+                   "prefixes": ["gsk_"], "tier": "tier", "key_page": "https://console.groq.com/keys"},
+    "xai":        {"name": "xAI (Grok)", "kind": "openai", "base": "https://api.x.ai/v1",
+                   "prefixes": ["xai-"], "tier": "paid", "key_page": "https://console.x.ai"},
+    "deepseek":   {"name": "DeepSeek", "kind": "openai", "base": "https://api.deepseek.com",
+                   "prefixes": [], "tier": "paid", "key_page": "https://platform.deepseek.com/api_keys"},
+    "mistral":    {"name": "Mistral", "kind": "openai", "base": "https://api.mistral.ai/v1",
+                   "prefixes": [], "tier": "tier", "key_page": "https://console.mistral.ai/api-keys"},
+    "opencode":   {"name": "OpenCode Zen", "kind": "openai", "base": "https://opencode.ai/zen/v1",
+                   "prefixes": [], "tier": "priced", "key_page": "https://opencode.ai/zen"},
+    "custom":     {"name": "Custom URL", "kind": "openai", "base": "", "prefixes": [], "tier": "unknown", "key_page": ""},
+    "ollama":     {"name": "Local (Ollama)", "kind": "ollama", "base": "http://localhost:11434", "prefixes": [], "tier": "local", "key_page": ""},
+}
+ORDER = ["anthropic", "openai", "gemini", "openrouter", "groq", "xai", "deepseek", "mistral", "opencode", "custom", "ollama"]
+# keys without a distinctive prefix: providers tried in this order
+GENERIC_SK = ["openai", "deepseek", "opencode"]
+GENERIC_OTHER = ["opencode", "mistral"]
+# OpenCode Zen: free models known from its docs; ids ending in -free are free too
+OPENCODE_FREE = {"big-pickle"}
+
+class ProviderError(Exception):
+    def __init__(self, code, detail=""):
+        super().__init__(code); self.code = code; self.detail = detail
+
+def _headers(pid, key):
+    p = PROVIDERS[pid]
+    h = {"Content-Type": "application/json", "User-Agent": "SolMind/0.2.2"}
+    if p["kind"] == "anthropic":
+        h["x-api-key"] = key; h["anthropic-version"] = "2023-06-01"
+    elif key:
+        h["Authorization"] = "Bearer " + key
+    return h
+
+def _http(method, url, headers, body=None, timeout=20):
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        code = {401: "invalid_key", 403: "forbidden", 404: "not_found", 429: "rate_limited", 402: "no_credit"}.get(e.code, "http_%d" % e.code)
+        try: text = e.read(600).decode("utf-8", "replace")
+        except Exception: text = ""
+        if "FreeTierError" in text: code = "free_tier_app_only"          # OpenCode: free models only inside the OpenCode app
+        elif "error code: 1010" in text: code = "blocked_by_firewall"     # Cloudflare refused the client
+        raise ProviderError(code, ("HTTP %d " % e.code) + " ".join(text.split())[:300])
+    except urllib.error.URLError as e:
+        raise ProviderError("unreachable", str(getattr(e, "reason", e))[:120])
+    except TimeoutError:
+        raise ProviderError("timeout")
+    except (ValueError, json.JSONDecodeError):
+        raise ProviderError("bad_response")
+
+def base_url(pid, custom_base=""):
+    b = custom_base.strip().rstrip("/") if pid in ("custom", "ollama") and custom_base.strip() else PROVIDERS[pid]["base"]
+    return b.rstrip("/")
+
+def candidates(key):
+    """Providers to try for a key, most likely first."""
+    k = (key or "").strip()
+    for pid in ORDER:
+        if any(k.startswith(px) for px in PROVIDERS[pid]["prefixes"]):
+            return [pid]
+    return list(GENERIC_SK) if k.startswith("sk-") else list(GENERIC_OTHER)
+
+# models that are not chat models (speech, TTS, guards, embeddings)
+NON_CHAT = ("whisper", "orpheus", "tts", "guard", "safeguard", "embed", "moderation", "transcribe", "playai", "rerank", "dall-e", "image")
+# models that think before answering: give them room and keep the thinking short
+REASONING = ("gpt-oss", "deepseek-r1", "-reasoner", "qwq", "o1-", "o3-", "o4-")
+
+def is_chat_model(mid):
+    low = mid.lower()
+    return not any(w in low for w in NON_CHAT)
+
+def is_reasoning_model(mid):
+    low = mid.lower()
+    return any(w in low for w in REASONING)
+
+def _label(pid, m):
+    """Return (badge, data_warning, supported) for one model entry."""
+    mid = m.get("id", "")
+    if not is_chat_model(mid):
+        return "nochat", False, False
+    tier = PROVIDERS[pid]["tier"]
+    if pid == "openrouter":
+        pr = m.get("pricing") or {}
+        free = str(pr.get("prompt", "1")) in ("0", "0.0") and str(pr.get("completion", "1")) in ("0", "0.0")
+        return ("free" if free else "paid"), free, True
+    if pid == "opencode":
+        free = mid.endswith("-free") or mid in OPENCODE_FREE
+        # Zen GPT models use /responses, Claude /messages, Gemini its own route: chat/completions only for now
+        supported = not (mid.startswith("gpt-") or mid.startswith("claude-") or mid.startswith("gemini-"))
+        return ("free" if free else "paid"), free, supported
+    if tier == "local":
+        return "local", False, True
+    return {"paid": "paid", "tier": "tier"}.get(tier, "unknown"), False, True
+
+def list_models(pid, key, custom_base="", timeout=20):
+    b = base_url(pid, custom_base)
+    if not b:
+        raise ProviderError("no_base_url")
+    if PROVIDERS[pid]["kind"] == "ollama":
+        data = _http("GET", b + "/api/tags", _headers(pid, ""), timeout=timeout)
+        raw = [{"id": m.get("name", "")} for m in data.get("models", [])]
+    else:
+        url = b + "/models"
+        if pid == "anthropic":
+            url += "?limit=100"
+        data = _http("GET", url, _headers(pid, key), timeout=timeout)
+        raw = data.get("data", data.get("models", []))
+        if pid == "gemini":  # ids come as "models/gemini-..." on the compat route
+            raw = [dict(m, id=str(m.get("id", m.get("name", ""))).replace("models/", "")) for m in raw]
+    out = []
+    for m in raw:
+        mid = str(m.get("id", "")).strip()
+        if not mid:
+            continue
+        badge, warn, supported = _label(pid, m)
+        out.append({"id": mid, "badge": badge, "warn": warn, "supported": supported})
+    # free first, then supported, then name
+    out.sort(key=lambda x: (x["badge"] != "free", not x["supported"], x["id"]))
+    return out
+
+def detect(key, preferred="auto", custom_base="", timeout=15):
+    """Find which provider accepts the key. Returns (pid, models). Raises ProviderError with the last failure."""
+    order = [preferred] if preferred and preferred != "auto" else candidates(key)
+    last = ProviderError("invalid_key")
+    tried = []
+    for pid in order:
+        try:
+            return pid, list_models(pid, key, custom_base, timeout)
+        except ProviderError as e:
+            tried.append("%s %s" % (PROVIDERS[pid]["name"], e.detail or e.code))
+            last = e
+            if e.code not in ("invalid_key", "forbidden", "not_found", "unreachable"):
+                break
+    last.detail = "; ".join(tried)
+    raise last
+
+def chat(pid, key, model, messages, system="", custom_base="", max_tokens=400, timeout=60):
+    """messages: [{"role": "user"|"assistant", "content": str}] -> reply text."""
+    b = base_url(pid, custom_base)
+    kind = PROVIDERS[pid]["kind"]
+    if kind == "anthropic":
+        body = {"model": model, "max_tokens": max_tokens, "messages": messages}
+        if system:
+            body["system"] = system
+        data = _http("POST", b + "/messages", _headers(pid, key), body, timeout)
+        return "".join(c.get("text", "") for c in data.get("content", []) if c.get("type") == "text").strip()
+    if kind == "ollama":
+        msgs = ([{"role": "system", "content": system}] if system else []) + messages
+        data = _http("POST", b + "/api/chat", _headers(pid, ""), {"model": model, "messages": msgs, "stream": False}, timeout)
+        return (data.get("message") or {}).get("content", "").strip()
+    msgs = ([{"role": "system", "content": system}] if system else []) + messages
+    body = {"model": model, "messages": msgs, "max_tokens": max_tokens}
+    if is_reasoning_model(model):
+        # proven 2026-10-23 on Groq gpt-oss-120b: with max_tokens=120 the thinking used the whole budget (finish=length,
+        # empty reply); reasoning_effort=low + 1024 answered in 35 tokens.
+        body["max_tokens"] = max(max_tokens, 1024)
+        if pid in ("groq", "openrouter", "openai", "opencode", "custom"):
+            body["reasoning_effort"] = "low"
+    data = _http("POST", b + "/chat/completions", _headers(pid, key), body, timeout)
+    ch = data.get("choices") or [{}]
+    return ((ch[0].get("message") or {}).get("content") or "").strip()
+
+def chat_with_tools(pid, key, model, messages, tools, run_tool, system="", custom_base="", max_tokens=600, timeout=60, rounds=4):
+    """OpenAI-compatible tool calling: the model may call tools (run_tool(name, args) -> dict) before answering.
+    Anthropic / Ollama fall back to plain chat (no tools)."""
+    if PROVIDERS[pid]["kind"] != "openai":
+        return chat(pid, key, model, messages, system=system, custom_base=custom_base, max_tokens=max_tokens, timeout=timeout)
+    b = base_url(pid, custom_base)
+    msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
+    for _ in range(rounds):
+        body = {"model": model, "messages": msgs, "max_tokens": max_tokens, "tools": tools, "tool_choice": "auto"}
+        if is_reasoning_model(model):
+            body["max_tokens"] = max(max_tokens, 1024)
+            if pid in ("groq", "openrouter", "openai", "opencode", "custom"): body["reasoning_effort"] = "low"
+        data = _http("POST", b + "/chat/completions", _headers(pid, key), body, timeout)
+        msg = ((data.get("choices") or [{}])[0].get("message") or {})
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            return (msg.get("content") or "").strip()
+        msgs.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
+        for c in calls:
+            fn = c.get("function") or {}
+            try: args = json.loads(fn.get("arguments") or "{}")
+            except ValueError: args = {}
+            try: result = run_tool(fn.get("name"), args)
+            except Exception as e: result = {"error": str(e)[:200]}
+            msgs.append({"role": "tool", "tool_call_id": c.get("id"), "content": json.dumps(result, ensure_ascii=False)})
+    return ""
+
+def test(pid, key, model, custom_base=""):
+    t0 = time.time()
+    reply = chat(pid, key, model, [{"role": "user", "content": "Reply with the single word: ready"}],
+                 custom_base=custom_base, max_tokens=64, timeout=30)
+    return reply, round(time.time() - t0, 2)
+
+import re as _re
+_KEY_RE = _re.compile(r"^[A-Za-z0-9_\-\.:+/=]{20,300}$")
+def looks_like_key(text):
+    """Shape check done BEFORE any network call, so random clipboard text is never sent anywhere."""
+    return bool(_KEY_RE.match((text or "").strip()))
+
+def key_hint(key):
+    k = (key or "").strip()
+    if len(k) < 10:
+        return "****"
+    head = k[:6] if not k.startswith("sk-or-v1-") else k[:9]
+    return head + "****" + k[-4:]

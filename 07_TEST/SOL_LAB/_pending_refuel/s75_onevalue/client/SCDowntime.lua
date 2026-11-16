@@ -1,0 +1,5076 @@
+-- SPDX-License-Identifier: MIT
+
+SurvivorCompanion = SurvivorCompanion or {}
+local SC = SurvivorCompanion
+if not SC.GameplayUtil and type(require) == "function" then pcall(require, "SCGameplayUtil") end
+if not SC.Background and type(require) == "function" then pcall(require, "SCBackground") end
+
+SC.Downtime = SC.Downtime or {}
+local Downtime = SC.Downtime
+local states = setmetatable({}, { __mode = "k" })
+local reservations = setmetatable({}, { __mode = "k" })
+local visualActivities = {
+    read = true, repair = true, craft_supply = true,
+    wash_self = true, wash_equipment = true, wash_bandage = true, shower = true,
+    study_corpse = true, pay_respects = true,
+    workout = true, write_diary = true, gear_check = true,
+    radio_check = true, tidy_camp = true, weather_recovery = true,
+}
+local lastSquadRadioCheckAt = -math.huge
+local LEADER_CHECK_IN_COOLDOWN_MS = 720000
+local LEADER_CHECK_IN_PAIR_COOLDOWN_MS = 1800000
+local LEADER_CHECK_IN_OPEN = {
+    common = {
+        "How you holding up, %1?", "Thought I would come see how you are doing, %1.",
+        "You all right over here, %1?", "Need a hand with anything, %1?",
+        "Taking a minute to check on everyone. How are you, %1?",
+        "You have been quiet, %1. Everything okay?",
+    },
+    caring = { "I wanted to make sure you were doing all right, %1." },
+    practical = { "Checking in, %1. Anything you need from the camp?" },
+}
+local LEADER_CHECK_IN_REPLY = {
+    common = {
+        "Holding up. Thanks for asking, %1.", "Tired, but I am all right.",
+        "I could use a rest when this is done.", "Better now that someone asked.",
+        "I have what I need. You take care of yourself too.",
+        "One thing at a time. I can manage that.",
+    },
+    caring = { "It helps knowing someone is looking out for us." },
+    practical = { "Supplies are fine. I will speak up if that changes." },
+}
+local CLEAN_DRESSING_TYPES = {
+    ["base.bandagedirty"] = "Base.Bandage",
+    ["base.rippedsheetsdirty"] = "Base.RippedSheets",
+    ["base.denimstripsdirty"] = "Base.DenimStrips",
+    ["base.leatherstripsdirty"] = "Base.LeatherStrips",
+}
+local restPostures = { sit = true, rest_bed = true, rest_floor = true }
+
+local function U()
+    return SC.GameplayUtil
+end
+
+local function gameHours()
+    if type(getGameTime) ~= "function" then return nil end
+    local ok, gameTime = pcall(getGameTime)
+    if not ok or gameTime == nil then return nil end
+    local hours, read = U().call(gameTime, "getWorldAgeHours")
+    hours = read and tonumber(hours) or nil
+    return hours and hours == hours and hours >= 0 and hours or nil
+end
+
+local function restHours(actor, kind, fatigue, current)
+    local minute = math.floor((gameHours() or current / 60000) * 60)
+    local seed = tostring(U().idOf(actor) or actor) .. ":" .. tostring(minute)
+        .. ":" .. tostring(kind)
+    local roll = math.abs(tonumber((U().stableHash(seed))) or 0) % 1000 / 1000
+    if kind == "sit" then return (25 + math.floor(roll * 61)) / 60 end
+    return math.max(3.5, math.min(9, 2 + fatigue * 7 + (roll - 0.5)))
+end
+
+local function wakeFromBed(actor, activity)
+    if activity and activity.sleepStarted == true then
+        U().call(actor, "setAsleep", false)
+        activity.sleepStarted = false
+    end
+end
+
+local function supervisor()
+    return type(SC.ActionSupervisor) == "table" and SC.ActionSupervisor or nil
+end
+
+local function debugTrace(actor, event, activity, reason)
+    local utility = U()
+    if not utility or utility.config("debugSpawnEnabled") ~= true then return end
+    print("[SurvivorCompanion][downtime] actor=" .. tostring(utility.idOf(actor))
+        .. " event=" .. tostring(event)
+        .. " kind=" .. tostring(activity and activity.kind or "none")
+        .. " reason=" .. tostring(reason or "none"))
+end
+
+local function stateFor(actor)
+    local state = states[actor]
+    if not state then
+        state = { safeSince = nil, active = nil, idleStopped = false, nextEvaluationAt = 0 }
+        states[actor] = state
+    end
+    return state
+end
+
+local function commandState(actor)
+    if SC.Commands and type(SC.Commands.peek) == "function" then
+        local ok, value = pcall(SC.Commands.peek, actor)
+        if ok and type(value) == "table" then
+            if SC.ExpeditionPrototype
+                and type(SC.ExpeditionPrototype.testWaypointActiveFor) == "function"
+                and SC.ExpeditionPrototype.testWaypointActiveFor(actor) then
+                local travelling = {}
+                for key, entry in pairs(value) do travelling[key] = entry end
+                travelling.order = "move_to"
+                return travelling
+            end
+            return value
+        end
+    end
+    return { order = "stay", commandSerial = 0, recruited = false }
+end
+
+local function reservationHeldByOther(value, actor, now)
+    local existing = value and reservations[value] or nil
+    if not existing or existing.actor == actor then return false end
+    if existing.expires > now then return true end
+    -- A long sit, read, or repair can exceed the lease. The active owner still
+    -- holds its resources until completion or cancellation releases them.
+    local owner = existing.actor
+    local state = owner and states[owner] or nil
+    local activity = state and state.active or nil
+    if not activity or U().isDead(owner) then return false end
+    if activity.object == value or activity.item == value
+        or activity.watchSquare == value
+        or activity.material == value then return true end
+    for _, scrap in ipairs(activity.scraps or {}) do
+        if scrap == value then return true end
+    end
+    return false
+end
+
+local function reserve(value, actor, now)
+    if not value then return true end
+    if reservationHeldByOther(value, actor, now) then return false end
+    reservations[value] = {
+        actor = actor,
+        expires = now + (U().config("downtimeReservationMs") or 30000),
+    }
+    return true
+end
+
+local function release(value, actor)
+    local existing = value and reservations[value]
+    if existing and existing.actor == actor then reservations[value] = nil end
+end
+
+-- An unfinished camp book belongs in the reader's pack between quiet pauses,
+-- including a journey. A finished copy goes back to its shelf when the reader
+-- is in reach; otherwise ordinary literature logistics shelves it later.
+local function returnBorrowedReadingItem(actor, activity)
+    if not activity or activity.borrowedReading ~= true or not activity.item then return true end
+    local utility = U()
+    local loan = select(1, utility.call(activity.item, "getModData"))
+    loan = type(loan) == "table" and loan.SC_BookLoan or nil
+    if type(loan) == "table" and loan.finished ~= true then return true end
+    local source = activity.borrowedFrom
+    local inventory = utility.inventory(actor)
+    if source and utility.inventoryContains(source, activity.item) then
+        activity.borrowedReading = false
+        if type(loan) == "table" then
+            local modData = select(1, utility.call(activity.item, "getModData"))
+            if type(modData) == "table" then modData.SC_BookLoan = nil end
+        end
+        return true
+    end
+    if not source or not inventory or not utility.inventoryContains(inventory, activity.item) then
+        debugTrace(actor, "borrow_return_blocked", activity, "borrowed_book_unavailable")
+        return false
+    end
+    local atSource = activity.borrowedOwner ~= nil
+        and utility.directInteractionAccess(actor, activity.borrowedOwner)
+    if atSource ~= true then
+        -- Cancellation may happen after danger or a new order has pulled the
+        -- reader away.  Keeping the exact book on the actor is lossless;
+        -- teleporting it through a wall back into its shelf is not.
+        debugTrace(actor, "borrow_return_blocked", activity,
+            "borrowed_book_source_not_in_reach")
+        return false
+    end
+    local returned, reason = utility.transferItemVerified(inventory, source, activity.item)
+    if returned == true then
+        activity.borrowedReading = false
+        local modData = select(1, utility.call(activity.item, "getModData"))
+        if type(modData) == "table" then modData.SC_BookLoan = nil end
+        return true
+    end
+    debugTrace(actor, "borrow_return_blocked", activity, reason or "borrowed_book_return_failed")
+    return false
+end
+
+local function releaseActivity(actor, activity)
+    if not activity then return end
+    if activity.kind == "rest_bed" then wakeFromBed(actor, activity) end
+    -- Getting up from a seat may earn a stretch (SCGestures), once per sit.
+    if restPostures[activity.kind]
+        and activity.preserveSeating ~= true
+        and activity.actionAccepted == true and not activity.stoodUpNoted
+        and SC.Gestures and type(SC.Gestures.noteStoodUp) == "function" then
+        activity.stoodUpNoted = true
+        pcall(SC.Gestures.noteStoodUp, actor, U().nowMs())
+    end
+    if restPostures[activity.kind] and activity.preserveSeating ~= true
+        and SC.NativeActions and type(SC.NativeActions.leaveSeating) == "function" then
+        pcall(SC.NativeActions.leaveSeating, actor)
+    end
+    returnBorrowedReadingItem(actor, activity)
+    release(activity.object, actor)
+    release(activity.watchSquare, actor)
+    release(activity.item, actor)
+    release(activity.material, actor)
+    if activity.scraps then
+        for _, item in ipairs(activity.scraps) do release(item, actor) end
+    end
+end
+
+-- Threats that combat has just judged out of reach (a zombie behind the base
+-- fence) do not stop idle life; anything close, attacking, human or
+-- surrounding does (SCCombat.onlyUnreachableThreats).
+local function dangerPresent(snapshot, actor, now)
+    if type(snapshot) ~= "table" then return false end
+    if (snapshot.immediateCount or 0) > 0
+        or (snapshot.player and snapshot.player.danger or 0) > 0 then
+        return true
+    end
+    if (snapshot.threatCount or 0) == 0 then return false end
+    local combat = SC.Combat
+    if actor == nil or type(combat) ~= "table"
+        or type(combat.onlyUnreachableThreats) ~= "function" then
+        return true
+    end
+    local ok, unreachable = pcall(combat.onlyUnreachableThreats, actor, snapshot, now)
+    return not (ok and unreachable == true)
+end
+
+local function objectOpen(object)
+    local value, ok = U().call(object, "IsOpen")
+    if ok then return value == true end
+    value, ok = U().call(object, "isOpen")
+    return ok and value == true
+end
+
+local function windowCurtain(window)
+    -- IsoWindow exposes HasCurtains in Build 42. A missing lookup used to
+    -- treat every covered window as clear and let the watch begin through it.
+    return select(1, U().call(window, "HasCurtains"))
+end
+
+local function isCurtain(object)
+    local utility = U()
+    if utility.instanceOf(object, "IsoCurtain") then return true end
+    local objectType, typeOk = utility.call(object, "getType")
+    local name, nameOk = utility.call(object, "getName")
+    local textValue = string.lower(
+        (typeOk and tostring(objectType) or "") .. " " .. (nameOk and tostring(name) or "")
+    )
+    return string.find(textValue, "curtain", 1, true) ~= nil
+end
+
+local function worldHour()
+    if type(getGameTime) ~= "function" then return 12 end
+    local ok, gameTime = pcall(getGameTime)
+    if not ok or not gameTime then return 12 end
+    local hour, hourOk = U().call(gameTime, "getHour")
+    if hourOk and type(hour) == "number" then return hour end
+    return 12
+end
+
+local orderAllowsIdle
+
+local function sameBuilding(actorSquare, candidateSquare)
+    local actorRoom, actorRoomOk = U().call(actorSquare, "getRoom")
+    local candidateRoom, candidateRoomOk = U().call(candidateSquare, "getRoom")
+    if not actorRoomOk or not candidateRoomOk or actorRoom == nil or candidateRoom == nil then
+        return false
+    end
+    if actorRoom == candidateRoom then return true end
+    local actorBuilding, actorBuildingOk = U().call(actorRoom, "getBuilding")
+    local candidateBuilding, candidateBuildingOk = U().call(candidateRoom, "getBuilding")
+    return actorBuildingOk and candidateBuildingOk and actorBuilding ~= nil
+        and actorBuilding == candidateBuilding
+end
+
+local function campFloorRoute(source, destination)
+    return SC.BaseLife and type(SC.BaseLife.allowsFloorTransit) == "function"
+        and SC.BaseLife.allowsFloorTransit(source, destination,
+            { workCampOnly = true }) == true
+end
+
+local function campWorkContext(source, destination)
+    if not source or not destination then return false end
+    if U().sameFloor(source, destination) then
+        return sameBuilding(U().squareOf(source), U().squareOf(destination))
+    end
+    return campFloorRoute(source, destination)
+end
+
+local function onCampStairs(actor)
+    local nav = SC.Navigation and type(SC.Navigation.peek) == "function"
+        and SC.Navigation.peek(actor) or nil
+    local lease = nav and nav.nativeLease or nil
+    if not lease or lease.affordance ~= "multi_level"
+        or lease.workCampOnly ~= true then return false end
+    return (SC.Navigation._betweenFloorHeights
+            and SC.Navigation._betweenFloorHeights(actor))
+        or (SC.BaseLife and type(SC.BaseLife.admitsStairTransit) == "function"
+            and SC.BaseLife.admitsStairTransit(U().squareOf(actor), lease))
+        or (SC.Navigation.isCampStairLanding
+            and SC.Navigation.isCampStairLanding(actor))
+end
+
+local function campWorkActorPresent(actor)
+    return SC.BaseLife and type(SC.BaseLife.isInside) == "function"
+        and (SC.BaseLife.isInside(actor) == true or onCampStairs(actor))
+end
+
+local function curtainCooling(state, object, now)
+    local expiry = state.curtainRetryAt and state.curtainRetryAt[object]
+    return expiry ~= nil and now < expiry
+end
+
+local function coolCurtain(state, object, now, failed)
+    if not object then return end
+    state.curtainRetryAt = state.curtainRetryAt or setmetatable({}, { __mode = "k" })
+    local cooldown = tonumber((U().config("curtainCooldownMs"))) or 45000
+    state.curtainRetryAt[object] = now + (failed and math.max(120000, cooldown) or cooldown)
+end
+
+local function nearbyCurtain(actor, desiredOpen, state, now)
+    local utility = U()
+    local x, y, z = utility.position(actor)
+    if not x then return nil end
+    local actorSquare = utility.squareOf(actor)
+    local radius = math.max(1, math.min(8,
+        math.floor(utility.config("curtainSearchRadius") or 5)))
+    local squareBudget = math.max(9, math.min(289,
+        math.floor(utility.config("curtainSearchSquareBudget") or 121)))
+    local objectBudget = math.max(48, math.min(256,
+        math.floor(utility.config("curtainSearchObjectBudget") or 128)))
+    local inspected = 0
+    local squaresInspected = 0
+    for distance = 0, radius do
+        for dx = -distance, distance do
+            for dy = -distance, distance do
+                if math.max(math.abs(dx), math.abs(dy)) == distance then
+                    squaresInspected = squaresInspected + 1
+                    if squaresInspected > squareBudget then return nil end
+                    local square = utility.gridSquare(x + dx, y + dy, z)
+                    local found
+                    if sameBuilding(actorSquare, square) then
+                        utility.squareObjects(square, function(object)
+                            inspected = inspected + 1
+                            if inspected > objectBudget then return false end
+                            if isCurtain(object) and objectOpen(object) ~= desiredOpen
+                                and not curtainCooling(state, object, now) then
+                                found = object
+                                return false
+                            end
+                        end, math.max(0, objectBudget - inspected))
+                    end
+                    if found then return found, square end
+                    if inspected >= objectBudget then return nil end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function clearCurtainTask(actor, state)
+    local task = state and state.curtainTask or nil
+    if not task then return false end
+    release(task.object, actor)
+    state.curtainTask = nil
+    return true
+end
+
+local function processCurtainTask(actor, state, commands, snapshot, now)
+    local task = state.curtainTask
+    if not task then return false, false, "no_curtain_task" end
+    if dangerPresent(snapshot, actor, now) or (commands.commandSerial or 0) ~= task.commandSerial then
+        clearCurtainTask(actor, state)
+        return true, false, "curtain_task_cancelled"
+    end
+    if now >= (task.expiresAt or 0) then
+        coolCurtain(state, task.object, now, true)
+        clearCurtainTask(actor, state)
+        return true, false, "curtain_approach_timeout"
+    end
+    local square = U().squareOf(task.object)
+    if not square or not isCurtain(task.object) then
+        clearCurtainTask(actor, state)
+        return true, false, "curtain_target_changed"
+    end
+    if objectOpen(task.object) == task.desiredOpen then
+        clearCurtainTask(actor, state)
+        return true, true, task.desiredOpen and "curtain_already_open" or "curtain_already_closed"
+    end
+    if not reserve(task.object, actor, now) then
+        clearCurtainTask(actor, state)
+        return true, false, "curtain_reserved"
+    end
+    local access, targets = U().directInteractionAccess(actor, task.object)
+    if not access then
+        if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+            clearCurtainTask(actor, state)
+            return true, false, "navigation_unavailable"
+        end
+        -- A curtain's own square can be the only usable indoor side of its
+        -- window. Other candidates must pass Navigation's direct-access edge
+        -- check, so the actor never stops across a wall from the curtain.
+        if U().isSquareFree(square) and sameBuilding(U().squareOf(actor), square) then
+            targets[#targets + 1] = square
+        end
+        if #targets == 0 then
+            coolCurtain(state, task.object, now, true)
+            clearCurtainTask(actor, state)
+            return true, false, "curtain_no_access_square"
+        end
+        local mode = commands.combatDoctrine == "stealth" and "sneak" or "walk"
+        local accepted, reason = SC.Navigation.requestAny(actor, targets, mode, {
+            action = "approach_interaction",
+            object = task.object,
+            environmentalTask = "curtain",
+            requireSameSquare = true,
+            nativeNearest = true,
+        })
+        if not accepted or reason == "arrived" then
+            coolCurtain(state, task.object, now, true)
+            clearCurtainTask(actor, state)
+            return true, false, reason == "arrived" and "curtain_access_mismatch"
+                or reason or "curtain_approach_rejected"
+        end
+        return true, true, "approaching_curtain"
+    end
+    if not SC.Navigation or type(SC.Navigation.interact) ~= "function" then
+        clearCurtainTask(actor, state)
+        return true, false, "navigation_unavailable"
+    end
+    local accepted, reason = SC.Navigation.interact(actor, task.object,
+        task.desiredOpen and "open_curtain" or "close_curtain")
+    coolCurtain(state, task.object, now, not accepted)
+    clearCurtainTask(actor, state)
+    if not accepted then return true, false, reason or "curtain_interaction_rejected" end
+    return true, true, task.desiredOpen and "curtain_opened" or "curtain_closed"
+end
+
+-- Bounded environmental behavior: search only the current building, cap both
+-- visited squares and objects, reserve the chosen curtain, then use ordinary
+-- Navigation so the NPC must physically approach it before toggling it.
+function Downtime.considerCurtain(actor, snapshot, current, player)
+    local utility = U()
+    if not utility.isValidActor(actor) then return false, false, "invalid_actor" end
+    local now = current or utility.nowMs()
+    local commands = commandState(actor)
+    local state = stateFor(actor)
+    if state.curtainTask then
+        return processCurtainTask(actor, state, commands, snapshot, now)
+    end
+    if dangerPresent(snapshot, actor, now) or not orderAllowsIdle(commands, actor, player) then
+        return false, false, "curtain_unsafe_or_busy"
+    end
+    local interval = utility.config("curtainDecisionIntervalMs") or 12000
+    if not utility.isDue(actor, "downtime_curtain", interval, now) then
+        return false, false, "curtain_deferred"
+    end
+    local actorSquare = utility.squareOf(actor)
+    local room, roomOk = utility.call(actorSquare, "getRoom")
+    local indoors = roomOk and room ~= nil
+    if not indoors then return false, false, "curtain_not_indoors" end
+    local hour = worldHour()
+    local night = hour >= 20 or hour < 6
+    local desiredOpen
+    local stealth = commands.combatDoctrine == "stealth" or commands.moveMode == "sneak"
+        or commands.holdFire == true
+    local phase = math.floor(now / math.max(1, interval))
+    local baseSeed = utility.stableHash(utility.idOf(actor) .. ":curtain")
+    local mixedSeed = (baseSeed + (phase % 2147483647) * 1103515245) % 2147483647
+    local roll = math.floor(mixedSeed / 65536) % 10
+    if night then
+        desiredOpen = false
+    elseif stealth then
+        -- A stealth companion sometimes spends safe downtime improving
+        -- concealment, but never reverses it by opening a curtain.
+        if roll <= 3 then desiredOpen = false end
+    elseif roll == 0 then
+        desiredOpen = false
+    elseif roll == 1 then
+        desiredOpen = true
+    end
+    if desiredOpen == nil then return false, false, "curtain_not_useful" end
+    local curtain, curtainSquare = nearbyCurtain(actor, desiredOpen, state, now)
+    if not curtain then return false, false, "no_curtain_change" end
+    if not reserve(curtain, actor, now) then
+        return true, false, "curtain_reserved"
+    end
+    state.curtainTask = {
+        object = curtain,
+        square = curtainSquare,
+        desiredOpen = desiredOpen,
+        commandSerial = commands.commandSerial or 0,
+        startedAt = now,
+        expiresAt = now + (utility.config("curtainTaskTimeoutMs") or 30000),
+    }
+    return processCurtainTask(actor, state, commands, snapshot, now)
+end
+
+local function travellingPassenger(actor, player)
+    if not actor or not player then return false end
+    local utility = U()
+    local vehicle = select(1, utility.call(actor, "getVehicle"))
+    if vehicle == nil or vehicle ~= select(1, utility.call(player, "getVehicle")) then
+        return false
+    end
+    if select(1, utility.call(vehicle, "isDriver", actor)) == true
+        or select(1, utility.call(vehicle, "getDriver")) == actor then return false end
+    return true
+end
+
+orderAllowsIdle = function(commands, actor, player, snapshot)
+    if not commands.recruited then return false end
+    if commands.order == "stay" or commands.order == "guard" then return true end
+    if commands.order == "base_duty" then
+        -- An outdoor work zone is a place to perform its job, not a new camp
+        -- lounge. If the return route stalls, keep retrying it rather than
+        -- accepting lower-priority sitting outside the marked area.
+        return SC.BaseLife and type(SC.BaseLife.isInside) == "function"
+            and SC.BaseLife.isInside(actor) == true
+    end
+    if commands.order == "follow" and player then
+        if travellingPassenger(actor, player) then return true end
+        local indoors = type(snapshot) == "table" and snapshot.indoors == true
+        if not indoors then
+            local square = U().squareOf(actor)
+            local room, roomOk = U().call(square, "getRoom")
+            indoors = roomOk and room ~= nil
+        end
+        if not indoors then return false end
+        local distance = U().distance(actor, player)
+        return distance <= math.max(3, (commands.followDistance or 3) + 1.5)
+    end
+    return false
+end
+
+local function isLiterature(item)
+    local utility = U()
+    local category, categoryOk = utility.call(item, "getCategory")
+    if categoryOk and tostring(category) == "Literature" then return true end
+    local itemType = string.lower(utility.itemType(item))
+    return string.find(itemType, "book", 1, true) ~= nil
+        or string.find(itemType, "magazine", 1, true) ~= nil
+end
+
+local function readingProgress(actor, item)
+    local utility = U()
+    local pageValue = select(1, utility.call(item, "getNumberOfPages"))
+    local pages = tonumber(pageValue) or 0
+    if pages <= 0 then return 0, 0 end
+    local fullType = utility.itemType(item)
+    local nativeValue = select(1, utility.call(actor, "getAlreadyReadPages", fullType))
+    local native = tonumber(nativeValue) or 0
+    local data = select(1, utility.call(actor, "getModData"))
+    local saved = type(data) == "table" and type(data.SC_ReadingPages) == "table"
+        and tonumber(data.SC_ReadingPages[fullType]) or 0
+    return math.min(pages, math.max(0, native, saved)), pages
+end
+
+-- Match the player's literature menu: Illiterate survivors may look at
+-- pictures, while a skill book is useful only for the reader's current level.
+-- Recheck this at completion because traits or skill levels can change during
+-- an animation; unreadable pages must never enter the saved reading ledger.
+local function readingEligible(actor, item)
+    if not isLiterature(item) then return false, nil end
+    local utility = U()
+    if type(CharacterTrait) == "table" and CharacterTrait.ILLITERATE ~= nil then
+        local illiterate, known = utility.call(actor, "hasTrait", CharacterTrait.ILLITERATE)
+        if known and illiterate == true then
+            local tags = ItemTag
+            local pictureBook = tags and tags.PICTUREBOOK or "PICTUREBOOK"
+            local picture = tags and tags.PICTURE or "PICTURE"
+            if not utility.itemHasTag(item, pictureBook)
+                and not utility.itemHasTag(item, picture) then
+                return false, nil
+            end
+        end
+    end
+    local skill = select(1, utility.call(item, "getSkillTrained"))
+    local trained = type(SkillBook) == "table" and SkillBook[skill] or nil
+    if trained then
+        local lowerValue = select(1, utility.call(item, "getLvlSkillTrained"))
+        local upperValue = select(1, utility.call(item, "getMaxLevelTrained"))
+        local levelValue = select(1, utility.call(actor, "getPerkLevel", trained.perk))
+        local lower, upper, level = tonumber(lowerValue), tonumber(upperValue),
+            tonumber(levelValue)
+        if not lower or not upper or not level or lower > level + 1
+            or upper < level + 1 then return false, trained end
+    end
+    return true, trained
+end
+
+local function literatureUseful(actor, item)
+    if not readingEligible(actor, item) then return false end
+    local tooDark, checked = U().call(actor, "tooDarkToRead")
+    if checked and tooDark == true then return false end
+    local read, pages = readingProgress(actor, item)
+    return pages > 0 and read < pages
+end
+
+local function finishReadingPages(actor, activity)
+    local utility, item = U(), activity.item
+    local inventory = utility.inventory(actor)
+    if item == nil or inventory == nil or not utility.inventoryContains(inventory, item) then
+        return false
+    end
+    local eligible, trained = readingEligible(actor, item)
+    if not eligible then return false end
+    local before, pages = readingProgress(actor, item)
+    if pages <= 0 or before >= pages then return false end
+    -- One verified Read pose covers a short chapter, rather than awarding an
+    -- entire book for a six-second animation. The character's page ledger is
+    -- saved with the survivor; an unfinished book survives trips and reloads.
+    local after = math.min(pages, before + math.max(1, math.floor(pages / 20)))
+    local fullType = utility.itemType(item)
+    local data = select(1, utility.call(actor, "getModData"))
+    if type(data) ~= "table" then return false end
+    data.SC_ReadingPages = type(data.SC_ReadingPages) == "table"
+        and data.SC_ReadingPages or {}
+    data.SC_ReadingPages[fullType] = after
+    utility.call(actor, "setAlreadyReadPages", fullType, after)
+    utility.call(item, "setAlreadyReadPages", after)
+    -- Skill books use the same ten-percent multiplier steps as vanilla
+    -- ISReadABook. The level gate above prevents progress on a book the
+    -- companion cannot currently use.
+    local skill = select(1, utility.call(item, "getSkillTrained"))
+    if trained and type(addXpMultiplier) == "function" then
+        local lowerValue = select(1, utility.call(item, "getLvlSkillTrained"))
+        local upperValue = select(1, utility.call(item, "getMaxLevelTrained"))
+        local levelValue = select(1, utility.call(actor, "getPerkLevel", trained.perk))
+        local lower, upper, level = tonumber(lowerValue), tonumber(upperValue),
+            tonumber(levelValue)
+        -- Vanilla ISReadABook numbers the multipliers by volume: a book that
+        -- starts at level 1, 3, 5, 7 or 9 uses maxMultiplier1..5. Indexing by
+        -- the level itself gave volumes 2 and 3 a later volume's multiplier and
+        -- volumes 4 and 5 none at all.
+        local volume = lower and ({ [1] = 1, [3] = 2, [5] = 3, [7] = 4, [9] = 5 })[
+            math.floor(lower)]
+        local maximum = volume and tonumber(trained["maxMultiplier" .. volume])
+        local xp = select(1, utility.call(actor, "getXp"))
+        local existingValue = select(1, utility.call(xp, "getMultiplier", trained.perk))
+        local existing = tonumber(existingValue) or 0
+        if lower and upper and level and maximum and lower <= level + 1
+            and upper >= level + 1 then
+            local multiplier = math.floor(after * 10 / pages) * maximum / 10
+            if multiplier > existing then
+                pcall(addXpMultiplier, actor, trained.perk, multiplier, lower, upper)
+            end
+        end
+    end
+    activity.fact.pagesBefore, activity.fact.pagesAfter = before, after
+    activity.fact.pagesTotal = pages
+    activity.fact.finishedBook = after >= pages
+    local itemData = select(1, utility.call(item, "getModData"))
+    if type(itemData) == "table" and type(itemData.SC_BookLoan) == "table" then
+        itemData.SC_BookLoan.finished = after >= pages
+    end
+    if after >= pages then
+        if skill == nil or skill == ""
+            or (type(SkillBook) == "table" and not trained) then
+            utility.call(actor, "ReadLiterature", item)
+        end
+    end
+    return true
+end
+
+local function readActivity(actor, items)
+    local utility = U()
+    local loaned, ordinary
+    for _, item in ipairs(items) do
+        if literatureUseful(actor, item) then
+            local activity = {
+                kind = "read",
+                score = 34,
+                item = item,
+                fact = { activity = "read", itemType = utility.itemType(item) },
+            }
+            local data = select(1, utility.call(item, "getModData"))
+            local loan = type(data) == "table" and data.SC_BookLoan or nil
+            if type(loan) == "table" and loan.actorId == utility.idOf(actor) then
+                activity.fact.borrowedFromCamp = true
+                activity.score = 38
+                loaned = loaned or activity
+            else
+                ordinary = ordinary or activity
+            end
+        end
+    end
+    return loaned or ordinary
+end
+
+function Downtime.canReadOnTrip(actor, player)
+    local utility = U()
+    if not travellingPassenger(actor, player) then return false end
+    return readActivity(actor, utility.inventoryItems(utility.inventory(actor), 100)) ~= nil
+end
+
+function Downtime.hasBookToDiscuss(actor)
+    if not actor then return false end
+    local utility = U()
+    for _, item in ipairs(utility.inventoryItems(utility.inventory(actor), 100)) do
+        if readingEligible(actor, item) then return true end
+    end
+    return false
+end
+
+-- A resident should use the books the camp actually owns, not stand beside a
+-- marked bookshelf because its personal inventory happens to be empty. The
+-- scan is base-only, close-range and globally bounded per decision. Reserves
+-- and personal/work-cargo ownership are honoured before offering the exact
+-- book as a downtime resource.
+local function campReadingActivity(actor)
+    local utility = U()
+    local base = SC.BaseLife
+    if not base or type(base.isInside) ~= "function"
+        or type(base.storageRows) ~= "function"
+        or type(base.resolveContainer) ~= "function"
+        or base.isInside(actor) ~= true then return nil end
+    local radius = tonumber((utility.config("campReadingStorageRadius"))) or 8
+    local storageLimit = math.max(1,
+        math.floor(tonumber((utility.config("campReadingStorageBudget"))) or 8))
+    local remaining = math.max(1,
+        math.floor(tonumber((utility.config("campReadingItemBudget"))) or 120))
+    -- Dedicated library storage is searched first, so a camp with many marked
+    -- containers cannot exhaust this bounded scan before reaching its shelf.
+    local storages, seen = {}, {}
+    local function append(rows)
+        for _, storage in ipairs(rows or {}) do
+            local key = storage.id or storage
+            if not seen[key] then
+                seen[key] = true
+                storages[#storages + 1] = storage
+            end
+        end
+    end
+    append(base.storageRows("literature", true))
+    append(base.storageRows(nil, true))
+    local inspected = 0
+    for _, storage in ipairs(storages) do
+        inspected = inspected + 1
+        if inspected > storageLimit or remaining <= 0 then break end
+        local container, object = base.resolveContainer(storage)
+        local crossFloor = object and not utility.sameFloor(actor, object)
+        if container and object
+            and (not crossFloor or campFloorRoute(actor, object))
+            and utility.distance(actor, object)
+                <= (crossFloor and math.max(radius, 16) or radius) then
+            local items = utility.inventoryItems(container, remaining)
+            remaining = remaining - #items
+            local counts = {}
+            for _, item in ipairs(items) do
+                local itemType = utility.itemType(item)
+                counts[itemType] = (counts[itemType] or 0) + 1
+            end
+            for _, item in ipairs(items) do
+                local itemType = utility.itemType(item)
+                local perType = type(storage.reserves) == "table"
+                    and tonumber(storage.reserves[itemType]) or nil
+                local reserveCount = math.max(0, math.floor(perType
+                    or tonumber(storage.reserve) or 0))
+                local protected = SC.PersonalItems
+                    and type(SC.PersonalItems.isProtected) == "function"
+                    and SC.PersonalItems.isProtected(item, actor, "camp_reading_borrow")
+                if counts[itemType] > reserveCount and not protected
+                    and literatureUseful(actor, item) then
+                    return {
+                        kind = "read",
+                        score = 32,
+                        item = item,
+                        object = object,
+                        square = utility.squareOf(object),
+                        borrowedFrom = container,
+                        borrowedOwner = object,
+                        borrowedStorageId = storage.id,
+                        originSquare = utility.squareOf(actor),
+                        crossFloor = crossFloor,
+                        fact = { activity = "read", itemType = itemType,
+                            borrowedFromCamp = true },
+                    }
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function availableReadActivity(actor, carriedItems)
+    return readActivity(actor, carriedItems) or campReadingActivity(actor)
+end
+
+local function repairActivity(actor, items)
+    local utility = U()
+    local damaged
+    for _, item in ipairs(items) do
+        local condition, conditionOk = utility.call(item, "getCondition")
+        local maximum, maxOk = utility.call(item, "getConditionMax")
+        if conditionOk and maxOk and type(condition) == "number" and type(maximum) == "number"
+            and maximum > 0 and condition / maximum < 0.65
+            and (utility.instanceOf(item, "HandWeapon") or utility.hasMethod(item, "getMaxDamage")) then
+            damaged = item
+            break
+        end
+    end
+    if not damaged then return nil end
+    for _, material in ipairs(items) do
+        local itemType = string.lower(utility.itemType(material))
+        local protected = SC.PersonalItems and SC.PersonalItems.isProtected(
+            material, actor, "craft_material")
+        if not protected and material ~= damaged and (string.find(itemType, "ducttape", 1, true)
+            or string.find(itemType, "woodglue", 1, true)
+            or string.find(itemType, "glue", 1, true)) then
+            return {
+                kind = "repair",
+                score = 43,
+                item = damaged,
+                material = material,
+                fact = { activity = "repair", itemType = utility.itemType(damaged) },
+            }
+        end
+    end
+    return nil
+end
+
+local function dirtyBandageActivity(actor)
+    if not SC.Medical or type(SC.Medical.assess) ~= "function" then return nil end
+    local assessment = (SC.Medical.assessCached or SC.Medical.assess)(actor)
+    -- Change a soiled dressing, or dress a wound that stopped bleeding undressed.
+    if assessment and (assessment.dirtyBandages > 0
+        or (tonumber(assessment.openWounds) or 0) > 0) then
+        if type(SC.Medical.canReplaceDirtyBandage) == "function" then
+            local available = SC.Medical.canReplaceDirtyBandage(actor)
+            if available ~= true then return nil end
+        end
+        return {
+            kind = "replace_bandage",
+            score = 75,
+            fact = { activity = "replace_bandage" },
+        }
+    end
+    return nil
+end
+
+local function craftActivity(actor, items)
+    local utility = U()
+    local inventory = utility.inventory(actor)
+    local rag, wood, splints
+    splints = 0
+    local rags = {
+        ["base.rippedsheets"] = true, ["base.denimstrips"] = true,
+        ["base.leatherstrips"] = true,
+    }
+    local woods = {
+        ["base.plank"] = true, ["base.treebranch2"] = true,
+        ["base.woodenstick2"] = true,
+    }
+    for _, item in ipairs(items) do
+        local itemType = string.lower(utility.itemType(item))
+        if utility.inventoryContains(inventory, item) then
+            if itemType == "base.splint" then splints = splints + 1 end
+            local protected = SC.PersonalItems and SC.PersonalItems.isProtected(
+                item, actor, "craft_material")
+            if not protected then
+                if rag == nil and rags[itemType] then rag = item end
+                if wood == nil and woods[itemType] then wood = item end
+            end
+        end
+    end
+    if splints < 2 and rag and wood then
+        return {
+            kind = "craft_supply", score = 51,
+            scraps = { rag, wood }, outputType = "Base.Splint",
+            fact = { activity = "craft_supply", itemType = "Base.Splint" },
+        }
+    end
+    for _, item in ipairs(items) do
+        local itemType = string.lower(utility.itemType(item))
+        local protected = SC.PersonalItems and SC.PersonalItems.isProtected(
+            item, actor, "craft_material")
+        if not protected and (itemType == "sheet" or itemType == "base.sheet") then
+            return {
+                kind = "craft_supply",
+                score = 27,
+                scraps = { item },
+                outputType = "Base.SheetRope",
+                fact = { activity = "craft_supply", itemType = "Base.SheetRope" },
+            }
+        end
+    end
+    return nil
+end
+
+local function washSourceValid(object)
+    local amount, amountOk = U().call(object, "getFluidAmount")
+    if not amountOk or (tonumber(amount) or 0)
+        < (U().config("downtimeWashMinimumWater") or 4) then return false end
+    local tainted, taintedOk = U().call(object, "isTaintedWater")
+    return not taintedOk or tainted ~= true
+end
+
+-- A water source a companion could not reach (a sink with no free square in
+-- front of it, a blocked kitchen) is skipped for a while instead of being
+-- picked again every downtime pulse.
+-- Distance alone says nothing about reach: the square on the far side of a
+-- wall is closer to a sink than the square in front of it. Every wash start
+-- and every wash commit goes through the topology-aware interaction rule, so
+-- proximity can never stand in for being able to touch the water.
+local function washSourceInReach(actor, activity)
+    local utility = U()
+    local target = activity.object or activity.square
+    if target == nil then return false, "wash_source_missing" end
+    local reachable, _, reason = utility.directInteractionAccess(actor, target)
+    if reachable == true then return true end
+    return false, reason or "wash_source_not_in_reach"
+end
+
+local function washSourceCooling(state, object, current)
+    local failed = type(state) == "table" and state.failedWashSources or nil
+    local untilAt = failed and object ~= nil and failed[object] or nil
+    return untilAt ~= nil and (tonumber(current) or U().nowMs()) < untilAt
+end
+
+local function coolWashSource(state, object, current)
+    if type(state) ~= "table" or object == nil then return end
+    state.failedWashSources = state.failedWashSources or setmetatable({}, { __mode = "k" })
+    state.failedWashSources[object] = (tonumber(current) or U().nowMs())
+        + (tonumber((U().config("downtimeWashFailureCooldownMs"))) or 60000)
+end
+
+-- A sink, tub or well blocks its own square, so a wash trip walks to a free
+-- square beside it with direct access instead of to the source itself (which
+-- navigation rejected as an invalid destination).
+local function approachWashSource(actor, activity)
+    local navigation = SC.Navigation
+    if not navigation or type(navigation.interactionTargets) ~= "function"
+        or type(navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    local targets = navigation.interactionTargets(actor, activity.object or activity.square, {
+        requireDirectAccess = true,
+    })
+    if type(targets) ~= "table" or #targets == 0 then return false, "no_interaction_targets" end
+    local accepted, status = navigation.requestAny(actor, targets, "walk", {
+        action = "move_to_water_source",
+        object = activity.object,
+        supervisorToken = activity.supervisorToken,
+        arrivalDistance = 0.6,
+        workCampOnly = activity.crossFloor == true,
+    })
+    return accepted == true, status
+end
+
+local function nearbyWashSource(actor, skip, validator, radiusOverride)
+    local utility = U()
+    validator = validator or washSourceValid
+    local x, y, z = utility.position(actor)
+    if not x then return nil, nil end
+    local radius = math.max(1, math.min(8,
+        math.floor(radiusOverride or utility.config("downtimeWashRadius") or 4)))
+    for distance = 0, radius do
+        for dx = -distance, distance do
+            for dy = -distance, distance do
+                if math.max(math.abs(dx), math.abs(dy)) == distance then
+                    local square = utility.gridSquare(x + dx, y + dy, z)
+                    local found
+                    utility.squareObjects(square, function(object)
+                        if validator(object) and not (skip and skip(object)) then
+                            found = object
+                            return false
+                        end
+                    end, 48)
+                    if found then return found, square end
+                end
+            end
+        end
+    end
+    local base = SC.BaseLife
+    if base and type(base.active) == "function"
+        and type(base.isInside) == "function"
+        and base.isInside(actor) == true then
+        local active = base.active()
+        for _, zone in ipairs(active and active.zones or {}) do
+            if zone.kind == "area" and zone.z ~= math.floor(z) then
+                for cy = math.max(zone.y1, math.floor(y) - radius),
+                        math.min(zone.y2, math.floor(y) + radius) do
+                    for cx = math.max(zone.x1, math.floor(x) - radius),
+                            math.min(zone.x2, math.floor(x) + radius) do
+                        local square = utility.gridSquare(cx, cy, zone.z)
+                        if square and base.isInside(square) then
+                            local found
+                            utility.squareObjects(square, function(object)
+                                if validator(object)
+                                    and not (skip and skip(object))
+                                    and campFloorRoute(actor, square) then
+                                    found = object
+                                    return false
+                                end
+                            end, 48)
+                            if found then return found, square end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function bodyDirt(actor)
+    local visual, visualOk = U().call(actor, "getHumanVisual")
+    if not visualOk or not visual then return 0 end
+    local score = 0
+    local ok = pcall(function()
+        for index = 0, BloodBodyPartType.MAX:index() - 1 do
+            local part = BloodBodyPartType.FromIndex(index)
+            score = score + math.max(0, tonumber((visual:getBlood(part))) or 0)
+                + math.max(0, tonumber((visual:getDirt(part))) or 0)
+        end
+    end)
+    return ok and score or 0
+end
+
+local function showerSourceValid(object)
+    if not washSourceValid(object) then return false end
+    local amount = select(1, U().call(object, "getFluidAmount"))
+    if (tonumber(amount) or 0) < 10 then return false end
+    local sprite = select(1, U().call(object, "getSprite"))
+    local properties = select(1, U().call(sprite, "getProperties"))
+    local name = select(1, U().call(properties, "get", "CustomName"))
+    local lowered = type(name) == "string" and string.lower(name) or ""
+    return string.find(lowered, "shower", 1, true) ~= nil
+end
+
+local function showerRecord(actor)
+    local registry = SC.Registry
+    local record = registry and type(registry.byId) == "function"
+        and registry.byId(U().idOf(actor)) or nil
+    if not record then return nil end
+    record.state = record.state or {}
+    record.state.downtime = record.state.downtime or {}
+    return record.state.downtime
+end
+
+local function showerActivity(actor, state, current)
+    if not SC.BaseLife or SC.BaseLife.isInside(actor) ~= true then return nil end
+    local hour = gameHours()
+    local record = showerRecord(actor)
+    if not hour or not record or hour - (record.lastShowerHour or -math.huge) < 18 then
+        return nil
+    end
+    local parts = BloodBodyPartType and BloodBodyPartType.MAX
+        and BloodBodyPartType.MAX:index() or 0
+    if parts <= 0 or bodyDirt(actor) / parts < 0.35 then return nil end
+    if current < (state.nextShowerSearchAt or 0) then return nil end
+    local source, square = nearbyWashSource(actor, function(object)
+        return washSourceCooling(state, object, current)
+    end, showerSourceValid, 8)
+    if not source then
+        state.nextShowerSearchAt = current + 30000
+        return nil
+    end
+    return {
+        kind = "shower", score = 86, object = source, square = square,
+        crossFloor = not U().sameFloor(actor, square),
+        fact = { activity = "shower" },
+    }
+end
+
+local function showerStartSpeech(actor)
+    if not SC.Dialogue or type(SC.Dialogue.say) ~= "function" then return end
+    local seed = tostring(U().idOf(actor) or actor) .. ":shower:"
+        .. tostring(math.floor(gameHours() or 0))
+    local topic = math.abs(tonumber((U().stableHash(seed))) or 0) % 5 == 0
+        and "hygiene.shower_sing" or "hygiene.shower_start"
+    pcall(SC.Dialogue.say, actor, topic)
+end
+
+local function restoreShowerClothes(actor, activity)
+    local receipt = activity and activity.showerClothes
+    if not receipt then return true end
+    local allRestored = true
+    for _, worn in ipairs(receipt) do
+        local equipped = select(1, U().call(actor, "isEquippedClothing", worn.item))
+        if equipped ~= true then
+            local result, called = U().call(actor, "setWornItem", worn.location,
+                worn.item)
+            equipped = called and result ~= false
+                and select(1, U().call(actor, "isEquippedClothing", worn.item)) == true
+            if not equipped then allRestored = false end
+        end
+    end
+    if allRestored then activity.showerClothes = nil end
+    U().call(actor, "resetModelNextFrame")
+    return allRestored
+end
+
+local function undressForShower(actor, activity)
+    if activity.showerClothes then return true end
+    local worn = select(1, U().call(actor, "getWornItems"))
+    local size = worn and select(1, U().call(worn, "size")) or 0
+    local receipt = {}
+    for index = 0, math.min((tonumber(size) or 0) - 1, 63) do
+        local entry = select(1, U().call(worn, "get", index))
+        local item = select(1, U().call(entry, "getItem"))
+        -- The worn slot is authoritative. An item's preferred body location
+        -- can differ from the slot it occupied (notably bags and accessories).
+        local location = select(1, U().call(entry, "getLocation"))
+            or (item and select(1, U().call(item, "getBodyLocation")))
+        if item and location then receipt[#receipt + 1] = {
+            item = item, location = location,
+        } end
+    end
+    activity.showerClothes = receipt
+    for _, entry in ipairs(receipt) do
+        local _, removed = U().call(actor, "removeWornItem", entry.item, false)
+        if not removed then
+            restoreShowerClothes(actor, activity)
+            return false
+        end
+    end
+    U().call(actor, "resetModelNextFrame")
+    return true
+end
+
+local function itemDirt(item)
+    local blood, bloodOk = U().call(item, "getBloodLevel")
+    local dirt, dirtOk = U().call(item, "getDirtiness")
+    if not bloodOk and not dirtOk then return 0 end
+    return math.max(0, tonumber(blood) or 0) + math.max(0, tonumber(dirt) or 0)
+end
+
+local function washBandageProtected(actor, item)
+    local personal = SC.PersonalItems
+    return personal == nil or type(personal.isProtected) ~= "function"
+        or personal.isProtected(item, actor, "wash_bandage") == true
+end
+
+-- Logistics audits include the contents of carried bags. A dirty dressing
+-- found there must be replaced in that same container; removing it from the
+-- character's root inventory leaves the original in the bag and fails every
+-- subsequent wash attempt.
+local function carriedBandageContainer(actor, item)
+    local utility = U()
+    local root = utility.inventory(actor)
+    if not root or not item then return nil end
+    local holder, holderOk = utility.call(item, "getContainer")
+    if not holderOk or holder == nil then holder = root end
+    if holder ~= root then
+        local carried = false
+        for _, pack in ipairs(utility.inventoryItems(root, 240)) do
+            local nested, nestedOk = utility.call(pack, "getItemContainer")
+            if nestedOk and nested == holder then carried = true break end
+        end
+        if not carried then return nil end
+    end
+    return utility.containerContainsIdentity(holder, item) == true and holder or nil
+end
+
+local function washActivity(actor, items, state, current)
+    local bodyScore = bodyDirt(actor)
+    local bestItem, bestItemScore
+    local dirtyBandage
+    for _, item in ipairs(items) do
+        local cleanType = CLEAN_DRESSING_TYPES[string.lower(U().itemType(item))]
+        local protected = cleanType ~= nil and washBandageProtected(actor, item)
+        if dirtyBandage == nil
+            and cleanType
+            and carriedBandageContainer(actor, item) ~= nil
+            and not protected then
+            dirtyBandage = item
+        end
+        local score = not protected and itemDirt(item) or 0
+        if score > 0.01 and (not bestItemScore or score > bestItemScore) then
+            bestItem, bestItemScore = item, score
+        end
+    end
+    if bodyScore <= 0.01 and not bestItem and not dirtyBandage then return nil end
+    local source, square = nearbyWashSource(actor, function(object)
+        return washSourceCooling(state, object, current)
+    end)
+    if not source then return nil end
+    local crossFloor = not U().sameFloor(actor, square)
+    if dirtyBandage then
+        return {
+            kind = "wash_bandage", score = 62,
+            object = source, square = square, item = dirtyBandage,
+            itemContainer = carriedBandageContainer(actor, dirtyBandage),
+            crossFloor = crossFloor,
+            cleanType = CLEAN_DRESSING_TYPES[
+                string.lower(U().itemType(dirtyBandage))],
+            fact = { activity = "wash_bandage",
+                itemType = U().itemType(dirtyBandage) },
+        }
+    end
+    if bodyScore > 0.01 and bodyScore * 100 >= (bestItemScore or 0) then
+        return {
+            kind = "wash_self", score = 48 + math.min(25, bodyScore * 5),
+            object = source, square = square,
+            crossFloor = crossFloor,
+            fact = { activity = "wash_self" },
+        }
+    end
+    return {
+        kind = "wash_equipment", score = 40 + math.min(28, (bestItemScore or 0) * 0.2),
+        object = source, square = square, item = bestItem,
+        crossFloor = crossFloor,
+        fact = { activity = "wash_equipment", itemType = U().itemType(bestItem) },
+    }
+end
+
+local function seatingPositionCount(object)
+    if type(SeatingManager) ~= "table" or type(SeatingManager.getInstance) ~= "function" then
+        return 0
+    end
+    local ok, manager = pcall(SeatingManager.getInstance)
+    if not ok or manager == nil then return 0 end
+    local count, countOk = U().call(manager, "getTilePositionCount", object)
+    return countOk and math.max(0, tonumber(count) or 0) or 0
+end
+
+local function restFurnitureText(value)
+    return value ~= nil and string.lower(tostring(value)) or ""
+end
+
+local function hasFurnitureWord(text, word)
+    for token in string.gmatch(text, "%a+") do
+        if token == word or token == word .. "s" then return true end
+    end
+    return false
+end
+
+local function isNamedBed(value)
+    local text = restFurnitureText(value)
+    return hasFurnitureWord(text, "bed") or hasFurnitureWord(text, "cot")
+        or hasFurnitureWord(text, "stretcher")
+end
+
+local function isNamedSeat(value)
+    local text = restFurnitureText(value)
+    return string.find(text, "chair", 1, true) ~= nil
+        or string.find(text, "sofa", 1, true) ~= nil
+        or string.find(text, "couch", 1, true) ~= nil
+        or string.find(text, "stool", 1, true) ~= nil
+        or string.find(text, "bench", 1, true) ~= nil
+        or string.find(text, "pew", 1, true) ~= nil
+        or string.find(text, "booth", 1, true) ~= nil
+        or string.find(text, "ottoman", 1, true) ~= nil
+        or string.find(text, "seat", 1, true) ~= nil
+end
+
+local function furnitureKind(object)
+    local utility = U()
+    local name, nameOk = utility.call(object, "getName")
+    local objectName = nameOk and name or nil
+    local sprite, spriteOk = utility.call(object, "getSprite")
+    if spriteOk and sprite then
+        local spriteName, spriteNameOk = utility.call(sprite, "getName")
+        local loweredSprite = spriteNameOk and restFurnitureText(spriteName) or ""
+        local properties, propertiesOk = utility.call(sprite, "getProperties")
+        if propertiesOk and properties then
+            local customName, customNameOk = utility.call(properties, "Val", "CustomName")
+            if not customNameOk or customName == nil then
+                customName, customNameOk = utility.call(properties, "get", "CustomName")
+            end
+            local groupName, groupNameOk = utility.call(properties, "Val", "GroupName")
+            if not groupNameOk or groupName == nil then
+                groupName, groupNameOk = utility.call(properties, "get", "GroupName")
+            end
+            -- Build 42 also gives bed-like properties to chairs and couches.
+            -- Use explicit object/tile semantics to identify a physical bed;
+            -- otherwise SeatingManager is the authoritative seating catalogue.
+            if isNamedBed(objectName) or isNamedBed(customNameOk and customName or nil)
+                or isNamedBed(groupNameOk and groupName or nil)
+                or string.find(loweredSprite, "furniture_bedding", 1, true) then
+                return "rest_bed"
+            end
+            -- Build 42's pathToSitOnFurniture and ISRestAction both use
+            -- SeatingManager as the authoritative contract. Names, IsChair and
+            -- BedType describe many decorative/non-enterable tiles and caused
+            -- companions to spend twelve seconds trying to sit in open air.
+            if seatingPositionCount(object) > 0 then return "sit" end
+        end
+    end
+    if isNamedBed(objectName) then return "rest_bed" end
+    if seatingPositionCount(object) > 0 then return "sit" end
+    return nil
+end
+
+local function sameFurnitureContext(actorSquare, candidateSquare)
+    local actorRoom, actorRoomOk = U().call(actorSquare, "getRoom")
+    local candidateRoom, candidateRoomOk = U().call(candidateSquare, "getRoom")
+    if not actorRoomOk or not candidateRoomOk then return false end
+    if actorRoom == nil or candidateRoom == nil then
+        return actorRoom == nil and candidateRoom == nil
+    end
+    return sameBuilding(actorSquare, candidateSquare)
+end
+
+local function furnitureCooling(state, object, current)
+    local failed = type(state) == "table" and state.failedFurniture or nil
+    local untilAt = failed and object ~= nil and failed[object] or nil
+    return untilAt ~= nil and (tonumber(current) or U().nowMs()) < untilAt
+end
+
+local function coolFurniture(state, object, current)
+    if type(state) ~= "table" or object == nil then return end
+    state.failedFurniture = state.failedFurniture or setmetatable({}, { __mode = "k" })
+    state.failedFurniture[object] = (tonumber(current) or U().nowMs())
+        + (tonumber((U().config("downtimeFurnitureFailureCooldownMs"))) or 60000)
+end
+
+local function seatingStatus(actor)
+    if SC.NativeActions and type(SC.NativeActions.seatingStatus) == "function" then
+        local ok, value = pcall(SC.NativeActions.seatingStatus, actor)
+        if ok and value ~= nil then return tostring(value) end
+    end
+    local sitting, sittingOk = U().call(actor, "isSittingOnFurniture")
+    if sittingOk and sitting == true then return "furniture" end
+    local onBed, bedOk = U().call(actor, "isOnBed")
+    if bedOk and onBed == true then return "bed" end
+    local ground, groundOk = U().call(actor, "isSitOnGround")
+    if groundOk and ground == true then return "ground" end
+    return "standing"
+end
+
+-- The native furniture occupied flag clears as soon as somebody stands, even
+-- while their body is still in the chair's use space. Check both the seat tile
+-- and its actual interaction targets before choosing or approaching it.
+local function freeFurnitureAccess(actor, object)
+    local utility = U()
+    if utility.movingBlocker(utility.squareOf(object), actor) then
+        return false, {}, "seat_spot_busy"
+    end
+    local arrived, targets, reason = utility.directInteractionAccess(actor, object)
+    local free = {}
+    for _, square in ipairs(targets or {}) do
+        if not utility.movingBlocker(square, actor) then
+            free[#free + 1] = square
+        end
+    end
+    if arrived and not utility.movingBlocker(utility.squareOf(actor), actor) then
+        return true, free, "arrived"
+    end
+    if #free == 0 and #(targets or {}) > 0 then
+        return false, free, "seat_spot_busy"
+    end
+    return false, free, reason
+end
+
+local function linkedFloorFurniture(actor, state, current, seatOnly, tired,
+        radius, fallback)
+    local utility, base = U(), SC.BaseLife
+    if not base or type(base.active) ~= "function"
+        or type(base.isInside) ~= "function"
+        or base.isInside(actor) ~= true then return fallback end
+    local active = base.active()
+    local ax, ay, az = utility.position(actor)
+    if not active or not ax then return fallback end
+    local seen, checked = {}, 0
+    for _, zone in ipairs(active.zones or {}) do
+        if zone.kind == "area" and zone.z ~= math.floor(az) then
+            for y = math.max(zone.y1, math.floor(ay) - radius),
+                    math.min(zone.y2, math.floor(ay) + radius) do
+                for x = math.max(zone.x1, math.floor(ax) - radius),
+                        math.min(zone.x2, math.floor(ax) + radius) do
+                    local key = x .. ":" .. y .. ":" .. zone.z
+                    if not seen[key] then
+                        seen[key], checked = true, checked + 1
+                        local square = utility.gridSquare(x, y, zone.z)
+                        if square and base.isInside(square) then
+                            local selected, kind
+                            utility.squareObjects(square, function(object)
+                                local value = furnitureKind(object)
+                                local occupied = select(1, utility.call(object,
+                                    "isFurnitureOccupied", actor))
+                                if value and (seatOnly ~= true or value == "sit")
+                                    and (seatOnly ~= "rest_bed"
+                                        or value == "rest_bed")
+                                    and (value ~= "rest_bed" or tired)
+                                    and occupied ~= true
+                                    and not reservationHeldByOther(object, actor, current)
+                                    and not furnitureCooling(state, object, current)
+                                    and campFloorRoute(actor, square) then
+                                    local reached, targets = freeFurnitureAccess(
+                                        actor, object)
+                                    if reached or #targets > 0 then
+                                        selected, kind = object, value
+                                        return false
+                                    end
+                                end
+                            end, 32)
+                            if selected then
+                                local activity = {
+                                    kind = kind,
+                                    score = kind == "rest_bed" and 78 or 12,
+                                    object = selected, square = square,
+                                    originSquare = utility.squareOf(actor),
+                                    crossFloor = true,
+                                    fact = { activity = kind },
+                                }
+                                if kind == "rest_bed" then return activity end
+                                fallback = fallback or activity
+                            end
+                        end
+                    end
+                    if checked >= 320 then return fallback end
+                end
+            end
+        end
+    end
+    return fallback
+end
+
+local function seatActivity(actor, state, current, seatOnly)
+    local utility = U()
+    if seatingStatus(actor) ~= "standing" then return nil end
+    if type(state) == "table" and (tonumber(current) or utility.nowMs())
+        < (tonumber(state.furnitureBackoffUntil) or 0) then return nil end
+    local x, y, z = utility.position(actor)
+    if not x then return nil end
+    local actorSquare = utility.squareOf(actor)
+    local fatigue = utility.clamp(tonumber(
+        (utility.characterStatValue(actor, "FATIGUE", 0))) or 0, 0, 1)
+    local tired = fatigue >= (tonumber(
+        (utility.config("needsFatigueThreshold"))) or 0.50)
+    local radius = math.max(1, math.min(12,
+        math.floor(tonumber((utility.config("downtimeFurnitureRadius"))) or 8)))
+    local budget = math.max(16,
+        math.floor(tonumber((utility.config("downtimeFurnitureSquareBudget"))) or 200))
+    local scanned = 0
+    local chairFallback
+    for distance = 0, radius do
+        for dx = -distance, distance do
+            for dy = -distance, distance do
+                if math.max(math.abs(dx), math.abs(dy)) == distance then
+                    local square = utility.gridSquare(x + dx, y + dy, z)
+                    scanned = scanned + 1
+                    local found, kind
+                    if sameFurnitureContext(actorSquare, square) then
+                        utility.squareObjects(square, function(object)
+                            local value = furnitureKind(object)
+                            local occupied, occupiedOk = utility.call(
+                                object, "isFurnitureOccupied", actor)
+                            if value and (seatOnly ~= true or value == "sit")
+                                and (seatOnly ~= "rest_bed" or value == "rest_bed")
+                                and (value ~= "rest_bed" or tired)
+                                and not (occupiedOk and occupied == true)
+                                and not reservationHeldByOther(object, actor, current)
+                                and not furnitureCooling(state, object, current) then
+                                local reached, targets = freeFurnitureAccess(actor, object)
+                                if not reached and #targets == 0 then return true end
+                                found, kind = object, value
+                                return false
+                            end
+                        end, 32)
+                    end
+                    if found then
+                        local score = kind == "rest_bed" and 13 or 12
+                        if tired then
+                            score = (kind == "rest_bed" and 78 or 40)
+                                + math.floor(fatigue * 10)
+                        end
+                        local candidate = {
+                            kind = kind,
+                            score = score,
+                            object = found,
+                            square = square,
+                            fact = { activity = kind },
+                        }
+                        if kind == "rest_bed" or seatOnly == true or not tired then
+                            return candidate
+                        end
+                        chairFallback = chairFallback or candidate
+                    end
+                    if scanned >= budget then
+                        return linkedFloorFurniture(actor, state, current,
+                            seatOnly, tired, radius, chairFallback)
+                    end
+                end
+            end
+        end
+    end
+    return linkedFloorFurniture(actor, state, current,
+        seatOnly, tired, radius, chairFallback)
+end
+
+local function floorRestActivity(actor, furnitureAvailable)
+    local utility = U()
+    if furnitureAvailable or seatingStatus(actor) ~= "standing" then return nil end
+    local fatigue = utility.clamp(tonumber(
+        (utility.characterStatValue(actor, "FATIGUE", 0))) or 0, 0, 1)
+    local threshold = tonumber((utility.config("needsFatigueThreshold"))) or 0.50
+    if fatigue < threshold then return nil end
+    return {
+        kind = "rest_floor",
+        score = 36 + math.floor(fatigue * 12),
+        durationMs = tonumber((utility.config("downtimeFloorRestMs"))) or 12000,
+        fact = { activity = "rest_floor", fatigue = fatigue },
+    }
+end
+
+local function approachFurniture(actor, activity)
+    if activity.kind == "rest_bed" and activity.lightChecked ~= true then
+        local bedSquare = U().squareOf(activity.object)
+        local bedroom = bedSquare and select(1, U().call(bedSquare, "getRoom"))
+        if bedroom then
+            if activity.lightSwitch == nil then
+                local bx, by, bz = U().position(bedSquare)
+                local nearest, nearestDistance
+                for dx = -5, 5 do
+                    for dy = -5, 5 do
+                        local square = U().gridSquare(bx + dx, by + dy, bz)
+                        if square and select(1, U().call(square, "getRoom")) == bedroom then
+                            U().squareObjects(square, function(object)
+                                if U().instanceOf(object, "IsoLightSwitch")
+                                    and select(1, U().call(object, "isActivated")) == true
+                                    and select(1, U().call(object, "canSwitchLight")) ~= false then
+                                    local distance = U().distance(actor, square)
+                                    if distance and (nearestDistance == nil
+                                        or distance < nearestDistance) then
+                                        nearest, nearestDistance = object, distance
+                                    end
+                                end
+                                return true
+                            end, 32)
+                        end
+                    end
+                end
+                activity.lightSwitch = nearest
+            end
+            if activity.lightSwitch then
+                local light = activity.lightSwitch
+                if select(1, U().call(light, "isActivated")) == true then
+                    local arrived, targets = U().directInteractionAccess(actor, light)
+                    if arrived then
+                        U().call(actor, "faceThisObject", light)
+                        U().call(light, "toggle")
+                        activity.lightChecked = true
+                        activity.lightSwitch = nil
+                    elseif #targets > 0 and SC.Navigation
+                        and type(SC.Navigation.requestAny) == "function" then
+                        local accepted, status = SC.Navigation.requestAny(actor, targets,
+                            "walk", { action = "move_to_light_switch",
+                                object = light, targetSquare = U().squareOf(light),
+                                requireSameSquare = true, continuousApproach = true,
+                                workCampOnly = activity.crossFloor == true,
+                                supervisorToken = activity.supervisorToken })
+                        if accepted then return true, "approaching_light_switch" end
+                        activity.lightChecked = true
+                        activity.lightSwitch = nil
+                    else
+                        activity.lightChecked = true
+                        activity.lightSwitch = nil
+                    end
+                else
+                    activity.lightChecked = true
+                    activity.lightSwitch = nil
+                end
+            else
+                activity.lightChecked = true
+            end
+        else
+            activity.lightChecked = true
+        end
+    end
+    local arrived, targets, accessReason = freeFurnitureAccess(actor, activity.object)
+    if arrived == true then
+        activity.busySince = nil
+        return true, "arrived"
+    end
+    if accessReason == "seat_spot_busy" then
+        local current = U().nowMs()
+        activity.busySince = activity.busySince or current
+        if SC.Navigation and type(SC.Navigation.cancel) == "function" then
+            SC.Navigation.cancel(actor, "seat_spot_busy")
+        end
+        if current - activity.busySince > 8000 then return false, "seat_spot_busy" end
+        return true, "seat_spot_busy"
+    end
+    activity.busySince = nil
+    if accessReason == "no_interaction_targets" then return false, accessReason end
+    if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    return SC.Navigation.requestAny(actor, targets, "walk", {
+        action = "move_to_seat", targetSquare = activity.square,
+        object = activity.object, arrivalDistance = 0.35,
+        requireSameSquare = true, continuousApproach = true,
+        workCampOnly = activity.crossFloor == true,
+        supervisorToken = activity.supervisorToken,
+    })
+end
+
+-- ---------------------------------------------------------------------------
+-- Studying the dead
+-- ---------------------------------------------------------------------------
+-- A rare, low-priority moment. Once a spot has been quiet for a while, a
+-- companion may crouch over a nearby zombie corpse and talk through what it
+-- sees: the clothes, what the infection did to the person, and what Knox
+-- Knews and LBMW radio said back in July 1993, in its own voice. Temperament
+-- and profession decide how curious it is and how it signs off. Each body is
+-- studied once; per-companion and party cooldowns keep it rare. Lines stay
+-- ASCII so every font renders them unchanged.
+
+local RESPECT_MARKER = "LF_Respected"
+local Study = { lastPartyAt = -math.huge, MARKER = "LF_Studied", REACH = 1.6 }
+
+local STUDY_POOLS = {
+    ["study.open"] = {
+        common = {
+            "Hold on. Let me look at this one.",
+            "Let's see who you were.",
+            "Everybody's got a story. Let's see yours.",
+            "Just looking. Nobody panic.",
+            "Don't mind me. Checking on the neighbors.",
+            "Easy. It's down. I just want a closer look.",
+            "Huh. Come here a second. No, actually, don't.",
+        },
+        brave = { "Let's see what beat you. Wasn't the fence, that's for sure." },
+        cautious = { "Checking it's really down before I get close. Okay. Okay." },
+        caring = { "Hey there. I'm not going to hurt you. Not that anything can now." },
+        practical = { "Quick look. Could tell us something useful." },
+        stressed = { "I shouldn't. I'm going to. Why am I like this?" },
+        low = { "Another one. Let's see which kind of unlucky you were." },
+        hopeful = { "Maybe you left us a clue. Somebody always leaves a clue." },
+    },
+    ["study.crawler"] = {
+        common = {
+            "No legs. Still dragged itself after us. That's commitment.",
+            "Crawler. Lost the lower half somewhere and kept going. Kentucky stubborn.",
+            "Look at those elbows. Worn to the bone from crawling. It never stopped wanting.",
+            "Couldn't walk anymore, so it crawled. The hunger doesn't take a day off.",
+        },
+        cautious = { "Crawlers are the ones you don't see coming. Remember that." },
+    },
+    ["study.skeleton"] = {
+        common = {
+            "Just bones in a jacket. Been out here longer than we have.",
+            "Picked clean. The crows ate better than we did this week.",
+            "Bones. Whoever you were, the summer took the rest.",
+        },
+    },
+    ["study.fresh"] = {
+        common = {
+            "Fresh. Blood's barely dark. Somebody put this one down today.",
+            "Still warm-ish. I don't love that.",
+            "Recent. Which means whatever's walking around here is recent too.",
+        },
+    },
+    ["study.old"] = {
+        common = {
+            "This one's been baking in the sun for days. The smell is its own enemy.",
+            "Old. Skin like wet paper. Nature's trying to finish the job.",
+            "Been lying here a while. The flies have filed a claim.",
+        },
+    },
+    ["study.ours.self"] = {
+        common = {
+            "That's my work. Clean. I don't feel good about it. I don't feel bad either.",
+            "I remember this one. Came at me by the fence. Didn't get far.",
+            "Mine. Sorry, friend. You were in the way of the rest of us.",
+        },
+    },
+    ["study.ours.team"] = {
+        common = {
+            "One of ours put this one down. Good hit.",
+            "Right between the ears. Somebody on this team has been practicing.",
+            "That's our work. Team effort. Well, one very determined team member.",
+        },
+    },
+    ["study.symptoms"] = {
+        common = {
+            "Look at the collar. Sweat stains. The fever came first, just like the paper said.",
+            "Knuckles split to the bone. Pounded on some door until there was nothing left.",
+            "Eyes gone milky. Whatever was in there left before the body did.",
+            "Skin's grey, veins gone dark. Like the blood gave up and turned to ink.",
+            "Vomit down the front of the shirt. Fevers and vomiting. First-week symptoms.",
+            "Fingernails torn off. Clawed at something. Or someone.",
+            "Bite on the forearm. Tried to fend it off. It always starts with a bite.",
+            "Teeth broken. Chewed on something harder than people. A car door, maybe.",
+            "Wedding ring sunk into a swollen finger. Nobody was taking that off. Nobody tried.",
+            "Weighs nothing. It kept walking long after there was anything left to burn.",
+            "Glass in the palms. Never flinched. It doesn't feel a thing. That's the part that scares me.",
+            "Flu-like at first, they said. Then panic and confusion. Then this.",
+        },
+        caring = { "Look at the hands. Somebody held these once." },
+        practical = { "The legs rot slower than the rest. Good to know when you're running." },
+        stressed = { "The eyes. Why did I look at the eyes?" },
+    },
+    ["study.lore"] = {
+        common = {
+            "Knox Knews called it an 'unusual illness'. Unusual. That's one word for it.",
+            "The paper said fevers and vomiting in Muldraugh. March Ridge opened its military hospital. Look how that turned out.",
+            "Radio said flu-like, then panic and confusion. They left out the part where confusion bites.",
+            "LBMW kept saying there was NO evidence of fatalities. I'd like to show them some evidence.",
+            "Keep safe, Kentucky, the radio lady said every night. Tried, Jackie. Tried real hard.",
+            "Phones in Knox went dead days before anybody got sick. Knox Telecom said sorry. Funny timing.",
+            "Army truck rolled over near March Ridge on the Fourth. 'No danger to the public.' Sure, Colonel.",
+            "They said it didn't spread person to person. This one would like a word.",
+            "The Exclusion Zone. Fancy government words for a fence around a graveyard.",
+            "Took them weeks to admit it was 'degenerative'. Big word for 'they rot and keep walking'.",
+            "The man on TV said it was contained. Contained where?",
+            "Paper was still printing ballgame scores the week it started. Rangers won in West Point. Then nobody won.",
+            "Fourth of July. Parade, fireworks, barbecue. Two days later the paper was talking about a mystery illness.",
+            "The second wave got the folks who thought they'd dodged the first. Don't get comfortable.",
+            "The CDC was 'on the way', the paper said. Must have taken the scenic route.",
+            "The Governor was fretting over tornado money for Brandenburg that week. Bet he misses those problems.",
+        },
+        cautious = { "Everything the radio said was wrong. So I assume everything is worse than it looks." },
+        practical = { "Nobody outside the zone knows what we know. So we'd better remember it." },
+        hopeful = { "Says here to stay tuned for further updates. I'm all ears.",
+            "'Temporary inconvenience.' Somebody typed that. Somebody approved it." },
+    },
+    ["study.psa"] = {
+        common = {
+            "Remember, citizens: the dead are not your neighbors anymore. Please adjust your casseroles accordingly.",
+            "This has been a Knox County Civil Defense reminder: stay indoors, stay quiet, stay you.",
+            "Feeling feverish? Confused? Hungry for the mailman? Please report to your nearest checkpoint. Or don't. It's closed.",
+            "The Kentucky Board of Health reminds you: wash your hands, cover your cough, and never, ever get bitten.",
+            "Safety tip from your friendly neighborhood survivor: if they're lying still, assume they're lying.",
+            "Duck, cover, and aim for the head.",
+            "A tidy town is a safe town! Please dispose of your deceased neighbors promptly.",
+            "Keep calm and carry a crowbar. Brought to you by the good folks still breathing.",
+            "Remember: it's only the flu until it isn't!",
+            "Did you know? Nine out of ten doctors are now patients.",
+            "Official instructions were to stay home and wait for instructions. Still waiting, Frank.",
+            "Tonight's forecast: warm, humid, and a ninety percent chance of neighbors.",
+            "Ask your doctor if not turning into one of these is right for you.",
+            "The Kentucky Department of Tourism invites you: come for the bourbon, stay forever.",
+        },
+        brave = { "Civil Defense says lock your doors. I say lock and load." },
+        cautious = { "Public service announcement: nobody touches anything. That's the whole announcement." },
+        stressed = { "This is fine. This is a normal Tuesday. Please remain calm. I am remaining calm." },
+        hopeful = { "Someone laminated this. Laminated it. That's faith, that is.",
+            "'Report to your nearest shelter.' I'd love to. Which one's nearest?" },
+    },
+    ["study.kentucky"] = {
+        common = {
+            "Kentucky kept its gold at Fort Knox. Should have guarded the other Knox instead.",
+            "Derby silks, bourbon barrels, bluegrass. And now this. Kentucky never did anything halfway.",
+            "The tobacco barns are still standing out there. The farmers aren't.",
+            "Somewhere a bourbon's been aging twelve years for a party that'll never happen. Honestly, the worst part.",
+            "The Ohio's right there. The river doesn't care what floats in it anymore.",
+            "Mama always said Kentucky folks never really leave. Didn't mean it like this.",
+            "Burgoo, hot browns, sweet tea on the porch. I'd kill for a hot brown. Poor choice of words.",
+            "A Kentucky colonel would be ashamed. Our finest, shuffling around like they own the place.",
+            "Y'all wanted the quiet country life. Well. It's real quiet now.",
+            "Horse country. The horses are fine, you know. It's just us.",
+        },
+        hopeful = { "Kentucky came through floods, fires and tornadoes. It'll still be Kentucky after this.",
+            "Leaflet says our county is prepared for any emergency. This may be an addendum.",
+            "'Your County Cares.' I think somebody meant it when they printed that." },
+    },
+    ["study.close"] = {
+        common = {
+            "Alright. Seen enough.",
+            "Rest easy. Or just rest.",
+            "Whoever you were, you're done carrying it.",
+            "Okay. Back to it.",
+        },
+        brave = { "You lost. We didn't. That's the whole lesson.",
+            "Stay down. That's the only order I have for you." },
+        cautious = { "Checked the neck twice. Not getting up. Probably. Stepping back now.",
+            "Nobody touch it. I mean it. Nobody." },
+        caring = { "Somebody's kid. Somebody's everything.",
+            "I hope whoever you were waiting for got out.",
+            "Sleep now. Nobody needs anything from you anymore." },
+        practical = { "Noted. Moving on.", "Clothes, wounds, smell. Filed. Back to work." },
+        stressed = { "I shouldn't have looked. Why do I always look?",
+            "Okay. Okay. That's going in the nightmare pile." },
+        low = { "Could be any of us next week. Could be me.",
+            "One more face I'll see when I close my eyes." },
+        hopeful = { "One day somebody will write all of this down. Maybe us.",
+            "We're still here. That counts for something." },
+    },
+    -- %1 is the companion's home town from its background.
+    ["study.home"] = {
+        common = {
+            "Could have been my neighbor back in %1. Might have been.",
+            "Folks like this used to wave from the porch back in %1.",
+            "I keep checking faces for somebody from %1. Not this one. Thank God. Or not.",
+        },
+    },
+    ["study.profession.doctor"] = { common = {
+        "Pupils fixed and clouded. Mottling like late sepsis. Except sepsis has the decency to stop.",
+        "I'd write a cause of death, but I'd need a longer form.",
+        "The joints move wrong. Like the tendons forgot who they belonged to.",
+        "Medical school promised me the dead don't bite. I want a refund.",
+    } },
+    ["study.profession.nurse"] = { common = {
+        "I charted fevers like this. We sent them home with fluids and told them to rest.",
+        "Hospital bracelet. Somebody triaged this one and sent them back out. Could have been me.",
+        "Bedside manner's wasted on this one. Old habits.",
+    } },
+    ["study.profession.policeofficer"] = { common = {
+        "No wallet, no ID. John Doe number... I stopped counting.",
+        "Defensive wounds on the forearms. Fought whoever bit them. Lost.",
+        "Back on the job I'd tape this off and call it in. Now I just step over.",
+    } },
+    ["study.profession.veteran"] = { common = {
+        "Seen bodies before. Never seen them get back up. Different war.",
+        "The Army said that crash was nothing. The Army says a lot of things.",
+        "Check the pockets. Old habit. Keeps you alive.",
+    } },
+    ["study.profession.parkranger"] = { common = {
+        "Tracks, scat, bodies. Same job, meaner animal.",
+        "Walked a long way on those shoes. Soles are gone. Came in from the east road, I'd say.",
+        "Nature takes everything back. Usually it has the courtesy to wait.",
+    } },
+    ["study.profession.fireofficer"] = { common = {
+        "We used to carry people out. Now we make sure they stay down.",
+        "Smoke on the jacket. Got out of one fire and walked into this.",
+        "Soot under the collar. They went in after somebody. I hope they got them out.",
+    } },
+    ["study.profession.chef"] = { common = {
+        "Grey meat. I wouldn't serve it to a raccoon.",
+        "Smells like a walk-in cooler three weeks after the power died.",
+        "Used to judge dinner by the smell. This tells me enough.",
+    } },
+    ["study.profession.farmer"] = { common = {
+        "Seen livestock go down sick. Never seen a cow get up afterwards.",
+        "Put down a lame horse once. Cried all night. This one I'd do again.",
+        "Fields taught me every season ends. Didn't teach me this one.",
+    } },
+    ["study.profession.mechanics"] = { common = {
+        "Engine runs, nobody driving. Bad wiring all the way down.",
+        "Everything's still hooked up and nothing runs right. Won't stop turning over, though.",
+        "I'd reach for a wrench. There isn't a bolt loose enough to fix this.",
+    } },
+    ["study.profession.burglar"] = { common = {
+        "Pockets already turned out. Somebody got here first. Professional courtesy.",
+        "Keys on the belt. Some house out there is still locked and waiting. Tempting.",
+        "Locks kept people out. Never did much for keeping death away.",
+    } },
+    ["study.profession.securityguard"] = { common = {
+        "Night shift, I'd bet. Walked the same loop forever. Still doing it, in a way.",
+        "I checked doors for a living. Nobody checked this one's way out.",
+        "Used to log every visitor. Now I count who didn't leave.",
+    } },
+    ["study.outfit.law"] = {
+        common = {
+            "Badge still pinned on. Served and protected right up to the end.",
+            "Sheriff's star. Wonder if they ever got the order to evacuate.",
+            "Cuffs on the belt. Never got to use them on the right suspect.",
+            "Security uniform. Minimum wage to guard somebody else's stuff. Guarded it to the last.",
+        },
+        caring = { "Kept people safe for a living. Nobody kept them safe." },
+    },
+    ["study.outfit.medic"] = { common = {
+        "Scrubs. They were the first to catch it. They were the first to try.",
+        "Doctor's coat, stethoscope still on. Diagnosis: everything.",
+        "Paramedic. Answered the call. The call answered back.",
+    } },
+    ["study.outfit.patient"] = { common = {
+        "Hospital gown. Walked out of March Ridge in slippers.",
+        "Hospital bracelet. Already sick when they checked in. They treated the flu. It wasn't the flu.",
+        "They came for care and found a hallway full of worse.",
+    } },
+    ["study.outfit.military"] = { common = {
+        "Army fatigues. Sent here to hold the line. The line held them.",
+        "Soldier. They put kids on that fence with orders nobody explained.",
+        "Dog tags. Somebody's going to wait for a letter that never gets sent.",
+    } },
+    ["study.outfit.fire"] = { common = {
+        "Firefighter. Ran toward this. Of course they did.",
+        "Turnout gear. Built for heat. Not for teeth.",
+        "Heavy coat, no air left to breathe. Brave wasn't enough.",
+    } },
+    ["study.outfit.hazmat"] = { common = {
+        "Hazmat suit. Didn't help. Nothing helped.",
+        "Sealed suit, torn at the glove. One tear was all it took.",
+        "They knew something. You don't dress like this for the flu.",
+    } },
+    ["study.outfit.food"] = { common = {
+        "Name tag from the burger place. Still smells a little like fryer oil. And worse.",
+        "Spiffo's uniform. The raccoon on the shirt's still smiling. Somebody should.",
+        "Apron and a hairnet. Health code violations: all of them.",
+    } },
+    ["study.outfit.farm"] = { common = {
+        "Overalls, boots, dirt under the nails. Kentucky farmer. The corn will go to seed now.",
+        "Hunting vest. Spent a life stalking deer. Ended up the one doing the stalking.",
+        "Mud on the cuffs. The field kept growing after they stopped.",
+    } },
+    ["study.outfit.office"] = { common = {
+        "Tie still knotted. Stuck on Monday morning forever.",
+        "Office clothes. Probably died wondering about a deadline.",
+        "Company badge from some office in Louisville. Came in for one meeting. Stayed.",
+    } },
+    ["study.outfit.student"] = { common = {
+        "Just a kid. Summer vacation, 1993. Should have been the best one.",
+        "School jacket. Somebody's honor roll.",
+        "School clothes. They should have been worried about homework.",
+    } },
+    ["study.outfit.sports"] = { common = {
+        "Baseball cap. Louisville fan. Season's over, champ.",
+        "Team jersey. Went to the game, came home a monster. Well, some fans always did.",
+        "Running shoes. A jogger. Outran nothing in the end.",
+    } },
+    ["study.outfit.jockey"] = { common = {
+        "Jockey silks. Derby dreams, Knox County nightmare.",
+        "A jockey. Small, quick, light. Still wasn't fast enough.",
+        "Silks still bright. The track will never know who missed the start.",
+    } },
+    ["study.outfit.wedding"] = { common = {
+        "Wedding clothes. 'Til death do us part. Death did its part. Then kept going.",
+        "Somebody was getting married that week. Somebody's still waiting at the altar.",
+        "Someone pressed this outfit for a day they never reached.",
+    } },
+    ["study.outfit.inmate"] = { common = {
+        "Prison orange. Got out in the end. Not how anybody planned it.",
+        "Inmate. Served the sentence and then some.",
+        "Number on the shirt. I wonder whether anyone remembers the name.",
+    } },
+    ["study.outfit.clergy"] = { common = {
+        "Priest's collar. I hope they found the answers they preached.",
+        "A preacher. The end times came and nobody got raptured. Just this.",
+        "They might have blessed half the county. Nobody could bless them out of this.",
+    } },
+    ["study.outfit.home"] = { common = {
+        "Bathrobe and slippers. It came for them at home, on an ordinary morning.",
+        "Pajamas. Went to bed with a fever. Never really woke up.",
+        "Still dressed for breakfast. The dead never wait for a better hour.",
+    } },
+    ["study.outfit.worker"] = { common = {
+        "Coveralls with a name stitched on. Somebody's mechanic. Somebody's dad, maybe.",
+        "Mail carrier. Neither rain, nor sleet, nor this.",
+        "Hard hat still on. Safety first. It helped with falling bricks. Not with this.",
+        "Gas station shirt. Somebody still owes them for a fill-up.",
+    } },
+    ["study.outfit.party"] = { common = {
+        "Party clothes. Last good night out in Kentucky.",
+        "Dressed as a monster for fun. Irony has a mean streak.",
+        "Dressed to be seen. Now nobody wants to look.",
+    } },
+    ["study.outfit.santa"] = { common = {
+        "A Santa suit in July. There's a story here I'll never hear.",
+        "That red suit had one job: make children feel safe.",
+        "Someone wore this to make people smile. I hope it worked.",
+    } },
+    ["study.outfit.reporter"] = { common = {
+        "Press badge. LBMW. Told us all to keep calm right up to the end.",
+        "A reporter. Stayed on the story too long. The good ones always do.",
+        "I wish somebody saved their notes. We could use an honest account.",
+    } },
+    ["study.outfit.traveler"] = { common = {
+        "Tourist. Came to see Kentucky. Saw too much of it.",
+        "Backpack still on. Was trying to leave. Almost made it.",
+        "Evacuee. They told them where to go. Nobody said what would be waiting.",
+    } },
+    ["study.outfit.raider"] = { common = {
+        "Bandit gear. Lived by taking. Died the same as everybody.",
+        "Mask and a mean streak. Doesn't matter now.",
+        "Armor made from scraps. Whoever wore it expected a fight.",
+    } },
+    ["study.outfit.survivor"] = { common = {
+        "Survivor gear. One of us, once. Didn't make it.",
+        "Good boots, full pack, homemade armor. Did everything right. Still ended up here.",
+        "Extra pockets, careful stitching. They meant to stay out here a long time.",
+    } },
+    ["study.ritual.spiffo_salute"] = { common = {
+        "*salutes* Colonel Spiffo, one more for the lost and found.",
+        "Colonel, this one had a name before the uniform became a shroud.",
+        "Spiffo, keep your bright eyes on the road they took alone.",
+        "A salute for a stranger. Still counts as one of us.",
+    } },
+    ["study.ritual.bourbon_blessing"] = { common = {
+        "By the barrel and the bluegrass, rest easy. I'd pour one out, but we're rationing.",
+        "Kentucky bourbon could warm a hand. It cannot help this one now.",
+        "I would toast your memory if I knew your name. Rest anyway.",
+        "Barrel's closed today. This stranger gets a blessing, not a drink.",
+    } },
+    ["study.ritual.mannequin_apology"] = { common = {
+        "Sorry. You're real, aren't you? I thought you were a mannequin. I'm so sorry.",
+        "I keep seeing cloth first and a person second. Forgive me.",
+        "Nobody put you on display. The world just stopped looking.",
+        "Sorry, stranger. You deserved more than a second glance.",
+    } },
+    ["study.ritual.gnome_commander"] = { common = {
+        "Gnome Command, be advised: one more hostile neutralized. Requesting tiny medals.",
+        "Gnome Command, stranger down. Send someone who remembers their name.",
+        "No medal for this one. Just a moment where we stop walking.",
+        "Report says unknown. I say somebody missed them.",
+    } },
+    ["study.ritual.sports_pep_talk"] = { common = {
+        "Hey. You played the whole game. Final whistle, champ.",
+        "Lost the final round, stranger. You still made it this far.",
+        "Coach used to say get up. I wish that worked here.",
+        "One whistle for you. Then I get back to the living.",
+    } },
+    ["study.ritual.rubber_duck_oracle"] = { common = {
+        "The Duck sees all. The Duck says this one is done. Squeak.",
+        "The Duck has no answer for why you ended here.",
+        "Squeak once for the living. Stay quiet for the dead.",
+        "Even the Duck knows when to stop joking. Rest now.",
+    } },
+}
+
+-- Vanilla outfit names, checked in order. A token starting with "=" must
+-- match exactly; any other token is a plain substring of the outfit name.
+Study.OUTFITS = {
+    { "party", { "Stripper", "Costume", "=Party", "ClubGoer", "=Gaudy" } },
+    { "santa", { "Santa" } },
+    { "reporter", { "Frank_Hemingway", "Jackie_Jaye" } },
+    { "patient", { "HospitalPatient" } },
+    { "medic", { "Doctor", "Nurse", "Pharmacist", "AmbulanceDriver" } },
+    { "hazmat", { "HazardSuit", "Exterminator" } },
+    { "fire", { "Fireman" } },
+    { "military", { "Army", "=Veteran", "Ghillie" } },
+    { "law", { "Police", "Sheriff", "PrisonGuard", "Security", "Detective", "=Agent", "=Ranger" } },
+    { "inmate", { "Inmate" } },
+    { "jockey", { "Jockey" } },
+    { "sports", { "Baseball", "Football", "IceHockey", "HockeyPsycho", "Golfer", "SportsFan",
+        "FitnessInstructor", "Cyclist", "Bowling", "Swimmer", "=Ski", "StreetSports", "Boxing",
+        "Varsity" } },
+    { "food", { "Chef", "Cook_", "Waiter_", "=Spiffo", "Meat_Master", "GigaMart" } },
+    { "farm", { "Farmer", "Woodcut", "=Hunter", "Fisherman", "Redneck" } },
+    { "wedding", { "Groom", "WeddingDress", "NakedVeil" } },
+    { "clergy", { "Priest", "Rev_" } },
+    { "home", { "Bathrobe", "Bedroom", "=Naked" } },
+    { "office", { "OfficeWorker", "=IT", "Teacher", "=Classy", "=Dean", "Judge", "Mayor" } },
+    { "student", { "Student", "=Young" } },
+    { "worker", { "Mechanic", "ConstructionWorker", "Foreman", "MetalWorker", "Trucker",
+        "Sanitation", "Postal", "Fossoil", "Gas2Go", "ThunderGas", "McCoys", "AirportWorker",
+        "AirCrew", "RiverboatCaptain" } },
+    { "raider", { "Bandit", "Raider", "=Thug", "BankRobber", "PrivateMilitia", "=Mob" } },
+    { "survivor", { "Survivalist" } },
+    { "traveler", { "Tourist", "Camper", "Backpacker", "Evacuee", "Hobbo", "Retiree" } },
+}
+Study.PROFESSION_ALIASES = {
+    burgerflipper = "chef", rancher = "farmer", engineer = "mechanics",
+    electrician = "mechanics", repairman = "mechanics",
+}
+Study.HOMES = SC.Background and SC.Background.HOMES or {}
+-- How each temperament likes to sign off: a closing thought, a civil-defense
+-- joke or a word about Kentucky.
+Study.CLOSER_WEIGHTS = {
+    brave = { psa = 3, kentucky = 2, close = 2 },
+    cautious = { psa = 2, kentucky = 1, close = 3 },
+    caring = { psa = 1, kentucky = 2, close = 4 },
+    practical = { psa = 3, kentucky = 2, close = 2 },
+}
+
+function Study.register()
+    if not SC.Dialogue or type(SC.Dialogue.register) ~= "function" then return false end
+    if type(SC.Dialogue.has) == "function" and SC.Dialogue.has("study.open") then return true end
+    for topic, pool in pairs(STUDY_POOLS) do SC.Dialogue.register(topic, pool) end
+    return true
+end
+
+function Study.outfitGroup(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    for _, row in ipairs(Study.OUTFITS) do
+        for _, token in ipairs(row[2]) do
+            if string.sub(token, 1, 1) == "=" then
+                if name == string.sub(token, 2) then return row[1] end
+            elseif string.find(name, token, 1, true) then
+                return row[1]
+            end
+        end
+    end
+    return nil
+end
+
+-- A zombie corpse that stays down: never one that is faking, due to
+-- reanimate, or already studied or given its moment.
+function Study.eligible(body)
+    local utility = U()
+    if not utility.instanceOf(body, "IsoDeadBody") then return false end
+    if utility.call(body, "isZombie") ~= true then return false end
+    if utility.call(body, "isFakeDead") == true then return false end
+    if (tonumber((utility.call(body, "getReanimateTime"))) or 0) > 0 then return false end
+    local data = utility.modData(body)
+    return not (type(data) == "table"
+        and (data[Study.MARKER] ~= nil or data[RESPECT_MARKER] ~= nil))
+end
+
+-- Nearest eligible body on this side of the walls: indoors only within the
+-- companion's own building, outdoors only outdoors.
+function Study.nearbyBody(actor)
+    local utility = U()
+    local x, y, z = utility.position(actor)
+    if not x then return nil end
+    local actorSquare = utility.squareOf(actor)
+    local room = utility.call(actorSquare, "getRoom")
+    local indoors = room ~= nil
+    local radius = math.max(1, math.min(10, math.floor(utility.config("downtimeStudyRadius") or 6)))
+    for distance = 0, radius do
+        for dx = -distance, distance do
+            for dy = -distance, distance do
+                if math.max(math.abs(dx), math.abs(dy)) == distance then
+                    local square = utility.gridSquare(x + dx, y + dy, z)
+                    local squareIndoors = square ~= nil and utility.call(square, "getRoom") ~= nil
+                    if square and squareIndoors == indoors
+                        and (not indoors or sameBuilding(actorSquare, square)) then
+                        local found
+                        utility.squareStaticMovingObjects(square, function(object)
+                            if Study.eligible(object) then found = object return false end
+                        end, 8)
+                        if found then return found, square end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function Study.trait(profile, name)
+    local value = tonumber(type(profile) == "table" and profile[name] or nil) or 50
+    return (math.max(0, math.min(100, value)) - 50) / 50
+end
+
+-- Chance per roll window. Practical minds and people who handled the dead
+-- for a living lean in; cautious ones keep their distance; a frayed nerve
+-- never goes looking.
+function Study.chance(commands)
+    local utility = U()
+    commands = type(commands) == "table" and commands or {}
+    if (tonumber(commands.stress) or 0) >= 65 then return 0 end
+    local profile = type(commands.personalityProfile) == "table" and commands.personalityProfile or {}
+    local chance = (tonumber((utility.config("downtimeStudyChancePercent"))) or 18)
+        + Study.trait(profile, "practicality") * 10 - Study.trait(profile, "caution") * 8
+        + Study.trait(profile, "courage") * 4
+    if SC.Background and type(SC.Background.downtimeModifier) == "function" then
+        chance = chance + (tonumber((SC.Background.downtimeModifier(profile, "study_corpse"))) or 0) * 4
+    end
+    return math.max(0, math.min(100, chance))
+end
+
+function Study.hash(text)
+    return math.abs(tonumber((U().stableHash(text))) or 0)
+end
+
+function Study.activity(actor, commands, state, current)
+    local utility = U()
+    if current - (state.safeSince or current) < (utility.config("downtimeStudySafeMs") or 20000) then
+        return nil
+    end
+    if current - (tonumber(state.studiedAt) or -math.huge)
+            < (utility.config("downtimeStudyActorCooldownMs") or 900000)
+        or current - Study.lastPartyAt < (utility.config("downtimeStudyPartyCooldownMs") or 240000) then
+        return nil
+    end
+    local window = math.max(10000, tonumber((utility.config("downtimeStudyRollWindowMs"))) or 90000)
+    local roll = Study.hash(tostring(utility.idOf(actor)) .. ":study:"
+        .. tostring(math.floor(current / window))) % 100
+    if roll >= Study.chance(commands) then return nil end
+    local body, square = Study.nearbyBody(actor)
+    if not body then return nil end
+    return {
+        kind = "study_corpse", score = 22, object = body, square = square,
+        fact = { activity = "study_corpse",
+            outfit = Study.outfitGroup(utility.call(body, "getOutfitName")) or "unknown" },
+    }
+end
+
+function Study.isPlayer(character)
+    if character == nil or type(getPlayer) ~= "function" then return false end
+    local ok, player = pcall(getPlayer)
+    return ok and player ~= nil and player == character
+end
+
+function Study.ageHours(body)
+    local died = tonumber((U().call(body, "getDeathTime")))
+    if not died or died <= 0 or type(getGameTime) ~= "function" then return nil end
+    local ok, gameTime = pcall(getGameTime)
+    if not ok or not gameTime then return nil end
+    local nowHours = tonumber((U().call(gameTime, "getWorldAgeHours")))
+    if not nowHours or nowHours < died then return nil end
+    return nowHours - died
+end
+
+function Study.pick(options, seed)
+    local total = 0
+    for _, option in ipairs(options) do total = total + math.max(0, option.weight or 0) end
+    if total <= 0 then return nil end
+    local roll = seed % total
+    for _, option in ipairs(options) do
+        local weight = math.max(0, option.weight or 0)
+        if roll < weight then return option end
+        roll = roll - weight
+    end
+    return options[#options]
+end
+
+-- Two or three lines: what it sees first, what that means (its own trade,
+-- the body's age, who put it down, the symptoms or the news), and, by
+-- temperament, a closing thought, a civil-defense joke or a word about
+-- Kentucky. A companion with a ritual quirk may close with its ritual.
+function Study.lines(actor, commands, body, current)
+    local utility = U()
+    Study.register()
+    local function has(topic)
+        return SC.Dialogue and type(SC.Dialogue.has) == "function" and SC.Dialogue.has(topic)
+    end
+    local profile = type(commands.personalityProfile) == "table" and commands.personalityProfile or {}
+    local seed = tostring(utility.idOf(actor)) .. ":" .. tostring(body) .. ":" .. tostring(current)
+    local group = Study.outfitGroup(utility.call(body, "getOutfitName"))
+    local skeleton = utility.call(body, "isSkeleton") == true
+    local lines = {}
+    if skeleton then
+        lines[1] = { topic = "study.skeleton" }
+    elseif utility.call(body, "isCrawling") == true and Study.hash(seed .. ":crawl") % 2 == 0 then
+        lines[1] = { topic = "study.crawler" }
+    elseif group and has("study.outfit." .. group) then
+        lines[1] = { topic = "study.outfit." .. group }
+    else
+        lines[1] = { topic = "study.open" }
+    end
+    local middle = {}
+    local killer = utility.call(body, "getKilledBy")
+    if killer ~= nil and killer == actor then
+        middle[#middle + 1] = { topic = "study.ours.self", weight = 5 }
+    elseif killer ~= nil and (utility.isCompanion(killer) or Study.isPlayer(killer)) then
+        middle[#middle + 1] = { topic = "study.ours.team", weight = 3 }
+    end
+    local age = not skeleton and Study.ageHours(body) or nil
+    if age and age < (utility.config("downtimeStudyFreshHours") or 12) then
+        middle[#middle + 1] = { topic = "study.fresh", weight = 2 }
+    elseif age and age > (utility.config("downtimeStudyOldHours") or 96) then
+        middle[#middle + 1] = { topic = "study.old", weight = 2 }
+    end
+    local profession = Study.PROFESSION_ALIASES[profile.profession] or profile.profession
+    if type(profession) == "string" and has("study.profession." .. profession) then
+        middle[#middle + 1] = { topic = "study.profession." .. profession, weight = 4 }
+    end
+    local background = type(profile.background) == "table" and profile.background or {}
+    local home = Study.HOMES[background.home]
+    if home then middle[#middle + 1] = { topic = "study.home", weight = 1, arguments = { home } } end
+    middle[#middle + 1] = { topic = "study.symptoms", weight = 4 }
+    middle[#middle + 1] = { topic = "study.lore", weight = 4 }
+    local second = Study.pick(middle, Study.hash(seed .. ":middle"))
+    if second then lines[#lines + 1] = { topic = second.topic, arguments = second.arguments } end
+    local voice = SC.Personality and type(SC.Personality.voice) == "function"
+        and SC.Personality.voice(profile) or "practical"
+    local weights = Study.CLOSER_WEIGHTS[voice] or Study.CLOSER_WEIGHTS.practical
+    local closers = {
+        { topic = "study.psa", weight = weights.psa },
+        { topic = "study.kentucky", weight = weights.kentucky },
+        { topic = "study.close", weight = weights.close },
+    }
+    local ritual = SC.Quirks and type(SC.Quirks.normalize) == "function"
+        and SC.Quirks.normalize(commands.ritual) or nil
+    if type(ritual) == "table" and ritual.id and has("study.ritual." .. tostring(ritual.id)) then
+        closers[#closers + 1] = { topic = "study.ritual." .. tostring(ritual.id), weight = 3 }
+    end
+    if Study.hash(seed .. ":closer") % 100 < (utility.config("downtimeStudyCloserPercent") or 75) then
+        local closer = Study.pick(closers, Study.hash(seed .. ":closerPick"))
+        if closer then lines[#lines + 1] = { topic = closer.topic } end
+    end
+    return lines
+end
+
+function Study.duration(kind)
+    local utility = U()
+    if kind == "study_corpse" then return utility.config("downtimeStudyMs") or 7000 end
+    if kind == "pay_respects" then return utility.config("downtimeRespectMs") or 6000 end
+    return utility.config("downtimeActivityMs") or 6000
+end
+
+-- The start claims the companion and party cooldowns, so an interrupted or
+-- unreachable look is not retried at once.
+function Study.prepare(actor, activity, commands, state, now)
+    activity.lines = Study.lines(actor, commands, activity.object, now)
+    activity.nextLineAt = 0
+    state.studiedAt = now
+    Study.lastPartyAt = now
+end
+
+function Study.speakNext(actor, activity, now)
+    local queue = activity and activity.lines
+    if type(queue) ~= "table" or #queue == 0 or now < (activity.nextLineAt or 0) then return false end
+    local line = table.remove(queue, 1)
+    activity.nextLineAt = now + (U().config("downtimeStudyLineGapMs") or 2600)
+    if not SC.Dialogue or type(SC.Dialogue.say) ~= "function" then return false end
+    local spoken = SC.Dialogue.say(actor, line.topic, nil, line.arguments, {
+        recentLimit = 6, salt = line.topic .. ":" .. tostring(now),
+    })
+    return spoken == true
+end
+
+function Study.stillThere(activity)
+    local present = false
+    U().squareStaticMovingObjects(activity.square, function(object)
+        if object == activity.object then present = true return false end
+    end, 16)
+    return present
+end
+
+-- A finished look marks the body for good and never cuts off the last thought.
+function Study.finish(actor, activity, now)
+    local data = U().modData(activity.object)
+    if type(data) == "table" then data[Study.MARKER] = true end
+    if type(activity.lines) == "table" and #activity.lines > 0 then
+        activity.nextLineAt = 0
+        Study.speakNext(actor, activity, now)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Paying respects
+-- ---------------------------------------------------------------------------
+-- Now and then a companion stops by a body, not to study it but to give it a
+-- moment: a few quiet words, and sometimes a keepsake noticed and left where
+-- it lies. Caring minds stop most, and more often right after a hard fight;
+-- a frayed nerve never does. A body gets one moment from the party, studied
+-- or respected, and nothing on it is touched. The pose is the study crouch.
+
+local Respect = { lastPartyAt = -math.huge, MARKER = RESPECT_MARKER }
+
+Respect.VOICE_SCALE = { caring = 2.5, practical = 1, brave = 0.8, cautious = 0.6 }
+
+local RESPECT_POOLS = {
+    ["respects.gesture"] = {
+        common = {
+            "Hold up a second.",
+            "Give me a moment here.",
+            "Just a second. Won't take long.",
+            "Wait. Not this one. Not like this.",
+            "One moment. For them.",
+            "Hang on. This one deserves a second.",
+            "Let me do this properly.",
+        },
+        brave = { "Stand easy. This one gets a moment." },
+        cautious = { "It's down. It's really down. Okay. A moment, then." },
+        caring = { "Wait. Nobody should just be left like this." },
+        practical = { "Ten seconds. Then we move." },
+    },
+    ["respects.act"] = {
+        common = {
+            "Rest now. You don't have to walk anymore.",
+            "Whoever you were, you're off shift.",
+            "Sorry it went this way, friend.",
+            "Nobody's going to make you get up again.",
+            "You fought it as long as you could. I'd bet on it.",
+            "There. That's all anybody can do now.",
+            "You can stop now. It's over.",
+            "Whoever you were waiting for, I hope they made it.",
+            "No more walking. No more hunger. Just rest.",
+        },
+        brave = { "You went down swinging. I hope." },
+        cautious = { "Stay down. Please. For both of us." },
+        caring = { "I'm sorry. I'm so sorry. Somebody should say it.",
+            "Somebody missed you. I'm sure of it." },
+        practical = { "Done now. That's something." },
+    },
+    -- %1 is the keepsake's name, lowercase.
+    ["respects.memento"] = {
+        common = {
+            "Their %1. That stays. It's theirs.",
+            "Look. Their %1. Somebody loved this one. Leave it be.",
+            "Kept their %1 all the way to the end. I'm not taking that.",
+            "Their %1. Some things you keep to the very end.",
+            "Their %1. I won't take it. It's the last thing that's theirs.",
+            "Their %1. Somebody out there would know that. Maybe still misses them.",
+        },
+        caring = { "Their %1. Whoever gave them that, I hope they got out." },
+    },
+    ["respects.reaction"] = {
+        common = {
+            "...Yeah. Rest easy.",
+            "Amen. Or whatever fits.",
+            "Nice words. They'd have liked that.",
+            "That was decent of you.",
+            "Rest easy, whoever you were.",
+            "Yeah. Somebody should.",
+        },
+        brave = { "Good. Now let's make sure it doesn't happen to us." },
+        cautious = { "That was nice. Can we go now? That was nice." },
+        caring = { "Thank you for doing that." },
+        practical = { "Right. Moving on." },
+    },
+}
+
+Respect.POOLS = RESPECT_POOLS
+
+function Respect.register()
+    if not SC.Dialogue or type(SC.Dialogue.register) ~= "function" then return false end
+    if type(SC.Dialogue.has) == "function" and SC.Dialogue.has("respects.act") then return true end
+    for topic, pool in pairs(RESPECT_POOLS) do SC.Dialogue.register(topic, pool) end
+    return true
+end
+
+-- Chance per roll window, by temperament; doubled just after a fight ends.
+function Respect.chance(commands, current)
+    local utility = U()
+    commands = type(commands) == "table" and commands or {}
+    if (tonumber(commands.stress) or 0) >= (tonumber((utility.config("respectStressLimit"))) or 72) then
+        return 0
+    end
+    local profile = type(commands.personalityProfile) == "table" and commands.personalityProfile or {}
+    local voice = SC.Personality and type(SC.Personality.voice) == "function"
+        and SC.Personality.voice(profile) or "practical"
+    local chance = (tonumber((utility.config("respectChancePercent"))) or 10)
+        * (Respect.VOICE_SCALE[voice] or 1)
+    local ended = SC.Tales and type(SC.Tales.lastEpisodeEndedAt) == "function"
+        and tonumber((SC.Tales.lastEpisodeEndedAt())) or nil
+    if ended and current >= ended
+        and current - ended <= (tonumber((utility.config("respectAfterFightMs"))) or 120000) then
+        chance = chance * 2
+    end
+    return math.max(0, math.min(100, chance))
+end
+
+-- A keepsake on the body, by name. Read-only and bounded; it stays there.
+function Respect.memento(body)
+    local utility = U()
+    local container = utility.call(body, "getContainer")
+    if container == nil then return nil end
+    for _, item in ipairs(utility.inventoryItems(container, 20)) do
+        local category = utility.call(item, "getDisplayCategory")
+        if utility.call(item, "isMemento") == true
+            or string.lower(tostring(category or "")) == "memento" then
+            local name = utility.call(item, "getDisplayName")
+            if type(name) == "string" and name ~= "" then
+                return utility.itemPhrase(string.sub(name, 1, 40), true)
+            end
+        end
+    end
+    return nil
+end
+
+function Respect.activity(actor, commands, state, current)
+    local utility = U()
+    if current - (state.safeSince or current) < (utility.config("downtimeStudySafeMs") or 20000) then
+        return nil
+    end
+    if current - (tonumber(state.respectedAt) or -math.huge)
+            < (utility.config("respectActorCooldownMs") or 2700000)
+        or current - Respect.lastPartyAt < (utility.config("respectPartyCooldownMs") or 1200000) then
+        return nil
+    end
+    local window = math.max(10000, tonumber((utility.config("downtimeStudyRollWindowMs"))) or 90000)
+    local roll = Study.hash(tostring(utility.idOf(actor)) .. ":respect:"
+        .. tostring(math.floor(current / window))) % 100
+    if roll >= Respect.chance(commands, current) then return nil end
+    local body, square = Study.nearbyBody(actor)
+    if not body then return nil end
+    return {
+        kind = "pay_respects", score = 20, object = body, square = square,
+        fact = { activity = "pay_respects" },
+    }
+end
+
+function Respect.lines(body)
+    Respect.register()
+    local lines = { { topic = "respects.gesture" }, { topic = "respects.act" } }
+    local memento = Respect.memento(body)
+    if memento then lines[#lines + 1] = { topic = "respects.memento", arguments = { memento } } end
+    return lines
+end
+
+-- Like a study, the start claims both cooldowns.
+function Respect.prepare(actor, activity, commands, state, now)
+    activity.lines = Respect.lines(activity.object)
+    activity.nextLineAt = 0
+    state.respectedAt = now
+    Respect.lastPartyAt = now
+end
+
+-- Sometimes a calm companion standing by says something back.
+function Respect.react(actor, now)
+    local utility = U()
+    if Study.hash(tostring(utility.idOf(actor)) .. ":react:" .. tostring(now)) % 100
+        >= (tonumber((utility.config("respectReactionPercent"))) or 30) then
+        return nil
+    end
+    local owner = SC.Banter
+    if type(owner) ~= "table" or type(owner.availableSpeaker) ~= "function"
+        or not SC.Registry or not SC.Dialogue or type(SC.Dialogue.say) ~= "function" then
+        return nil
+    end
+    local radius = tonumber((utility.config("respectReactionRadius"))) or 8
+    for _, record in ipairs(SC.Registry.records()) do
+        if record.actor ~= actor and owner.availableSpeaker(record, actor, now, radius) then
+            local spoken = SC.Dialogue.say(record.actor, "respects.reaction", nil, nil, {
+                recentLimit = 6, salt = "respects.reaction:" .. tostring(now),
+            })
+            return spoken == true and record.actor or nil
+        end
+    end
+    return nil
+end
+
+function Respect.finish(actor, activity, now)
+    local data = U().modData(activity.object)
+    if type(data) == "table" then data[Respect.MARKER] = true end
+    if type(activity.lines) == "table" and #activity.lines > 0 then
+        activity.nextLineAt = 0
+        Study.speakNext(actor, activity, now)
+    end
+    return Respect.react(actor, now)
+end
+
+local function carriedItems(actor)
+    local utility = U()
+    local items = utility.inventoryItems(utility.inventory(actor), 100)
+    if SC.Logistics and type(SC.Logistics.audit) == "function" then
+        local ok, audit = pcall(SC.Logistics.audit, actor)
+        if ok and type(audit) == "table" and type(audit.items) == "table" then
+            items = {}
+            for _, record in ipairs(audit.items) do items[#items + 1] = record.item end
+        end
+    end
+    return items
+end
+
+-- A quiet lookout needs a clear indoor standing square. A kitchen counter in
+-- front of the window rules out watching there; the native window traversal
+-- remains available to emergency escape movement.
+-- Windows sit on the north or west edge of their square; inspect both sides
+-- instead of assuming that the window object's square is the indoor side.
+local function windowWatchActivity(actor)
+    local utility = U()
+    local ax, ay, az = utility.position(actor)
+    local actorSquare = utility.squareOf(actor)
+    if ax == nil or actorSquare == nil
+        or select(1, utility.call(actorSquare, "getRoom")) == nil then return nil end
+    local best, bestDistance
+    local inspected = 0
+    for dx = -3, 3 do
+        for dy = -3, 3 do
+            local square = utility.gridSquare(ax + dx, ay + dy, az)
+            if square ~= nil then
+                utility.squareObjects(square, function(object)
+                    inspected = inspected + 1
+                    if inspected > 180 then return false end
+                    if not utility.instanceOf(object, "IsoWindow") then return true end
+                    local north, northOk = utility.call(object, "getNorth")
+                    if not northOk then return true end
+                    local sx, sy, sz = utility.position(square)
+                    if sx == nil then return true end
+                    local opposite = utility.gridSquare(sx + (north and 0 or -1),
+                        sy + (north and -1 or 0), sz)
+                    local candidate, outside
+                    if sameBuilding(actorSquare, square) then
+                        candidate, outside = square, opposite
+                    elseif sameBuilding(actorSquare, opposite) then
+                        candidate, outside = opposite, square
+                    end
+                    if candidate == nil or outside == nil
+                        or select(1, utility.call(outside, "getRoom")) ~= nil then
+                        return true
+                    end
+                    if not SC.Navigation
+                        or type(SC.Navigation.standingSquareClear) ~= "function"
+                        or not SC.Navigation.standingSquareClear(actor, candidate)
+                        or reservationHeldByOther(candidate, actor, utility.nowMs()) then
+                        return true
+                    end
+                    local distance = utility.distance(actor, candidate)
+                    if distance == nil or distance > 5
+                        or bestDistance ~= nil and distance >= bestDistance then return true end
+                    local ox, oy = utility.position(outside)
+                    if ox == nil then return true end
+                    bestDistance = distance
+                    best = {
+                        kind = "window_watch", score = 19,
+                        object = object, square = candidate,
+                        watchSquare = candidate,
+                        watchTarget = { x = ox + 0.5, y = oy + 0.5, z = sz },
+                        durationMs = 6500,
+                        fact = { activity = "window_watch" },
+                    }
+                    return true
+                end, 32)
+            end
+            if inspected > 180 then return best end
+        end
+    end
+    return best
+end
+
+local function gearCheckActivity(actor)
+    local utility = U()
+    local primary = select(1, utility.call(actor, "getPrimaryHandItem"))
+    local secondary = select(1, utility.call(actor, "getSecondaryHandItem"))
+    local item = primary or secondary
+    if item == nil or not utility.inventoryContains(utility.inventory(actor), item) then
+        return nil
+    end
+    return {
+        kind = "gear_check", score = 20, item = item, durationMs = 2400,
+        fact = { activity = "gear_check", itemType = utility.itemType(item) },
+    }
+end
+
+local function workingWalkieTalkie(actor, expected, requiredChannel)
+    local utility = U()
+    local inventory = utility.inventory(actor)
+    if not inventory then return nil end
+    local function numberValue(value)
+        return type(value) == "number" and value or tonumber(value)
+    end
+    local function usable(item)
+        if not item or not utility.inventoryContains(inventory, item) then return nil end
+        local device = select(1, utility.call(item, "getDeviceData"))
+        if not device or select(1, utility.call(device, "getIsPortable")) ~= true
+            or select(1, utility.call(device, "getIsTwoWay")) ~= true
+            or select(1, utility.call(device, "getIsTurnedOn")) ~= true
+            or select(1, utility.call(device, "getHasBattery")) ~= true
+            or select(1, utility.call(device, "getMicIsMuted")) == true
+            or select(1, utility.call(device, "isNoTransmit")) == true
+            or (numberValue(select(1, utility.call(device, "getTransmitRange"))) or 0) <= 0
+            or (numberValue(select(1, utility.call(device, "getPower"))) or 0) <= 0 then
+            return nil
+        end
+        local channel = numberValue(select(1, utility.call(device, "getChannel")))
+        if not channel or channel <= 0
+            or requiredChannel and channel ~= requiredChannel then return nil end
+        return device, channel
+    end
+    if expected then return usable(expected) end
+    local primary = select(1, utility.call(actor, "getPrimaryHandItem"))
+    local secondary = select(1, utility.call(actor, "getSecondaryHandItem"))
+    local heldDevice, heldChannel = usable(primary)
+    if heldDevice then return primary, heldDevice, heldChannel end
+    heldDevice, heldChannel = usable(secondary)
+    if heldDevice then return secondary, heldDevice, heldChannel end
+    -- Only loose carried items qualify. A radio packed inside a bag should
+    -- not appear in the companion's hands for this short ambient action.
+    for _, item in ipairs(utility.inventoryItems(inventory, 80)) do
+        local device, channel = usable(item)
+        if device then return item, device, channel end
+    end
+    return nil
+end
+
+local function radioCheckActivity(actor)
+    local teamChannel = SC.ExpeditionPrototype
+        and SC.ExpeditionPrototype.TEAM_RADIO_CHANNEL or 90000
+    local item, device, channel = workingWalkieTalkie(actor, nil, teamChannel)
+    if not item then return nil end
+    return {
+        kind = "radio_check", score = 18, item = item, device = device,
+        channel = channel, durationMs = 2500,
+        fact = { activity = "radio_check", channel = channel },
+    }
+end
+
+local function broadcastRadioCheck(actor, activity)
+    local dialogue = SC.Dialogue
+    if not dialogue or type(dialogue.choose) ~= "function"
+        or type(getZomboidRadio) ~= "function" then return false end
+    local line = dialogue.choose(actor, "downtime.radio_check", nil, nil, {
+        recentLimit = 8,
+    })
+    if type(line) ~= "string" or line == "" then return false end
+    local ok, radio = pcall(getZomboidRadio)
+    if not ok or radio == nil then return false end
+    local utility = U()
+    local x, y = utility.position(actor)
+    if x == nil or y == nil then return false end
+    local range = select(1, utility.call(activity.device, "getTransmitRange"))
+    if type(range) ~= "number" or range <= 0 then return false end
+    local message = string.sub(utility.nameOf(actor), 1, 80) .. ": " .. line
+    local sequence = tostring(math.floor(utility.nowMs()))
+        .. ":" .. tostring(utility.stableHash(tostring(actor) .. ":" .. line))
+    local _, sent = utility.call(radio, "SendTransmission",
+        math.floor(x), math.floor(y), activity.channel, message,
+        "LF-RADIO-CHECK", sequence, 0.65, 0.85, 1.0,
+        math.floor(range), false)
+    if not sent then return false end
+    utility.say(actor, line)
+    return true
+end
+
+local function tidyCampValid(actor, activity)
+    local base = SC.BaseLife
+    if not base or type(base.storage) ~= "function"
+        or type(base.resolveContainer) ~= "function"
+        or type(base.isInside) ~= "function"
+        or not campWorkActorPresent(actor) then return false end
+    local storage = base.storage(activity.storageId)
+    if storage == nil or storage ~= activity.storage then return false end
+    local container, owner = base.resolveContainer(storage)
+    return container ~= nil and container == activity.container
+        and owner == activity.object and U().squareOf(owner) ~= nil
+end
+
+local function tidyCampActivity(actor)
+    local base, utility = SC.BaseLife, U()
+    if not base or type(base.isInside) ~= "function"
+        or base.isInside(actor) ~= true
+        or type(base.storageRows) ~= "function" then return nil end
+    local actorSquare = utility.squareOf(actor)
+    if actorSquare == nil then return nil end
+    local best, bestDistance
+    for _, storage in ipairs(base.storageRows() or {}) do
+        local container, object = base.resolveContainer(storage)
+        local square = utility.squareOf(object)
+        if container and square and campWorkContext(actorSquare, square)
+            and #utility.inventoryItems(container, 1) > 0 then
+            local distance = utility.distance(actor, square)
+            if distance and distance <= 8
+                and (bestDistance == nil or distance < bestDistance) then
+                bestDistance = distance
+                best = {
+                    kind = "tidy_camp", score = 16, object = object,
+                    container = container, storage = storage,
+                    storageId = storage.id, square = square,
+                    originSquare = actorSquare,
+                    crossFloor = not utility.sameFloor(actorSquare, square),
+                    durationMs = 4200,
+                    fact = { activity = "tidy_camp", storageId = storage.id },
+                }
+            end
+        end
+    end
+    return best
+end
+
+local function cleaningLiquidAmount(item)
+    local fluid = select(1, U().call(item, "getFluidContainer"))
+    if not fluid then return nil end
+    local bleach = Fluid and Fluid.Bleach
+    local cleaning = Fluid and Fluid.CleaningLiquid
+    if (not bleach or select(1, U().call(fluid, "contains", bleach)) ~= true)
+        and (not cleaning or select(1, U().call(fluid, "contains", cleaning)) ~= true) then
+        return nil
+    end
+    local amount = select(1, U().call(fluid, "getAmount"))
+    return type(amount) == "number" and amount or tonumber(amount)
+end
+
+local function cleanerRemaining(item)
+    local fluid = select(1, U().call(item, "getFluidContainer"))
+    local amount = fluid and select(1, U().call(fluid, "getAmount")) or nil
+    return type(amount) == "number" and amount or tonumber(amount)
+end
+
+local function cleaningSupplies(actor)
+    local utility = U()
+    local tag = ItemTag and ItemTag.CLEAN_STAINS
+    local minimum = ZomboidGlobals and ZomboidGlobals.CleanBloodBleachAmount
+    if tag == nil or type(minimum) ~= "number" or minimum <= 0 then return nil end
+    local tool, cleaner
+    for _, item in ipairs(utility.inventoryItemsDeep(utility.inventory(actor), 180, 12)) do
+        if not tool and select(1, utility.call(item, "hasTag", tag)) == true
+            and select(1, utility.call(item, "isBroken")) ~= true then
+            tool = item
+        end
+        if not cleaner then
+            local amount = cleaningLiquidAmount(item)
+            if amount and amount >= minimum then cleaner = item end
+        end
+        if tool and cleaner then return tool, cleaner end
+    end
+    return nil
+end
+
+local function carriedCleaningItem(actor, expected)
+    if expected == nil then return false end
+    for _, item in ipairs(U().inventoryItemsDeep(U().inventory(actor), 180, 12)) do
+        if item == expected then return true end
+    end
+    return false
+end
+
+local function cleanBaseValid(actor, activity)
+    local base, utility = SC.BaseLife, U()
+    local tag = ItemTag and ItemTag.CLEAN_STAINS
+    if not base or type(base.isInside) ~= "function"
+        or tag == nil
+        or not campWorkActorPresent(actor)
+        or base.isInside(activity.square) ~= true
+        or utility.gridSquare(activity.square:getX(), activity.square:getY(),
+            activity.square:getZ()) ~= activity.square
+        or not campWorkContext(activity.originSquare or actor,
+            activity.square)
+        or select(1, utility.call(activity.square, "haveStains")) ~= true
+        or not carriedCleaningItem(actor, activity.item)
+        or not carriedCleaningItem(actor, activity.material)
+        or select(1, utility.call(activity.item, "hasTag", tag)) ~= true
+        or select(1, utility.call(activity.item, "isBroken")) == true then
+        return false
+    end
+    local amount = cleaningLiquidAmount(activity.material)
+    local minimum = ZomboidGlobals and ZomboidGlobals.CleanBloodBleachAmount
+    return amount ~= nil and type(minimum) == "number" and amount >= minimum
+end
+
+local function cleanBaseActivity(actor, state)
+    local base, utility = SC.BaseLife, U()
+    if not base or type(base.isInside) ~= "function"
+        or base.isInside(actor) ~= true then return nil end
+    local actorSquare = utility.squareOf(actor)
+    if not actorSquare then return nil end
+    local tool, cleaner = cleaningSupplies(actor)
+    if not tool then return nil end
+    local x, y, z = utility.position(actorSquare)
+    if x == nil then return nil end
+    local best, bestDistance
+    local function consider(square)
+        if not square or base.isInside(square) ~= true
+            or state and state.cleanRetryAt and state.cleanRetryAt[square]
+                and U().nowMs() < state.cleanRetryAt[square]
+            or not campWorkContext(actorSquare, square)
+            or select(1, utility.call(square, "haveStains")) ~= true then return end
+        local distance = utility.distance(actor, square)
+        if distance and (bestDistance == nil or distance < bestDistance) then
+            bestDistance = distance
+            local wall = select(1, utility.call(square, "haveBloodWall")) == true
+                or select(1, utility.call(square, "haveGrimeWall")) == true
+            best = {
+                kind = "clean_base", score = 24, square = square,
+                object = square, item = tool, material = cleaner,
+                originSquare = actorSquare,
+                crossFloor = not utility.sameFloor(actorSquare, square),
+                surface = wall and "wall" or "floor",
+                fact = { activity = "clean_base",
+                    surface = wall and "wall" or "floor" },
+            }
+        end
+    end
+    for dx = -3, 3 do
+        for dy = -3, 3 do
+            consider(utility.gridSquare(x + dx, y + dy, z))
+        end
+    end
+    -- Large and multi-floor camps get a rotating, bounded sweep. Nearby
+    -- stains are always checked first; distant loaded rooms are discovered
+    -- over later downtime evaluations without a one-frame full-zone scan.
+    local active = type(base.active) == "function" and base.active() or nil
+    local zones = active and active.zones or nil
+    if type(zones) == "table" and #zones > 0 then
+        local cursor = state and state.cleanScanCursor or nil
+        if type(cursor) ~= "table" then cursor = { zoneIndex = 1 } end
+        local checked, skipped = 0, 0
+        while checked < 32 and skipped <= #zones do
+            local zone = zones[cursor.zoneIndex]
+            if zone == nil then
+                cursor.zoneIndex, cursor.x, cursor.y = 1, nil, nil
+                zone = zones[1]
+            end
+            if zone and zone.kind == "area" then
+                cursor.x = cursor.x or zone.x1
+                cursor.y = cursor.y or zone.y1
+                consider(utility.gridSquare(cursor.x, cursor.y, zone.z))
+                checked = checked + 1
+                cursor.x = cursor.x + 1
+                if cursor.x > zone.x2 then
+                    cursor.x, cursor.y = zone.x1, cursor.y + 1
+                end
+                if cursor.y > zone.y2 then
+                    cursor.zoneIndex, cursor.x, cursor.y =
+                        cursor.zoneIndex + 1, nil, nil
+                end
+            else
+                cursor.zoneIndex, cursor.x, cursor.y =
+                    cursor.zoneIndex + 1, nil, nil
+                skipped = skipped + 1
+            end
+        end
+        if state then state.cleanScanCursor = cursor end
+    end
+    return best
+end
+
+local function weatherRecoveryActivity(actor)
+    local utility = U()
+    local square = utility.squareOf(actor)
+    if square == nil or select(1, utility.call(square, "getRoom")) == nil then
+        return nil
+    end
+    local wetness = utility.characterStatValue(actor, "WETNESS", 0)
+    wetness = type(wetness) == "number" and wetness or tonumber(wetness) or 0
+    local body = select(1, utility.call(actor, "getBodyDamage"))
+    local cold = select(1, utility.call(body, "getColdDamageStage"))
+    cold = type(cold) == "number" and cold or tonumber(cold) or 0
+    if wetness < 25 and cold <= 0 then return nil end
+    local towel
+    if wetness > 0 then
+        for _, item in ipairs(utility.inventoryItems(utility.inventory(actor), 80)) do
+            local itemType = utility.itemType(item)
+            if itemType == "Base.BathTowel" or itemType == "Base.DishCloth" then
+                local uses = select(1, utility.call(item, "getCurrentUsesFloat"))
+                uses = type(uses) == "number" and uses or tonumber(uses) or 0
+                if uses > 0 then towel = item break end
+            end
+        end
+    end
+    return {
+        kind = "weather_recovery", score = (wetness >= 50 or cold > 0) and 27 or 17,
+        square = square, item = towel, durationMs = 8500,
+        fact = { activity = "weather_recovery", wetnessBefore = wetness,
+            coldBefore = cold },
+    }
+end
+
+local function finishWeatherRecovery(actor, activity)
+    local utility = U()
+    if activity.item == nil then return true end
+    local inventory = utility.inventory(actor)
+    if not utility.inventoryContains(inventory, activity.item) then return false end
+    local uses = select(1, utility.call(activity.item, "getCurrentUsesFloat"))
+    uses = type(uses) == "number" and uses or tonumber(uses) or 0
+    if uses <= 0 then return false end
+    local wetness = utility.characterStatValue(actor, "WETNESS", 0)
+    wetness = type(wetness) == "number" and wetness or tonumber(wetness) or 0
+    if wetness <= 0 then return true end
+    local body = select(1, utility.call(actor, "getBodyDamage"))
+    -- Match one use of vanilla ISDryMyself. The game owns both the body stat
+    -- and the towel's replacement-on-deplete behavior.
+    local _, dried = utility.call(body, "decreaseBodyWetness", wetness / 10)
+    if not dried then return false end
+    local _, used = utility.call(activity.item, "Use")
+    if not used then return false end
+    activity.fact.towelUsed = utility.itemType(activity.item)
+    return true
+end
+
+-- A carried book or a diary page ready to write: something to do without
+-- getting up. Camp shelf books are excluded, since fetching one means standing.
+local function seatedTaskReady(actor, now)
+    if readActivity(actor, carriedItems(actor)) ~= nil then return true end
+    if SC.Diary and type(SC.Diary.writeActivity) == "function" then
+        local ok, writing = pcall(SC.Diary.writeActivity, actor, now)
+        return ok and type(writing) == "table"
+    end
+    return false
+end
+
+local function ambientCooling(state, kind, current)
+    local lastAt = state and state.ambientLastAt
+        and tonumber(state.ambientLastAt[kind]) or nil
+    local lastFact = state and state.lastFact or nil
+    if lastAt == nil and type(lastFact) == "table"
+        and lastFact.activity == kind then
+        lastAt = tonumber(lastFact.completedAt)
+    end
+    local intervals = { radio_check = 600000, tidy_camp = 600000,
+        leader_check_in = LEADER_CHECK_IN_COOLDOWN_MS,
+        tv_watch = 240000,
+        radio_listen = 360000, radio_setup = 120000,
+        weather_recovery = 120000, clean_base = 45000 }
+    return lastAt ~= nil and current - lastAt < (intervals[kind] or 180000)
+end
+
+local function leaderCheckInTargetValid(actor, target, id)
+    local utility, baseLife = U(), SC.BaseLife
+    if not SC.BaseWatch or type(SC.BaseWatch.isLeader) ~= "function"
+        or SC.BaseWatch.isLeader(actor) ~= true
+        or not baseLife or not SC.Registry or not target or target == actor
+        or not utility.isValidActor(target) or utility.isDead(target) then return false end
+    local base = baseLife.active and baseLife.active()
+    local resident = baseLife.resident and baseLife.resident(id)
+    if not base or not resident or resident.baseId ~= base.id
+        or resident.duty ~= true or not campWorkActorPresent(actor)
+        or baseLife.isInside(target) ~= true
+        or baseLife.isOutdoorSquare(target) ~= false then return false end
+    if SC.Registry.isActive and SC.Registry.isActive(target, id) ~= true then
+        return false
+    end
+    local record = type(SC.Registry.byId) == "function"
+        and SC.Registry.byId(id) or nil
+    local runtime = record and record.runtime or nil
+    local snapshot = runtime and (runtime.senses and runtime.senses.current
+        or runtime.snapshot) or nil
+    if dangerPresent(snapshot, target, utility.nowMs()) then return false end
+    if not utility.sameFloor(actor, target)
+        and not campFloorRoute(actor, target)
+        and not onCampStairs(actor) then return false end
+    local commands = commandState(target)
+    if commands.recruited ~= true or commands.order ~= "base_duty" then return false end
+    local token = supervisor()
+    token = token and type(token.current) == "function" and token.current(target) or nil
+    if token and token.owner ~= "downtime" then return false end
+    if token and (token.action == "rest_bed" or token.action == "wash_self"
+        or token.action == "wash_bandage") then return false end
+    local moving, known = utility.call(target, "isMoving")
+    if known and moving == true then return false end
+    return utility.distance(actor, target) <= 24
+end
+
+local function leaderCheckInActivity(actor, commands, state, current)
+    if commands.order ~= "base_duty" or ambientCooling(state, "leader_check_in", current)
+        or current < (tonumber(state.leaderCheckInRetryAt) or 0)
+        or not SC.Registry or type(SC.Registry.snapshot) ~= "function" then
+        return nil
+    end
+    local best, bestScore
+    for _, record in ipairs(SC.Registry.snapshot()) do
+        local target, id = record.actor, record.id
+        if leaderCheckInTargetValid(actor, target, id)
+            and current - ((state.leaderCheckInPairs or {})[id] or -math.huge)
+                >= LEADER_CHECK_IN_PAIR_COOLDOWN_MS then
+            local score = math.abs(U().stableHash(tostring(U().idOf(actor))
+                .. ":" .. tostring(id) .. ":" .. tostring(math.floor(current / 60000)))) % 100
+            if id == state.lastLeaderCheckInId then score = score - 100 end
+            if not best or score > bestScore then
+                best, bestScore = { kind = "leader_check_in", score = 52,
+                    target = target, targetId = id, durationMs = 10000,
+                    originSquare = U().squareOf(actor),
+                    crossFloor = not U().sameFloor(actor, target),
+                    deadlines = { approaching = 45000, waiting = 12000 },
+                    fact = { activity = "leader_check_in", targetId = id } }, score
+            end
+        end
+    end
+    return best
+end
+
+local function approachLeaderCheckIn(actor, activity)
+    local utility, target = U(), activity.target
+    if not leaderCheckInTargetValid(actor, target, activity.targetId) then
+        return false, "check_in_partner_unavailable"
+    end
+    if utility.sameFloor(actor, target) and utility.distance(actor, target) <= 2.7
+        and utility.canSee(actor, target) then return true, "arrived" end
+    if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    local x, y, z = utility.position(target)
+    if x == nil then return false, "check_in_partner_unavailable" end
+    local squares, room = {}, select(1, utility.call(utility.squareOf(target), "getRoom"))
+    for _, offset in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+            { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } }) do
+        local square = utility.gridSquare(math.floor(x) + offset[1],
+            math.floor(y) + offset[2], z)
+        local occupied = false
+        if square then
+            utility.squareMovingObjects(square, function(object)
+                if object ~= actor then occupied = true return false end
+            end, 8)
+        end
+        if square and utility.isSquareFree(square) and SC.BaseLife.isInside(square)
+            and not occupied
+            and (room == nil or select(1, utility.call(square, "getRoom")) == room) then
+            squares[#squares + 1] = square
+        end
+    end
+    return SC.Navigation.requestAny(actor, squares, "walk", {
+        action = "move_to_base_check_in", targetSquare = utility.squareOf(target),
+        arrivalDistance = 0.7, continuousApproach = true,
+        workCampOnly = activity.crossFloor == true,
+        supervisorToken = activity.supervisorToken,
+    })
+end
+
+local function speakLeaderCheckIn(actor, activity, current)
+    local utility = U()
+    if not leaderCheckInTargetValid(actor, activity.target, activity.targetId)
+        or not utility.sameFloor(actor, activity.target)
+        or utility.distance(actor, activity.target) > 3
+        or not utility.canSee(actor, activity.target) then
+        return false, "check_in_partner_moved"
+    end
+    if not SC.Dialogue or type(SC.Dialogue.say) ~= "function" then
+        return false, "dialogue_unavailable"
+    end
+    local name = tostring(utility.nameOf(activity.target) or "friend")
+    name = string.match(name, "^(%S+)") or "friend"
+    local spoken = SC.Dialogue.say(actor, "downtime.leader_check_in.open",
+        LEADER_CHECK_IN_OPEN, { name })
+    if spoken ~= true then return false, "check_in_speech_rejected" end
+    activity.approaching = nil
+    activity.startedAt = current
+    activity.replyAt = current + 2800
+    activity.actionAccepted = true
+    return true, "leader_check_in"
+end
+
+local function candidates(actor, commands, state, current, desiredKind)
+    local utility = U()
+    commands = type(commands) == "table" and commands or {}
+    if desiredKind == "leader_check_in" then
+        local visit = leaderCheckInActivity(actor, commands, state, current)
+        return visit and { visit } or {}
+    end
+    local items = carriedItems(actor)
+    local filtered = {}
+    if desiredKind == nil then
+        local visit = leaderCheckInActivity(actor, commands, state, current)
+        if visit then filtered[#filtered + 1] = visit end
+    end
+    local activity = dirtyBandageActivity(actor)
+    if activity then filtered[#filtered + 1] = activity end
+    activity = washActivity(actor, items, state, current)
+    if activity then filtered[#filtered + 1] = activity end
+    activity = showerActivity(actor, state, current)
+    if activity then filtered[#filtered + 1] = activity end
+    -- Older saves may retain a manual idle/craft setting. Quiet activity is
+    -- now chosen by the companion's scored candidates, not that old setting.
+    activity = repairActivity(actor, items)
+    if activity then filtered[#filtered + 1] = activity end
+    activity = availableReadActivity(actor, items)
+    if activity then filtered[#filtered + 1] = activity end
+    activity = craftActivity(actor, items)
+    if activity then filtered[#filtered + 1] = activity end
+    if (desiredKind == nil or desiredKind == "gear_check")
+        and not ambientCooling(state, "gear_check", current) then
+        activity = gearCheckActivity(actor)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "radio_check")
+        and current - lastSquadRadioCheckAt >= 300000
+        and not ambientCooling(state, "radio_check", current) then
+        activity = radioCheckActivity(actor)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "tidy_camp")
+        and not ambientCooling(state, "tidy_camp", current)
+        and (desiredKind == "tidy_camp"
+            or utility.isDue(actor, "downtime_tidy_probe", 15000, current)) then
+        activity = tidyCampActivity(actor)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "clean_base")
+        and not ambientCooling(state, "clean_base", current)
+        and (desiredKind == "clean_base"
+            or utility.isDue(actor, "downtime_clean_probe", 15000, current)) then
+        activity = cleanBaseActivity(actor, state)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "weather_recovery")
+        and not ambientCooling(state, "weather_recovery", current) then
+        activity = weatherRecoveryActivity(actor)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "window_watch")
+        and not ambientCooling(state, "window_watch", current)
+        and (desiredKind == "window_watch"
+            or utility.isDue(actor, "downtime_window_probe", 12000, current)) then
+        activity = windowWatchActivity(actor)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    local television
+    if (desiredKind == nil or desiredKind == "tv_watch"
+        or desiredKind == "sit")
+        and not ambientCooling(state, "tv_watch", current)
+        and SC.TVWatching and type(SC.TVWatching.candidate) == "function"
+        and (desiredKind ~= nil
+            or current < (tonumber(state.tvSeatPendingUntil) or 0)
+            or utility.isDue(actor, "downtime_tv_probe", 12000, current)) then
+        television = SC.TVWatching.candidate(actor, state, current, {
+            seatingStatus = seatingStatus, furnitureKind = furnitureKind,
+            reserved = reservationHeldByOther, cooling = furnitureCooling,
+            freeAccess = freeFurnitureAccess,
+        }, desiredKind)
+        if television and television.kind == "tv_watch" then
+            if current < (tonumber(state.tvSeatPendingUntil) or 0) then
+                television.score = math.max(television.score, 45)
+            end
+            filtered[#filtered + 1] = television
+        end
+    end
+    local radio
+    if (desiredKind == nil or desiredKind == "sit"
+        or desiredKind == "radio_listen" or desiredKind == "radio_setup")
+        and not ambientCooling(state, "radio_listen", current)
+        and SC.RadioListening and type(SC.RadioListening.candidate) == "function"
+        and (desiredKind ~= nil
+            or current < (tonumber(state.radioSeatPendingUntil) or 0)
+            or utility.isDue(actor, "downtime_radio_listen_probe", 12000, current)) then
+        radio = SC.RadioListening.candidate(actor, state, current, {
+            seatingStatus = seatingStatus, furnitureKind = furnitureKind,
+            reserved = reservationHeldByOther, cooling = furnitureCooling,
+            freeAccess = freeFurnitureAccess,
+        }, desiredKind)
+        if radio and radio.kind ~= "sit" then
+            if radio.kind == "radio_listen"
+                and current < (tonumber(state.radioSeatPendingUntil) or 0) then
+                radio.score = math.max(radio.score, 46)
+            end
+            filtered[#filtered + 1] = radio
+        end
+    end
+    if desiredKind == nil or desiredKind == "study_corpse" then
+        activity = Study.activity(actor, commands, state or {}, current)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if desiredKind == nil or desiredKind == "pay_respects" then
+        activity = Respect.activity(actor, commands, state or {}, current)
+        if activity then filtered[#filtered + 1] = activity end
+    end
+    if (desiredKind == nil or desiredKind == "workout")
+        and SC.Gestures and type(SC.Gestures.workoutActivity) == "function" then
+        local ok, workout = pcall(SC.Gestures.workoutActivity, actor, commands, state or {}, current)
+        if ok and type(workout) == "table" then filtered[#filtered + 1] = workout end
+    end
+    -- A private diary entry: SCDiary offers one only when a truthful page is
+    -- prepared and the exact book and a pen are carried.
+    if (desiredKind == nil or desiredKind == "write_diary")
+        and SC.Diary and type(SC.Diary.writeActivity) == "function" then
+        local ok, writing = pcall(SC.Diary.writeActivity, actor, current)
+        if ok and type(writing) == "table" then filtered[#filtered + 1] = writing end
+    end
+    do
+        local furniture = seatActivity(actor, state, current,
+            desiredKind == "rest_bed" and "rest_bed" or nil)
+        local seatedTask, seatedTaskScore
+        for _, candidate in ipairs(filtered) do
+            if candidate.kind == "read" or candidate.kind == "write_diary" then
+                local score = tonumber(candidate.score) or 0
+                if seatedTask == nil or score > seatedTaskScore then
+                    seatedTask, seatedTaskScore = candidate, score
+                end
+            end
+        end
+        local rest = radio and radio.kind == "sit" and radio
+            or television and television.kind == "sit" and television or furniture
+        if seatedTask ~= nil and seatedTask.borrowedFrom == nil
+            and seatingStatus(actor) == "standing" then
+            -- Sit first, then the normal next downtime pass starts Read/Write
+            -- without getting up. Beds remain available for actual tired rest;
+            -- a chair/sofa/stool is selected specifically for desk-like activity.
+            local readingSeat = furniture and furniture.kind == "sit" and furniture
+                or seatActivity(actor, state, current, true)
+            if readingSeat then
+                readingSeat.score = math.max(tonumber(readingSeat.score) or 0,
+                    (seatedTaskScore or 0) + 1)
+                readingSeat.fact.seatingFor = seatedTask.kind
+                rest = readingSeat
+            end
+        end
+        if rest then filtered[#filtered + 1] = rest end
+        local floorRest = floorRestActivity(actor,
+            furniture ~= nil and desiredKind ~= "rest_floor")
+        if floorRest then filtered[#filtered + 1] = floorRest end
+    end
+    if desiredKind ~= nil then
+        for index = #filtered, 1, -1 do
+            if filtered[index].kind ~= desiredKind then table.remove(filtered, index) end
+        end
+    end
+    for _, candidate in ipairs(filtered) do
+        if SC.Personality and type(SC.Personality.adjustDowntime) == "function" then
+            candidate.score = candidate.score
+                + SC.Personality.adjustDowntime(commands.personalityProfile, candidate)
+        end
+        if SC.Objectives and type(SC.Objectives.activityBonus) == "function" then
+            candidate.score = candidate.score
+                + SC.Objectives.activityBonus(commands.objectives, candidate)
+        end
+    end
+    local lastFact = state and state.lastFact or nil
+    if type(lastFact) == "table" and tonumber(lastFact.completedAt) then
+        local age = current - tonumber(lastFact.completedAt)
+        if age >= 0 and age < (utility.config("ambientRepeatCooldownMs") or 60000)
+            and (lastFact.activity == "read" or lastFact.activity == "sit") then
+            for index = #filtered, 1, -1 do
+                if filtered[index].kind == lastFact.activity then table.remove(filtered, index) end
+            end
+        end
+    end
+    utility.sortByScoreDescending(filtered)
+    return filtered
+end
+
+-- Read-only capability probe used by the base scheduler. It prevents the
+-- operations queue from inventing repair/craft jobs that no resident can
+-- currently perform with their real carried tools and materials.
+function Downtime.canPerform(actor, desiredKind)
+    if not U().isValidActor(actor) or type(desiredKind) ~= "string" then
+        return false, "invalid_downtime_probe"
+    end
+    local rows = candidates(actor, commandState(actor), stateFor(actor), U().nowMs(), desiredKind)
+    return #rows > 0, rows[1] and rows[1].kind or "no_matching_activity"
+end
+
+local function reserveActivity(actor, activity, now)
+    local held = {}
+    local function take(value)
+        if not value then return true end
+        if not reserve(value, actor, now) then return false end
+        held[#held + 1] = value
+        return true
+    end
+    -- A switched-on receiver is shared room ambience: several seated
+    -- companions may listen without claiming the radio from one another.
+    if (activity.kind ~= "radio_listen" and not take(activity.object))
+        or not take(activity.watchSquare)
+        or not take(activity.item) or not take(activity.material) then
+        for _, value in ipairs(held) do release(value, actor) end
+        return false
+    end
+    if activity.scraps then
+        for _, item in ipairs(activity.scraps) do
+            if not take(item) then
+                for _, value in ipairs(held) do release(value, actor) end
+                return false
+            end
+        end
+    end
+    return true
+end
+
+local function activityTargetKey(activity)
+    local utility = U()
+    local target = activity.object or activity.item or activity.material or activity.target
+        or activity.scraps and activity.scraps[1]
+    if target == nil then return tostring(activity.kind) end
+    local x, y, z = utility.position(target)
+    if x ~= nil then
+        return tostring(activity.kind) .. ":" .. tostring(math.floor(x)) .. ":"
+            .. tostring(math.floor(y)) .. ":" .. tostring(math.floor(z or 0))
+    end
+    return tostring(activity.kind) .. ":" .. tostring(utility.itemType(target))
+end
+
+local function releaseDowntimeResources(actor, state, activity, reason)
+    activity = activity or state and state.active
+    if not activity then return true, reason or "no_activity" end
+    if activity.kind == "shower" then restoreShowerClothes(actor, activity) end
+    if activity.kind == "window_watch" and activity.watchCrouched == true then
+        U().call(actor, "setSneaking", activity.wasSneaking == true)
+        activity.watchCrouched = nil
+    end
+    if activity.kind == "clean_base" and SC.NativeActions
+        and type(SC.NativeActions.cancelWork) == "function" then
+        pcall(SC.NativeActions.cancelWork, actor, reason or "downtime_cancelled")
+    end
+    if SC.NativeActions and type(SC.NativeActions.cancelVisual) == "function"
+        and activity.startedAt then
+        pcall(SC.NativeActions.cancelVisual, actor, reason or "downtime_cancelled")
+    end
+    if activity.approaching and SC.Navigation and type(SC.Navigation.cancel) == "function" then
+        pcall(SC.Navigation.cancel, actor, reason or "downtime_cancelled")
+    end
+    releaseActivity(actor, activity)
+    -- An interrupted diary entry leaves no page behind.
+    if activity.kind == "write_diary" and SC.Diary and type(SC.Diary.abandonWrite) == "function" then
+        pcall(SC.Diary.abandonWrite, actor, activity.diary)
+    end
+    if state and state.active == activity then state.active = nil end
+    return true, reason or "cancelled"
+end
+
+local function failActivity(actor, state, reason, detail)
+    local activity = state and state.active
+    if not activity then return false, reason or "no_activity" end
+    debugTrace(actor, "finish_blocked", activity, reason)
+    if activity.kind == "leader_check_in" then
+        state.leaderCheckInRetryAt = U().nowMs() + 120000
+    end
+    if activity.kind == "clean_base" and activity.square then
+        state.cleanRetryAt = state.cleanRetryAt
+            or setmetatable({}, { __mode = "k" })
+        state.cleanRetryAt[activity.square] = U().nowMs() + 120000
+    end
+    if activity.kind == "sit" or activity.kind == "rest_bed" then
+        -- A rejected/invalid seat should not monopolize every downtime pass.
+        -- Remember the exact object long enough for another activity or piece
+        -- of furniture to win while the world topology remains unchanged.
+        coolFurniture(state, activity.object, U().nowMs())
+        -- A blocked approach describes this chair's route, not the other
+        -- chairs in the room. Let the next ordinary downtime pass try a
+        -- different object. Native seating failures can affect every chair,
+        -- so retain the broader backoff for those cases.
+        local routeBlocked = reason == "seat_spot_busy"
+            or type(reason) == "string"
+            and (string.find(reason, "path_blocked:", 1, true) == 1
+                or reason == "no_interaction_targets")
+        if not routeBlocked then
+            state.furnitureBackoffUntil = U().nowMs()
+                + (tonumber((U().config("downtimeFurnitureFailureCooldownMs"))) or 60000)
+        end
+    end
+    releaseDowntimeResources(actor, state, activity, reason)
+    state.nextEvaluationAt = U().nowMs() + (U().config("downtimeIntervalMs") or 1500)
+    local service = supervisor()
+    if service and activity.supervisorToken
+        and service.isCurrent(activity.supervisorToken) then
+        service.fail(activity.supervisorToken, reason or "downtime_failed", detail)
+    end
+    return false, reason or "downtime_failed"
+end
+
+local function beginSupervisedActivity(actor, state, activity)
+    local service = supervisor()
+    if not service then return true end
+    local token, reason = service.begin(actor, {
+        owner = "downtime", action = tostring(activity.kind),
+        targetKey = activityTargetKey(activity),
+        targetLabel = activity.item and U().itemName(activity.item)
+            or activity.kind,
+        priority = service.Priority.DOWNTIME,
+        interruptible = true, requiresVisual = false,
+        -- Vanilla furniture rest can shift the actor about 0.3 tile after it
+        -- reports a seated pose. Keep the generic 0.25-tile invariant for
+        -- other work, but allow that final cushion alignment here.
+        poseMaximumDisplacement = (activity.kind == "sit"
+            or activity.kind == "rest_bed") and 0.5 or nil,
+        deadlines = activity.deadlines,
+        allowedActions = {
+            [activity.kind] = true,
+            move_to_seat = true, move_to_water_source = true, move_to_corpse = true,
+            move_to_base_storage = true, move_to_window = true,
+            move_to_light_switch = true, face_alert = true,
+            move_to_clean_stain = true, move_to_tv = true,
+            move_to_radio = true,
+            move_to_base_check_in = true,
+            sit_ground = true, stand_ground = true,
+            -- A seated companion may yawn or stretch without getting up.
+            ext_gesture = true,
+        },
+        onCancel = function(_, cancelReason)
+            return releaseDowntimeResources(actor, state, activity,
+                cancelReason or "downtime_cancelled")
+        end,
+        metadata = { commandSerial = activity.commandSerial or 0 },
+    })
+    if not token then
+        if service.containsDeferredStatus and service.containsDeferredStatus(reason) then
+            -- Urgent survival work was dispatched for this actor during begin(); the
+    -- companion is committed to it this cycle.  That is the urgent succeeding,
+    -- not this action failing, so report a deferral the decision layer can
+    -- recognise instead of a refusal that would cool the target down.
+            return false, "deferred:" .. tostring(reason)
+        end
+        return false, reason or "downtime_owner_rejected"
+    end
+    activity.supervisorToken = token
+    local resources = {}
+    if activity.object and activity.kind ~= "radio_listen" then
+        resources[#resources + 1] = activity.object
+    end
+    if activity.item then resources[#resources + 1] = activity.item end
+    if activity.material then resources[#resources + 1] = activity.material end
+    for _, value in ipairs(activity.scraps or {}) do resources[#resources + 1] = value end
+    for _, value in ipairs(resources) do
+        if value then
+            local reserved, reserveReason = service.reserve(token, value, "downtime_resource")
+            if reserved ~= true then
+                service.fail(token, reserveReason or "reservation_lost")
+                activity.supervisorToken = nil
+                return false, reserveReason or "reservation_lost"
+            end
+        end
+    end
+    return true
+end
+
+local function startSupervisedVisual(actor, activity, detail)
+    if not SC.NativeActions or type(SC.NativeActions.visualStatus) ~= "function" then
+        return true
+    end
+    local service = supervisor()
+    if not service or not activity.supervisorToken then return true end
+    return service.expectVisual(activity.supervisorToken, detail)
+end
+
+local function transitionActivity(activity, phase, detail)
+    local service = supervisor()
+    if not service or not activity.supervisorToken then return true, phase end
+    return service.transition(activity.supervisorToken, phase, detail)
+end
+
+local function approachBorrowedReadingSource(actor, activity)
+    local utility = U()
+    if not activity.borrowedOwner or not activity.borrowedFrom
+        or not utility.inventoryContains(activity.borrowedFrom, activity.item) then
+        return false, "borrowed_book_unavailable"
+    end
+    local atSource, targets, accessReason = utility.directInteractionAccess(
+        actor, activity.borrowedOwner)
+    if atSource == true then return true, "arrived" end
+    if accessReason == "no_interaction_targets" then return false, accessReason end
+    if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    local accepted, status = SC.Navigation.requestAny(actor, targets, "walk", {
+        action = "move_to_base_storage",
+        targetSquare = utility.squareOf(activity.borrowedOwner),
+        object = activity.borrowedOwner,
+        container = activity.borrowedFrom,
+        item = activity.item,
+        arrivalDistance = 0.35,
+        requireSameSquare = true,
+        continuousApproach = true,
+        workCampOnly = activity.crossFloor == true,
+        supervisorToken = activity.supervisorToken,
+    })
+    return accepted == true, status
+end
+
+-- Selection happens across the room and checkout happens a walk later, so the
+-- policy that authorised the choice is re-read at the moment the item actually
+-- changes hands. The player can un-register the shelf, raise the reserve,
+-- protect the book or remove the other copies during that walk; the selected
+-- copy then becomes the reserved last copy and must stay on the shelf.
+local function borrowedCheckoutAuthorized(actor, activity)
+    if activity.borrowedStorageId == nil then return true end
+    local utility = U()
+    local base = SC.BaseLife
+    if not base or type(base.storage) ~= "function"
+        or type(base.resolveContainer) ~= "function"
+        or type(base.availableCountExact) ~= "function" then
+        return false, "base_storage_unavailable"
+    end
+    local storage = base.storage(activity.borrowedStorageId)
+    if type(storage) ~= "table" then return false, "borrowed_book_storage_changed" end
+    if not base.withdrawable(storage) then return false, "borrowed_book_withdrawals_disabled" end
+    local container = base.resolveContainer(storage)
+    if container == nil or container ~= activity.borrowedFrom then
+        return false, "borrowed_book_storage_changed"
+    end
+    if not utility.inventoryContains(container, activity.item) then
+        return false, "borrowed_book_unavailable"
+    end
+    if base.availableCountExact(storage, utility.itemType(activity.item)) < 1 then
+        return false, "borrowed_book_reserved"
+    end
+    if SC.PersonalItems and type(SC.PersonalItems.isProtected) == "function"
+        and SC.PersonalItems.isProtected(activity.item, actor, "camp_reading_borrow") then
+        return false, "borrowed_book_protected"
+    end
+    return true
+end
+
+local function startBorrowedReading(actor, activity, now)
+    local utility = U()
+    local atSource = utility.directInteractionAccess(actor, activity.borrowedOwner)
+    if atSource ~= true then return false, "borrowed_book_source_not_in_reach" end
+    local authorized, authorizedReason = borrowedCheckoutAuthorized(actor, activity)
+    if authorized ~= true then return false, authorizedReason or "borrowed_book_unavailable" end
+    local inventory = utility.inventory(actor)
+    local transferred, transferReason = utility.transferItemVerified(
+        activity.borrowedFrom, inventory, activity.item)
+    if transferred ~= true then
+        return false, transferReason or "borrowed_book_transfer_failed"
+    end
+    activity.borrowedReading = true
+    local itemData = select(1, utility.call(activity.item, "getModData"))
+    if type(itemData) == "table" then
+        itemData.SC_BookLoan = {
+            actorId = utility.idOf(actor), storageId = activity.borrowedStorageId,
+            finished = false,
+        }
+    end
+    local expected, expectedReason = startSupervisedVisual(actor, activity, {
+        action = activity.kind,
+    })
+    if expected ~= true then return false, expectedReason or "visual_registration_failed" end
+    if not utility.move(actor, "walk", {
+        action = activity.kind,
+        item = activity.item,
+        object = activity.borrowedOwner,
+        downtime = true,
+        durationMs = activity.durationMs or Study.duration(activity.kind),
+        supervisorToken = activity.supervisorToken,
+    }) then
+        return false, "animation_rejected"
+    end
+    activity.approaching = nil
+    activity.actionAccepted = true
+    activity.startedAt = now
+    transitionActivity(activity, "animating", { action = activity.kind })
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        local title = select(1, utility.call(activity.item, "getDisplayName"))
+        pcall(SC.Dialogue.say, actor, "reading.choose", nil,
+            { tostring(title or utility.itemType(activity.item)) })
+        stateFor(actor).lastBookSpeakAt = now
+    end
+    return true, activity.kind
+end
+
+local function watchWindowValid(actor, activity)
+    local utility = U()
+    if utility.squareOf(activity.object) == nil
+        or not sameBuilding(utility.squareOf(actor), activity.square) then return false end
+    if not SC.Navigation or type(SC.Navigation.standingSquareClear) ~= "function"
+        or not SC.Navigation.standingSquareClear(actor, activity.square) then return false end
+    return true
+end
+
+local function approachWatchWindow(actor, activity)
+    if not watchWindowValid(actor, activity) then return false, "window_watch_unavailable" end
+    if U().movingBlocker(activity.square, actor) then
+        local current = U().nowMs()
+        activity.busySince = activity.busySince or current
+        if SC.Navigation and type(SC.Navigation.cancel) == "function" then
+            SC.Navigation.cancel(actor, "window_spot_busy")
+        end
+        if current - activity.busySince > 8000 then return false, "window_spot_busy" end
+        return true, "window_spot_busy"
+    end
+    activity.busySince = nil
+    if U().sameSquare(actor, activity.square) then return true, "arrived" end
+    if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    return SC.Navigation.request(actor, activity.square, "walk", {
+        action = "move_to_window", targetSquare = activity.square,
+        object = activity.object, requireSameSquare = true,
+        continuousApproach = true, supervisorToken = activity.supervisorToken,
+    })
+end
+
+local function startWindowWatch(actor, activity, now)
+    if not watchWindowValid(actor, activity)
+        or not U().sameSquare(actor, activity.square)
+        or U().movingBlocker(activity.square, actor) then
+        return false, "window_watch_unavailable"
+    end
+    local curtain = windowCurtain(activity.object)
+    if curtain ~= nil and not objectOpen(curtain) then
+        if not SC.Navigation or type(SC.Navigation.interact) ~= "function" then
+            return false, "curtain_interaction_unavailable"
+        end
+        local opened, reason = SC.Navigation.interact(actor, curtain, "open_curtain")
+        if not opened and (reason == "curtain_cooldown" or reason == "reserved") then
+            activity.curtainWaitSince = activity.curtainWaitSince or now
+            if now - activity.curtainWaitSince > 10000 then
+                return false, "curtain_open_timeout"
+            end
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = "waiting_for_curtain" })
+            return true, "waiting_for_curtain"
+        end
+        if not opened or not objectOpen(curtain) then
+            return false, reason or "curtain_open_failed"
+        end
+    end
+    activity.curtainWaitSince = nil
+    if activity.wasSneaking == nil then
+        activity.wasSneaking = select(1, U().call(actor, "isSneaking")) == true
+    end
+    if not U().move(actor, "walk", {
+        action = "face_alert", targetPosition = activity.watchTarget,
+        weaponReady = false, downtime = true,
+        supervisorToken = activity.supervisorToken,
+    }) then return false, "window_watch_facing_rejected" end
+    if activity.watchCrouched == nil then
+        local x, y = U().position(activity.square)
+        -- A few lookout positions call for a low silhouette; this is chosen
+        -- once for the whole pause so the posture cannot flicker every tick.
+        local crouch = x and y and (math.abs(math.floor(x * 17 + y * 31
+            + now / 60000)) % 3 == 0)
+        if crouch or activity.wasSneaking then
+            local _, set = U().call(actor, "setSneaking", true)
+            if set then activity.watchCrouched = true end
+        end
+    end
+    activity.approaching = nil
+    activity.actionAccepted = true
+    activity.startedAt = now
+    if SC.Oddballs and type(SC.Oddballs.groupForActor) == "function"
+        and SC.OddballSpiffo and type(SC.OddballSpiffo.windowDuty) == "function" then
+        local group = SC.Oddballs.groupForActor(actor)
+        if group and group.oddball
+            and group.oddball.id == "window_spiffo_kevin" then
+            pcall(SC.OddballSpiffo.windowDuty, actor, activity.square)
+        end
+    end
+    transitionActivity(activity, "settling", { action = activity.kind })
+    return true, activity.kind
+end
+
+local function approachTidyCamp(actor, activity)
+    if not tidyCampValid(actor, activity) then return false, "tidy_storage_unavailable" end
+    local atStorage, targets, reason = U().directInteractionAccess(actor, activity.object)
+    if atStorage == true then return true, "arrived" end
+    if reason == "no_interaction_targets" then return false, reason end
+    if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    return SC.Navigation.requestAny(actor, targets, "walk", {
+        action = "move_to_base_storage", targetSquare = activity.square,
+        object = activity.object, container = activity.container,
+        arrivalDistance = 0.35, requireSameSquare = true,
+        continuousApproach = true, supervisorToken = activity.supervisorToken,
+        workCampOnly = activity.crossFloor == true,
+    })
+end
+
+local function startTidyCamp(actor, activity, now)
+    if not tidyCampValid(actor, activity)
+        or U().directInteractionAccess(actor, activity.object) ~= true then
+        return false, "tidy_storage_unavailable"
+    end
+    local expected, reason = startSupervisedVisual(actor, activity, {
+        action = activity.kind,
+    })
+    if expected ~= true then return false, reason or "visual_registration_failed" end
+    if not U().move(actor, "walk", {
+        action = activity.kind, object = activity.object,
+        downtime = true, durationMs = activity.durationMs,
+        supervisorToken = activity.supervisorToken,
+    }) then return false, "animation_rejected" end
+    activity.approaching = nil
+    activity.actionAccepted = true
+    activity.startedAt = now
+    transitionActivity(activity, "animating", { action = activity.kind })
+    return true, activity.kind
+end
+
+local function approachCleanBase(actor, activity)
+    if not cleanBaseValid(actor, activity) then return false, "clean_stain_unavailable" end
+    local atStain, targets, reason = U().directInteractionAccess(actor, activity.square)
+    if atStain == true then return true, "arrived" end
+    if reason == "no_interaction_targets" then return false, reason end
+    if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+        return false, "navigation_unavailable"
+    end
+    return SC.Navigation.requestAny(actor, targets, "walk", {
+        action = "move_to_clean_stain", targetSquare = activity.square,
+        arrivalDistance = 0.35, requireSameSquare = true,
+        continuousApproach = true, supervisorToken = activity.supervisorToken,
+        workCampOnly = activity.crossFloor == true,
+    })
+end
+
+local function startCleanBase(actor, activity, now)
+    if not cleanBaseValid(actor, activity)
+        or U().directInteractionAccess(actor, activity.square) ~= true then
+        return false, "clean_stain_unavailable"
+    end
+    if not SC.NativeActions
+        or type(SC.NativeActions.startCleanBlood) ~= "function" then
+        return false, "native_cleaning_unavailable"
+    end
+    if SC.Navigation and type(SC.Navigation.cancel) == "function" then
+        pcall(SC.Navigation.cancel, actor, "cleaning_interaction")
+    end
+    local amount = cleaningLiquidAmount(activity.material)
+    local started, reason = SC.NativeActions.startCleanBlood(actor,
+        activity.square, activity.item, activity.material)
+    if started ~= true then return false, reason or "native_cleaning_rejected" end
+    activity.cleanerBefore = amount
+    activity.approaching = nil
+    activity.actionAccepted = true
+    activity.startedAt = now
+    transitionActivity(activity, "animating", { action = activity.kind })
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        pcall(SC.Dialogue.say, actor, "downtime.clean_start", nil,
+            { surface = activity.surface })
+    end
+    return true, activity.kind
+end
+
+local function startBedSleep(actor, activity)
+    local utility = U()
+    activity.sleepFatigueStart = utility.clamp(tonumber(
+        (utility.characterStatValue(actor, "FATIGUE", 0))) or 0, 0, 1)
+    utility.call(actor, "setBed", activity.object)
+    local bedType
+    if ISWorldObjectContextMenu
+        and type(ISWorldObjectContextMenu.getBedQuality) == "function" then
+        local ok, value = pcall(ISWorldObjectContextMenu.getBedQuality,
+            actor, activity.object)
+        if ok then bedType = value end
+    end
+    bedType = bedType or select(1, utility.call(activity.object, "getBedType"))
+        or "averageBed"
+    utility.call(actor, "setBedType", bedType)
+    local time
+    if type(getGameTime) == "function" then
+        local ok, value = pcall(getGameTime)
+        if ok then time = value end
+    end
+    local timeOfDay = time and select(1, utility.call(time, "getTimeOfDay")) or nil
+    if tonumber(timeOfDay) then
+        utility.call(actor, "setForceWakeUpTime",
+            (tonumber(timeOfDay) + activity.gameDurationHours) % 24)
+    end
+    utility.call(actor, "setAsleepTime", 0)
+    local _, set = utility.call(actor, "setAsleep", true)
+    activity.sleepStarted = set == true
+    activity.startedGameHour = gameHours()
+    return true
+end
+
+local function sleepElapsedHours(activity, current)
+    local hour = gameHours()
+    if hour ~= nil and activity.startedGameHour ~= nil then
+        return math.max(0, hour - activity.startedGameHour)
+    end
+    return math.max(0, current - (activity.startedAt or current))
+        / math.max(1, tonumber(activity.durationMs) or 1200000)
+        * math.max(0.1, tonumber(activity.gameDurationHours) or 6)
+end
+
+local function recoverBedSleep(actor, activity, current)
+    local elapsed = sleepElapsedHours(activity, current)
+    local duration = math.max(0.1, tonumber(activity.gameDurationHours) or 6)
+    local fraction = math.min(1, elapsed / duration)
+    local target = math.max(0.08, (activity.sleepFatigueStart or 0.5)
+        * (1 - 0.9 * fraction))
+    local stats = select(1, U().call(actor, "getStats"))
+    local statOk, fatigueStat = pcall(function()
+        return CharacterStat and CharacterStat.FATIGUE or nil
+    end)
+    if not statOk then fatigueStat = nil end
+    local currentFatigue = U().characterStatValue(actor, "FATIGUE", target)
+    if stats and fatigueStat and currentFatigue > target then
+        U().call(stats, "set", fatigueStat, target)
+    end
+    return elapsed
+end
+
+local function beginActivity(actor, state, activity, commands, now)
+    if activity.kind == "replace_bandage" then
+        if not SC.Medical or type(SC.Medical.replaceDirtyBandage) ~= "function" then
+            return false, "medical_unavailable"
+        end
+        return SC.Medical.replaceDirtyBandage(actor)
+    end
+    if not reserveActivity(actor, activity, now) then return false, "reserved" end
+    if restPostures[activity.kind] then
+        if activity.kind == "sit" or activity.kind == "rest_bed" then
+            local fatigue = U().clamp(tonumber(
+                (U().characterStatValue(actor, "FATIGUE", 0))) or 0, 0, 1)
+            activity.gameDurationHours = restHours(actor, activity.kind, fatigue, now)
+            activity.durationMs = activity.kind == "sit" and 120000 or 1200000
+        end
+        activity.deadlines = activity.deadlines or {}
+        activity.deadlines.animating = tonumber(
+            (U().config("bedEntryTimeoutMs"))) or 12000
+        -- Game-time rests can outlast a real-time supervisor deadline. Their
+        -- own world-clock completion and the normal danger/order cancels own
+        -- the wait instead.
+        activity.deadlines.waiting = activity.gameDurationHours and 0 or math.max(
+            tonumber(activity.durationMs) or 0, 30000)
+    elseif activity.kind == "tv_watch" or activity.kind == "radio_listen" then
+        activity.deadlines = { waiting = (tonumber(activity.durationMs) or 90000)
+            + 10000 }
+    end
+    activity.commandSerial = commands.commandSerial or 0
+    local owned, ownerReason = beginSupervisedActivity(actor, state, activity)
+    if owned ~= true then
+        releaseActivity(actor, activity)
+        return false, ownerReason or "downtime_owner_rejected"
+    end
+    local utility = U()
+    local wash = activity.kind == "wash_self"
+        or activity.kind == "wash_equipment" or activity.kind == "wash_bandage"
+        or activity.kind == "shower"
+    local study = activity.kind == "study_corpse" or activity.kind == "pay_respects"
+    local furniture = activity.kind == "sit" or activity.kind == "rest_bed"
+    local floorRest = activity.kind == "rest_floor"
+    local borrowedRead = activity.kind == "read" and activity.borrowedFrom ~= nil
+    if activity.kind == "study_corpse" then Study.prepare(actor, activity, commands, state, now) end
+    if activity.kind == "pay_respects" then Respect.prepare(actor, activity, commands, state, now) end
+    if activity.kind == "leader_check_in" then
+        state.active = activity
+        local accepted, status = approachLeaderCheckIn(actor, activity)
+        if not accepted then return failActivity(actor, state,
+            status or "check_in_route_failed") end
+        if status == "arrived" then
+            local spoken, reason = speakLeaderCheckIn(actor, activity, now)
+            if not spoken then return failActivity(actor, state, reason) end
+            transitionActivity(activity, "waiting", { action = activity.kind })
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif floorRest then
+        if not utility.move(actor, "walk", {
+            action = "sit_ground",
+            downtime = true,
+            supervisorToken = activity.supervisorToken,
+        }) then
+            state.active = activity
+            return failActivity(actor, state, "ground_rest_rejected")
+        end
+        activity.actionAccepted = true
+        activity.entryStartedAt = now
+        activity.startedAt = nil
+        transitionActivity(activity, "approaching", {
+            action = activity.kind, finalAlignment = true,
+        })
+    elseif activity.kind == "tv_watch" then
+        state.active = activity
+        local accepted, status = SC.TVWatching.approach(actor, activity)
+        if not accepted then return failActivity(actor, state,
+            status or "route_failed") end
+        if status == "arrived" then
+            local started, reason = SC.TVWatching.start(actor, activity, now)
+            if not started then return failActivity(actor, state, reason) end
+            transitionActivity(activity, "waiting", { action = "tv_watch" })
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif activity.kind == "radio_setup" then
+        state.active = activity
+        local accepted, status = SC.RadioListening.approach(actor, activity)
+        if not accepted then return failActivity(actor, state,
+            status or "radio_route_failed") end
+        if status == "arrived" then
+            local ready, reason = SC.RadioListening.setup(actor, activity)
+            if not ready then return failActivity(actor, state, reason) end
+            transitionActivity(activity, "waiting", { action = "radio_setup" })
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif activity.kind == "radio_listen" then
+        state.active = activity
+        local started, reason = SC.RadioListening.start(actor, activity, now)
+        if not started then return failActivity(actor, state, reason) end
+        transitionActivity(activity, "waiting", { action = "radio_listen" })
+    elseif activity.kind == "window_watch" then
+        state.active = activity
+        local accepted, status = approachWatchWindow(actor, activity)
+        if not accepted then return failActivity(actor, state, status or "route_failed") end
+        if status == "arrived" then
+            local started, reason = startWindowWatch(actor, activity, now)
+            if not started then return failActivity(actor, state, reason) end
+            if reason == "waiting_for_curtain" then return true, reason end
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif activity.kind == "tidy_camp" then
+        state.active = activity
+        local accepted, status = approachTidyCamp(actor, activity)
+        if not accepted then return failActivity(actor, state, status or "route_failed") end
+        if status == "arrived" then
+            local started, reason = startTidyCamp(actor, activity, now)
+            if not started then return failActivity(actor, state, reason) end
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif activity.kind == "clean_base" then
+        state.active = activity
+        local accepted, status = approachCleanBase(actor, activity)
+        if not accepted then return failActivity(actor, state, status or "route_failed") end
+        if status == "arrived" then
+            local started, reason = startCleanBase(actor, activity, now)
+            if not started then return failActivity(actor, state, reason) end
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif borrowedRead then
+        state.active = activity
+        local accepted, status = approachBorrowedReadingSource(actor, activity)
+        if not accepted then return failActivity(actor, state, status or "route_failed") end
+        activity.approaching = true
+        transitionActivity(activity, "approaching", { status = status })
+        if status == "arrived" then
+            local started, startReason = startBorrowedReading(actor, activity, now)
+            if not started and startReason == "borrowed_book_source_not_in_reach" then
+                -- The selected multi-goal can become invalid between native
+                -- arrival and this fresh topology check (a companion moved
+                -- through the use square in the live camp). Keep the checkout
+                -- uncommitted and re-approach instead of failing/reselecting the
+                -- same book every decision pulse.
+                return true, "approaching_reading_storage"
+            end
+            if not started then return failActivity(actor, state, startReason) end
+        end
+    elseif furniture and activity.square then
+        if not SC.Navigation or type(SC.Navigation.requestAny) ~= "function" then
+            state.active = activity
+            return failActivity(actor, state, "navigation_unavailable")
+        end
+        local accepted, status = approachFurniture(actor, activity)
+        if not accepted then
+            state.active = activity
+            return failActivity(actor, state, status or "route_failed")
+        end
+        if status == "arrived" then
+            if not utility.move(actor, "walk", {
+                action = activity.kind,
+                object = activity.object,
+                downtime = true,
+                supervisorToken = activity.supervisorToken,
+            }) then
+                state.active = activity
+                return failActivity(actor, state, "animation_rejected")
+            end
+            activity.approaching = nil
+            activity.actionAccepted = true
+            activity.entryStartedAt = now
+            activity.startedAt = nil
+            transitionActivity(activity, "approaching", {
+                action = activity.kind, finalAlignment = true,
+            })
+        else
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        end
+    elseif (wash or study) and activity.square
+        and (wash and not washSourceInReach(actor, activity)
+            or not wash and utility.distance(actor, activity.square) > Study.REACH) then
+        if SC.Navigation and (type(SC.Navigation.request) == "function"
+            or wash and type(SC.Navigation.requestAny) == "function") then
+            local accepted, status
+            if wash then
+                accepted, status = approachWashSource(actor, activity)
+                if not accepted then coolWashSource(state, activity.object, now) end
+            else
+                accepted, status = SC.Navigation.request(actor, activity.square, "walk", {
+                    action = study and "move_to_corpse" or "move_to_seat",
+                    targetSquare = activity.square,
+                    object = activity.object,
+                    supervisorToken = activity.supervisorToken,
+                })
+            end
+            if not accepted then
+                state.active = activity
+                return failActivity(actor, state, status or "route_failed")
+            end
+            if wash and status == "arrived" then activity.atSource = true end
+            activity.approaching = true
+            transitionActivity(activity, "approaching", { status = status })
+        else
+            state.active = activity
+            return failActivity(actor, state, "navigation_unavailable")
+        end
+    else
+        if activity.kind == "shower" then
+            if not showerSourceValid(activity.object)
+                or not undressForShower(actor, activity) then
+                state.active = activity
+                return failActivity(actor, state, "shower_source_or_clothes_failed")
+            end
+            showerStartSpeech(actor)
+        end
+        if visualActivities[activity.kind] then
+            local expected, expectedReason = startSupervisedVisual(actor, activity, {
+                action = activity.kind,
+            })
+            if expected ~= true then
+                state.active = activity
+                return failActivity(actor, state,
+                    expectedReason or "visual_registration_failed")
+            end
+        end
+        if not utility.move(actor, "walk", {
+            action = activity.kind,
+            item = activity.item,
+            material = activity.material,
+            object = activity.object,
+            exercise = activity.exercise,
+            struggle = activity.struggle,
+            downtime = true,
+            durationMs = activity.durationMs or Study.duration(activity.kind),
+            supervisorToken = activity.supervisorToken,
+        }) then
+            state.active = activity
+            return failActivity(actor, state, "animation_rejected")
+        end
+        if restPostures[activity.kind] then
+            activity.entryStartedAt = now
+            activity.startedAt = nil
+        else
+            activity.startedAt = now
+        end
+        activity.actionAccepted = true
+        if study then Study.speakNext(actor, activity, now) end
+        if activity.kind == "workout" and SC.Gestures
+            and type(SC.Gestures.workoutStarted) == "function" then
+            pcall(SC.Gestures.workoutStarted, actor, activity, now)
+        end
+        -- The stock furniture actions may still make a short, precise move to
+        -- a SeatingManager position. Keep movement legal until the native pose
+        -- is actually entered; protecting the pose here falsely cancelled that
+        -- final alignment as "protected_pose_moved".
+        transitionActivity(activity, furniture and "approaching"
+            or visualActivities[activity.kind]
+            and SC.NativeActions and type(SC.NativeActions.visualStatus) == "function"
+            and "animating" or "settling", { action = activity.kind })
+    end
+    state.active = activity
+    state.idleStopped = false
+    debugTrace(actor, "start", activity, activity.approaching and "approaching" or "action_started")
+    return true, activity.kind
+end
+
+local function useWashWater(source, amount)
+    amount = math.max(0, tonumber(amount) or 0)
+    if amount <= 0 then return true end
+    local available, availableOk = U().call(source, "getFluidAmount")
+    if not availableOk or (tonumber(available) or 0) < amount then return false end
+    local result, usedOk = U().call(source, "useFluid", amount)
+    if not usedOk or result == false then return false end
+    U().call(source, "transmitModData")
+    return true
+end
+
+local function completeWashSelf(actor, activity)
+    if not washSourceValid(activity.object) then return false end
+    if not washSourceInReach(actor, activity) then return false end
+    local visual, visualOk = U().call(actor, "getHumanVisual")
+    if not visualOk or not visual then return false end
+    local dirty = {}
+    local inspected = pcall(function()
+        for index = 0, BloodBodyPartType.MAX:index() - 1 do
+            local part = BloodBodyPartType.FromIndex(index)
+            if (tonumber((visual:getBlood(part))) or 0) + (tonumber((visual:getDirt(part))) or 0) > 0 then
+                dirty[#dirty + 1] = part
+            end
+        end
+    end)
+    if not inspected or #dirty == 0 then return false end
+    local amount, amountOk = U().call(activity.object, "getFluidAmount")
+    local available = amountOk and math.floor(tonumber(amount) or 0) or 0
+    local count = math.min(#dirty, available)
+    if count <= 0 or not useWashWater(activity.object, count) then return false end
+    for index = 1, count do
+        U().call(visual, "setBlood", dirty[index], 0)
+        U().call(visual, "setDirt", dirty[index], 0)
+    end
+    U().call(actor, "resetModelNextFrame")
+    if type(sendHumanVisual) == "function" then pcall(sendHumanVisual, actor) end
+    return true
+end
+
+local function completeShower(actor, activity)
+    if not showerSourceValid(activity.object)
+        or not washSourceInReach(actor, activity) then return false end
+    local visual = select(1, U().call(actor, "getHumanVisual"))
+    if not visual then return false end
+    local parts = {}
+    local inspected = pcall(function()
+        for index = 0, BloodBodyPartType.MAX:index() - 1 do
+            parts[#parts + 1] = BloodBodyPartType.FromIndex(index)
+        end
+    end)
+    if not inspected or #parts == 0 then return false end
+    if not useWashWater(activity.object, 10) then return false end
+    for _, part in ipairs(parts) do
+        U().call(visual, "setBlood", part, 0)
+        U().call(visual, "setDirt", part, 0)
+    end
+    U().call(actor, "resetModelNextFrame")
+    if type(sendHumanVisual) == "function" then pcall(sendHumanVisual, actor) end
+    if not restoreShowerClothes(actor, activity) then return false end
+    local record = showerRecord(actor)
+    if record then record.lastShowerHour = gameHours() end
+    if SC.Dialogue and type(SC.Dialogue.say) == "function" then
+        pcall(SC.Dialogue.say, actor, "hygiene.shower_done")
+    end
+    return true
+end
+
+local function completeWashEquipment(actor, activity)
+    local item = activity.item
+    if not item or itemDirt(item) <= 0.01 then return false end
+    if CLEAN_DRESSING_TYPES[string.lower(U().itemType(item))]
+        and washBandageProtected(actor, item) then return false end
+    if not washSourceValid(activity.object) then return false end
+    if not washSourceInReach(actor, activity) then return false end
+    local required = math.max(U().config("downtimeWashMinimumWater") or 4,
+        math.min(20, math.ceil(4 + itemDirt(item) / 25)))
+    if not useWashWater(activity.object, required) then return false end
+    pcall(function()
+        local clothingType = item:getBloodClothingType()
+        local parts = BloodClothingType.getCoveredParts(clothingType)
+        if parts then
+            for index = 0, parts:size() - 1 do
+                item:setBlood(parts:get(index), 0)
+                item:setDirt(parts:get(index), 0)
+            end
+        end
+    end)
+    U().call(item, "setBloodLevel", 0)
+    U().call(item, "setDirtiness", 0)
+    U().call(item, "setWetness", 100)
+    U().call(actor, "resetModelNextFrame")
+    if type(syncVisuals) == "function" then pcall(syncVisuals, actor) end
+    return itemDirt(item) <= 0.01
+end
+
+local function consumeExact(inventory, item)
+    local utility = U()
+    local result, ok = utility.call(inventory, "Remove", item)
+    if ok then return result ~= false and not utility.inventoryContains(inventory, item) end
+    if type(inventory) == "table" and type(inventory.items) == "table" then
+        for index, value in ipairs(inventory.items) do
+            if value == item then table.remove(inventory.items, index) return true end
+        end
+    end
+    return false
+end
+
+local function completeWashBandage(actor, activity)
+    local utility = U()
+    local inventory = carriedBandageContainer(actor, activity.item)
+    if not inventory or not activity.item or not activity.cleanType
+        or (activity.itemContainer ~= nil and activity.itemContainer ~= inventory)
+        or CLEAN_DRESSING_TYPES[string.lower(utility.itemType(activity.item))]
+            ~= activity.cleanType
+        or washBandageProtected(actor, activity.item)
+        or not washSourceValid(activity.object)
+        or not washSourceInReach(actor, activity) then return false end
+    local clean = utility.addItem(inventory, activity.cleanType)
+    if not clean then return false end
+    local favorite, favoriteOk = utility.call(activity.item, "isFavorite")
+    if favoriteOk and favorite == true then
+        local setResult, setOk = utility.call(clean, "setFavorite", true)
+        local retained, retainedOk = utility.call(clean, "isFavorite")
+        if not setOk or setResult == false or retainedOk and retained ~= true then
+            consumeExact(inventory, clean)
+            return false
+        end
+    end
+    local customName, customOk = utility.call(activity.item, "isCustomName")
+    if customOk and customName == true then
+        local name, nameOk = utility.call(activity.item, "getName")
+        if not nameOk or type(name) ~= "string" or name == "" then
+            consumeExact(inventory, clean)
+            return false
+        end
+        local setResult, setOk = utility.call(clean, "setName", name)
+        if not setOk or setResult == false then
+            consumeExact(inventory, clean)
+            return false
+        end
+    end
+    -- The stock ISCleanBandage action spends one unit for one dressing.
+    if not useWashWater(activity.object, 1) then
+        consumeExact(inventory, clean)
+        return false
+    end
+    if not consumeExact(inventory, activity.item) then
+        consumeExact(inventory, clean)
+        return false
+    end
+    utility.touchInventoryIndex(inventory)
+    return utility.inventoryContains(inventory, clean)
+end
+
+local function completeRepair(actor, activity)
+    local utility = U()
+    local condition, conditionOk = utility.call(activity.item, "getCondition")
+    local maximum, maxOk = utility.call(activity.item, "getConditionMax")
+    if not conditionOk or not maxOk or not maximum then return false end
+    local inventory = utility.inventory(actor)
+    local restored = math.min(maximum, condition + math.max(1, math.floor(maximum * 0.25)))
+    local setResult, setOk = utility.call(activity.item, "setCondition", restored)
+    if not setOk or setResult == false then return false end
+    local actual, actualOk = utility.call(activity.item, "getCondition")
+    if actualOk and actual ~= restored then
+        utility.call(activity.item, "setCondition", condition)
+        return false
+    end
+    if consumeExact(inventory, activity.material) then return true end
+    utility.call(activity.item, "setCondition", condition)
+    return false
+end
+
+local function completeCraft(actor, activity)
+    local utility = U()
+    local inventory = utility.inventory(actor)
+    if not inventory then return false end
+    local seen = {}
+    for _, scrap in ipairs(activity.scraps or {}) do
+        local holder = reservations[scrap]
+        if seen[scrap] or not holder or holder.actor ~= actor
+            or not utility.inventoryContains(inventory, scrap)
+            or (SC.PersonalItems and type(SC.PersonalItems.isProtected) == "function"
+                and SC.PersonalItems.isProtected(scrap, actor, "craft_material")) then
+            return false
+        end
+        seen[scrap] = true
+    end
+    -- The player can protect or move a selected scrap while the animation is
+    -- running. Recheck exact items before creating output or consuming either.
+    local output = utility.addItem(inventory, activity.outputType)
+    if not output then return false end
+    local removed = {}
+    for _, item in ipairs(activity.scraps or {}) do
+        if not consumeExact(inventory, item) then
+            consumeExact(inventory, output)
+            for _, previous in ipairs(removed) do utility.addItem(inventory, previous) end
+            return false
+        end
+        removed[#removed + 1] = item
+    end
+    return true
+end
+
+local function finishActivity(actor, state, now)
+    local activity = state.active
+    if not activity then return false, "none" end
+    local committing, commitReason = transitionActivity(activity, "committing", {
+        action = activity.kind,
+    })
+    if committing ~= true then return failActivity(actor, state,
+        commitReason or "commit_rejected") end
+    local success = true
+    if activity.kind == "repair" then
+        success = completeRepair(actor, activity)
+    elseif activity.kind == "craft_supply" then
+        success = completeCraft(actor, activity)
+    elseif activity.kind == "read" then
+        success = activity.actionAccepted == true and finishReadingPages(actor, activity)
+    elseif activity.kind == "sit" then
+        success = activity.actionAccepted == true
+    elseif activity.kind == "rest_bed" then
+        success = activity.actionAccepted == true
+    elseif activity.kind == "rest_floor" then
+        success = activity.actionAccepted == true
+    elseif activity.kind == "tv_watch" then
+        success = activity.actionAccepted == true
+            and SC.TVWatching and SC.TVWatching.valid(actor, activity, true)
+    elseif activity.kind == "radio_setup" or activity.kind == "radio_listen" then
+        success = activity.actionAccepted == true and SC.RadioListening
+            and (activity.kind == "radio_setup"
+                and SC.RadioListening.audible(activity.object)
+                or SC.RadioListening.valid(actor, activity, true))
+    elseif activity.kind == "window_watch" then
+        local curtain = windowCurtain(activity.object)
+        success = activity.actionAccepted == true
+            and watchWindowValid(actor, activity)
+            and U().sameSquare(actor, activity.square)
+            and (curtain == nil or objectOpen(curtain))
+    elseif activity.kind == "gear_check" then
+        local primary = select(1, U().call(actor, "getPrimaryHandItem"))
+        local secondary = select(1, U().call(actor, "getSecondaryHandItem"))
+        success = activity.actionAccepted == true
+            and (primary == activity.item or secondary == activity.item)
+    elseif activity.kind == "radio_check" then
+        local device, channel = workingWalkieTalkie(actor, activity.item)
+        success = activity.actionAccepted == true
+            and device == activity.device and channel == activity.channel
+    elseif activity.kind == "tidy_camp" then
+        success = activity.actionAccepted == true
+            and tidyCampValid(actor, activity)
+            and U().directInteractionAccess(actor, activity.object) == true
+    elseif activity.kind == "clean_base" then
+        local amount = cleanerRemaining(activity.material)
+        success = activity.nativeCompleted == true
+            and amount ~= nil and amount < (activity.cleanerBefore or 0)
+            and select(1, U().call(activity.square, "haveStains")) == false
+    elseif activity.kind == "weather_recovery" then
+        local square = U().squareOf(actor)
+        success = activity.actionAccepted == true
+            and U().sameSquare(actor, activity.square)
+            and square ~= nil
+            and select(1, U().call(square, "getRoom")) ~= nil
+            and finishWeatherRecovery(actor, activity)
+    elseif activity.kind == "leader_check_in" then
+        success = activity.actionAccepted == true and activity.replied == true
+    elseif activity.kind == "wash_self" then
+        success = completeWashSelf(actor, activity)
+    elseif activity.kind == "shower" then
+        success = completeShower(actor, activity)
+    elseif activity.kind == "wash_equipment" then
+        success = completeWashEquipment(actor, activity)
+    elseif activity.kind == "wash_bandage" then
+        success = completeWashBandage(actor, activity)
+    elseif activity.kind == "study_corpse" or activity.kind == "pay_respects"
+        or activity.kind == "workout" then
+        success = activity.actionAccepted == true
+    elseif activity.kind == "write_diary" then
+        -- The page is committed only now, after the verified writing pose
+        -- completed, and only if the author and exact book still qualify.
+        success = activity.actionAccepted == true and SC.Diary ~= nil
+            and type(SC.Diary.commitWrite) == "function"
+            and SC.Diary.commitWrite(actor, activity.diary) == true
+    end
+    local failureReasons = {
+        repair = "repair_commit_failed",
+        craft_supply = "craft_commit_failed",
+        read = "read_verification_failed",
+        sit = "sit_verification_failed",
+        rest_bed = "bed_rest_verification_failed",
+        rest_floor = "floor_rest_verification_failed",
+        tv_watch = "tv_view_verification_failed",
+        radio_setup = "radio_setup_verification_failed",
+        radio_listen = "radio_listen_verification_failed",
+        window_watch = "window_watch_verification_failed",
+        gear_check = "gear_check_verification_failed",
+        radio_check = "radio_check_verification_failed",
+        tidy_camp = "tidy_camp_verification_failed",
+        clean_base = "clean_base_verification_failed",
+        weather_recovery = "weather_recovery_verification_failed",
+        leader_check_in = "leader_check_in_reply_failed",
+        wash_self = "wash_self_commit_failed",
+        shower = "shower_commit_failed",
+        wash_equipment = "wash_equipment_commit_failed",
+        wash_bandage = "wash_bandage_commit_failed",
+        study_corpse = "study_verification_failed",
+        pay_respects = "respects_verification_failed",
+        workout = "workout_verification_failed",
+        write_diary = "diary_commit_failed",
+    }
+    if not success then
+        return failActivity(actor, state,
+            failureReasons[activity.kind] or "downtime_commit_failed")
+    end
+    local verifying, verifyReason = transitionActivity(activity, "verifying", {
+        action = activity.kind,
+    })
+    if verifying ~= true then return failActivity(actor, state,
+        verifyReason or "verification_failed") end
+    -- A completed chair/sofa sit becomes a passive posture. The native rest
+    -- action has left the queue, so Read/Write may begin without getting up.
+    -- Skip the ordinary post-action look-around pause here: that observation
+    -- is a standing action and could undo the seat before the follow-up starts.
+    if activity.kind == "sit" and activity.furnitureEntered == true then
+        activity.preserveSeating = true
+        if activity.fact and activity.fact.seatingFor == "tv_watch" then
+            state.tvSeatPendingUntil = now + 15000
+        elseif activity.fact and activity.fact.seatingFor == "radio_listen" then
+            state.radioSeatPendingUntil = now + 15000
+        end
+    elseif (activity.kind == "rest_bed" or activity.kind == "rest_floor")
+        and activity.furnitureEntered == true and seatedTaskReady(actor, now) then
+        -- A rested companion with a book or its diary to hand reads or writes
+        -- where it sits, on the bed, cot or floor. Otherwise it gets up as
+        -- before, so a tired companion's rest cycle is unchanged.
+        activity.preserveSeating = true
+    end
+    if success then
+        if activity.kind == "study_corpse" then Study.finish(actor, activity, now) end
+        if activity.kind == "pay_respects" then Respect.finish(actor, activity, now) end
+        if activity.kind == "workout" and SC.Gestures
+            and type(SC.Gestures.workoutFinished) == "function" then
+            pcall(SC.Gestures.workoutFinished, actor, activity, now)
+        end
+        if SC.Diary and type(SC.Diary.noteDowntime) == "function" then
+            local memento = activity.kind == "pay_respects" and activity.object ~= nil
+                and Respect.memento(activity.object) or nil
+            pcall(SC.Diary.noteDowntime, actor, activity, { memento = memento })
+        end
+        local fact = U().copyShallow(activity.fact)
+        if activity.kind == "weather_recovery" then
+            fact.wetnessAfter = U().characterStatValue(actor, "WETNESS", 0)
+        end
+        fact.completedAt = now
+        if activity.kind == "radio_check" then
+            fact.transmitted = broadcastRadioCheck(actor, activity)
+            if fact.transmitted then lastSquadRadioCheckAt = now end
+        elseif activity.kind == "radio_listen" and SC.RadioListening then
+            fact.heardBroadcast = activity.lastBroadcastAt ~= nil
+            activity.preserveSeating = true
+            SC.RadioListening.finish(actor, activity)
+        end
+        state.lastFact = fact
+        if activity.kind == "read" and SC.Dialogue
+            and type(SC.Dialogue.say) == "function" then
+            local before, after, total = tonumber(fact.pagesBefore) or 0,
+                tonumber(fact.pagesAfter) or 0, tonumber(fact.pagesTotal) or 0
+            local milestone = total > 0 and math.floor(after * 4 / total)
+                > math.floor(before * 4 / total)
+            if fact.finishedBook == true or (milestone
+                and now - (state.lastBookSpeakAt or -math.huge) >= 25000) then
+                local title = select(1, U().call(activity.item, "getDisplayName"))
+                local topic = fact.finishedBook and "reading.finished"
+                    or math.floor(after * 4 / total) % 2 == 0
+                        and "reading.philosophy" or "reading.progress"
+                pcall(SC.Dialogue.say, actor, topic, nil,
+                    { tostring(title or U().itemType(activity.item)) })
+                state.lastBookSpeakAt = now
+            end
+        end
+        if activity.kind == "leader_check_in" then
+            state.lastLeaderCheckInId = activity.targetId
+            state.leaderCheckInPairs = state.leaderCheckInPairs or {}
+            state.leaderCheckInPairs[activity.targetId] = now
+        end
+        if activity.kind == "window_watch" or activity.kind == "tv_watch"
+            or activity.kind == "radio_setup" or activity.kind == "radio_listen"
+            or activity.kind == "gear_check"
+            or activity.kind == "radio_check" or activity.kind == "tidy_camp"
+            or activity.kind == "weather_recovery"
+            or activity.kind == "clean_base"
+            or activity.kind == "leader_check_in" then
+            state.ambientLastAt = state.ambientLastAt or {}
+            state.ambientLastAt[activity.kind] = now
+        end
+        if SC.Commands and type(SC.Commands.noteDowntime) == "function" then
+            pcall(SC.Commands.noteDowntime, actor, fact)
+        end
+        if activity.kind == "clean_base" and SC.Dialogue
+            and type(SC.Dialogue.say) == "function" then
+            pcall(SC.Dialogue.say, actor, "downtime.clean_done", nil,
+                { surface = activity.surface })
+        end
+        if activity.kind ~= "clean_base" and SC.NativeActions
+            and type(SC.NativeActions.noteResult) == "function" then
+            SC.NativeActions.noteResult(actor, "downtime_" .. tostring(activity.kind),
+                "completed", { kind = "long", skip = activity.preserveSeating == true })
+        end
+    end
+    if activity.kind == "window_watch" and activity.watchCrouched == true then
+        U().call(actor, "setSneaking", activity.wasSneaking == true)
+        activity.watchCrouched = nil
+    end
+    releaseActivity(actor, activity)
+    state.active = nil
+    state.nextEvaluationAt = now + (U().config("downtimeIntervalMs") or 1500)
+    local service = supervisor()
+    if service and activity.supervisorToken and service.isCurrent(activity.supervisorToken) then
+        service.complete(activity.supervisorToken, "completed", {
+            activity = activity.kind, verified = true,
+        })
+    end
+    debugTrace(actor, "finish", activity, "completed")
+    return true, "completed"
+end
+
+function Downtime.cancel(actor, reason)
+    local state = actor and states[actor]
+    if not state then return false end
+    local changed = clearCurtainTask(actor, state)
+    if state.active then
+        local activity = state.active
+        local service = supervisor()
+        if service and activity.supervisorToken and service.isCurrent(activity.supervisorToken) then
+            local cancelled, cancelReason = service.cancel(actor,
+                reason or "downtime_cancelled", nil, false)
+            if cancelled ~= true then
+                debugTrace(actor, "cancel_blocked", activity, cancelReason)
+                return false, cancelReason or "downtime_cancel_rejected"
+            end
+        else
+            releaseDowntimeResources(actor, state, activity,
+                reason or "downtime_cancelled")
+        end
+        debugTrace(actor, "cancel", activity, reason)
+        changed = true
+    end
+    if seatingStatus(actor) ~= "standing" and SC.NativeActions
+        and type(SC.NativeActions.leaveSeating) == "function" then
+        local ok, stood = pcall(SC.NativeActions.leaveSeating, actor)
+        changed = changed or ok and stood == true
+    end
+    if not changed then return false end
+    state.safeSince = nil
+    state.idleStopped = false
+    U().stop(actor)
+    return true, reason or "cancelled"
+end
+
+function Downtime.update(actor, player, runtime, desiredKind)
+    local utility = U()
+    if not utility or not utility.isValidActor(actor) then return false, "invalid_actor" end
+    local rootRuntime = utility.actorState(actor, runtime)
+    local snapshot = rootRuntime.senses and rootRuntime.senses.current or rootRuntime.snapshot
+    local commands = commandState(actor)
+    local state = stateFor(actor)
+    if desiredKind == nil and Downtime.canReadOnTrip(actor, player) then
+        desiredKind = "read"
+    end
+    if state.lastFact == nil and type(commands.lastDowntime) == "table" then
+        state.lastFact = utility.copyShallow(commands.lastDowntime)
+    end
+    local current = utility.nowMs()
+    local unsafe = dangerPresent(snapshot, actor, current)
+        or not orderAllowsIdle(commands, actor, player, snapshot)
+    local medicalState = SC.Medical and type(SC.Medical.peek) == "function"
+        and SC.Medical.peek(actor) or nil
+    if unsafe then
+        state.safeSince = nil
+        if state.active or state.curtainTask then Downtime.cancel(actor, "danger_or_order") end
+        if medicalState and medicalState.dirtyOnly
+            and type(SC.Medical.cancel) == "function" then
+            SC.Medical.cancel(actor, "danger_or_order")
+        end
+        return false, "unsafe_or_busy"
+    end
+
+    -- Downtime may propose a dirty-bandage change, but Medical owns and
+    -- advances the entire transaction once accepted.
+    if medicalState and medicalState.dirtyOnly
+        and type(SC.Medical.replaceDirtyBandage) == "function" then
+        return SC.Medical.replaceDirtyBandage(actor)
+    end
+
+    if not state.active and desiredKind == nil then
+        local curtainAttempted, curtainAccepted, curtainReason = Downtime.considerCurtain(
+            actor, snapshot, current, player)
+        if curtainAttempted then
+            if not curtainAccepted then return false, curtainReason end
+            return true, curtainReason
+        end
+    end
+
+    if not state.safeSince then state.safeSince = current end
+    if state.active then
+        if (commands.commandSerial or 0) ~= state.active.commandSerial then
+            Downtime.cancel(actor, "new_order")
+            return false, "cancelled_for_order"
+        end
+        if state.active.kind == "leader_check_in" then
+            local visit = state.active
+            if visit.approaching then
+                local accepted, status = approachLeaderCheckIn(actor, visit)
+                if not accepted then return failActivity(actor, state,
+                    status or "check_in_route_failed") end
+                transitionActivity(visit, "approaching", { status = status })
+                if status ~= "arrived" then return true, "approaching_companion" end
+                local spoken, reason = speakLeaderCheckIn(actor, visit, current)
+                if not spoken then return failActivity(actor, state, reason) end
+                transitionActivity(visit, "waiting", { action = visit.kind })
+                return true, "leader_check_in"
+            end
+            if not leaderCheckInTargetValid(actor, visit.target, visit.targetId)
+                or not utility.sameFloor(actor, visit.target)
+                or utility.distance(actor, visit.target) > 3 then
+                return failActivity(actor, state, "check_in_partner_moved")
+            end
+            if current < (visit.replyAt or current) then
+                return true, "leader_check_in_waiting"
+            end
+            local name = tostring(utility.nameOf(actor) or "friend")
+            name = string.match(name, "^(%S+)") or "friend"
+            visit.replied = SC.Dialogue and SC.Dialogue.say(visit.target,
+                "downtime.leader_check_in.reply", LEADER_CHECK_IN_REPLY,
+                { name }) == true
+            if not visit.replied then return failActivity(actor, state,
+                "check_in_reply_rejected") end
+            return finishActivity(actor, state, current)
+        end
+        if state.active.kind == "tv_watch" then
+            local watching = state.active
+            if not SC.TVWatching
+                or not SC.TVWatching.valid(actor, watching, false) then
+                return failActivity(actor, state, "tv_turned_off")
+            end
+            if watching.approaching then
+                local accepted, status = SC.TVWatching.approach(actor, watching)
+                if not accepted then return failActivity(actor, state,
+                    status or "route_failed") end
+                if status ~= "arrived" then
+                    transitionActivity(watching, "approaching", { status = status })
+                    return true, "approaching_tv"
+                end
+                local started, reason = SC.TVWatching.start(actor, watching, current)
+                if not started then return failActivity(actor, state, reason) end
+                transitionActivity(watching, "waiting", { action = "tv_watch" })
+            end
+            if not SC.TVWatching.valid(actor, watching, true) then
+                return failActivity(actor, state, "tv_view_lost")
+            end
+            if current - watching.startedAt >= watching.durationMs then
+                return finishActivity(actor, state, current)
+            end
+            return true, "watching_tv"
+        end
+        if state.active.kind == "radio_setup" then
+            local tuning = state.active
+            if tuning.approaching then
+                if not SC.RadioListening.valid(actor, tuning, false) then
+                    return failActivity(actor, state, "radio_unavailable")
+                end
+                local accepted, status = SC.RadioListening.approach(actor, tuning)
+                if not accepted then return failActivity(actor, state,
+                    status or "radio_route_failed") end
+                if status ~= "arrived" then
+                    transitionActivity(tuning, "approaching", { status = status })
+                    return true, "approaching_radio"
+                end
+                local ready, reason = SC.RadioListening.setup(actor, tuning)
+                if not ready then return failActivity(actor, state, reason) end
+                transitionActivity(tuning, "waiting", { action = "radio_setup" })
+            end
+            return finishActivity(actor, state, current)
+        end
+        if state.active.kind == "radio_listen" then
+            local listening = state.active
+            if not SC.RadioListening.valid(actor, listening, true) then
+                return failActivity(actor, state, "radio_listening_lost")
+            end
+            if current - listening.startedAt >= listening.durationMs then
+                return finishActivity(actor, state, current)
+            end
+            return true, "listening_radio"
+        end
+        local furniture = state.active.kind == "sit" or state.active.kind == "rest_bed"
+        local floorRest = state.active.kind == "rest_floor"
+        local borrowedCheckout = state.active.kind == "read"
+            and state.active.borrowedFrom ~= nil and state.active.borrowedReading ~= true
+        if borrowedCheckout then
+            local accepted, status = approachBorrowedReadingSource(actor, state.active)
+            if not accepted then return failActivity(actor, state, status or "route_failed") end
+            transitionActivity(state.active, "approaching", { status = status })
+            if status ~= "arrived" then return true, "approaching_reading_storage" end
+            local started, startReason = startBorrowedReading(actor, state.active, current)
+            if not started and startReason == "borrowed_book_source_not_in_reach" then
+                transitionActivity(state.active, "approaching", { status = startReason })
+                return true, "approaching_reading_storage"
+            end
+            if not started then return failActivity(actor, state, startReason) end
+            return true, state.active.kind
+        end
+        if state.active.kind == "window_watch" and state.active.approaching then
+            local accepted, status = approachWatchWindow(actor, state.active)
+            if not accepted then return failActivity(actor, state, status or "route_failed") end
+            transitionActivity(state.active, "approaching", { status = status })
+            if status ~= "arrived" then return true, "approaching_window" end
+            local started, reason = startWindowWatch(actor, state.active, current)
+            if not started then return failActivity(actor, state, reason) end
+            return true, reason or "window_watch"
+        end
+        if state.active.kind == "tidy_camp" and state.active.approaching then
+            local accepted, status = approachTidyCamp(actor, state.active)
+            if not accepted then return failActivity(actor, state, status or "route_failed") end
+            transitionActivity(state.active, "approaching", { status = status })
+            if status ~= "arrived" then return true, "approaching_camp_storage" end
+            local started, reason = startTidyCamp(actor, state.active, current)
+            if not started then return failActivity(actor, state, reason) end
+            return true, "tidy_camp"
+        end
+        if state.active.kind == "clean_base" then
+            local cleaning = state.active
+            if cleaning.approaching then
+                local accepted, status = approachCleanBase(actor, cleaning)
+                if not accepted then return failActivity(actor, state,
+                    status or "route_failed") end
+                transitionActivity(cleaning, "approaching", { status = status })
+                if status ~= "arrived" then return true, "approaching_clean_stain" end
+                local started, reason = startCleanBase(actor, cleaning, current)
+                if not started then return failActivity(actor, state, reason) end
+                return true, "clean_base"
+            end
+            if current - (cleaning.startedAt or current) > 45000 then
+                return failActivity(actor, state, "native_cleaning_timeout")
+            end
+            if SC.NativeActions and type(SC.NativeActions.isWorkActive) == "function"
+                and SC.NativeActions.isWorkActive(actor) == true then
+                local service = supervisor()
+                if service and cleaning.supervisorToken then
+                    service.progress(cleaning.supervisorToken,
+                        "native_clean:" .. tostring(cleaning.startedAt), {
+                            action = "clean_base",
+                        })
+                end
+                return true, "clean_base"
+            end
+            local finished, reason = SC.NativeActions
+                and type(SC.NativeActions.finishWork) == "function"
+                and SC.NativeActions.finishWork(actor)
+            if finished ~= true then return failActivity(actor, state,
+                reason or "native_cleaning_finish_failed") end
+            cleaning.nativeCompleted = true
+            return finishActivity(actor, state, current)
+        end
+        if furniture and state.active.square and state.active.approaching then
+            local accepted, status = approachFurniture(actor, state.active)
+            if not accepted then return failActivity(actor, state, status or "route_failed") end
+            transitionActivity(state.active, "approaching", { status = status })
+            if status ~= "arrived" then return true, "approaching_seat" end
+        end
+        local washing = state.active.kind == "wash_self"
+            or state.active.kind == "wash_equipment"
+            or state.active.kind == "wash_bandage"
+            or state.active.kind == "shower"
+        if washing and state.active.approaching and state.active.atSource ~= true
+            and not washSourceInReach(actor, state.active) then
+            local accepted, status = approachWashSource(actor, state.active)
+            if not accepted then
+                coolWashSource(state, state.active.object, current)
+                return failActivity(actor, state, status or "route_failed")
+            end
+            if status ~= "arrived" then
+                transitionActivity(state.active, "approaching", { status = status })
+                return true, "approaching_wash_source"
+            end
+            -- Standing on a free square beside the source is close enough.
+            state.active.atSource = true
+        end
+        if washing and state.active.approaching then
+            if state.active.kind == "shower" then
+                if not showerSourceValid(state.active.object)
+                    or not undressForShower(actor, state.active) then
+                    return failActivity(actor, state, "shower_source_or_clothes_failed")
+                end
+                showerStartSpeech(actor)
+            end
+            local expected, expectedReason = startSupervisedVisual(actor, state.active, {
+                action = state.active.kind,
+            })
+            if expected ~= true then return failActivity(actor, state,
+                expectedReason or "visual_registration_failed") end
+            if not utility.move(actor, "walk", {
+                action = state.active.kind,
+                item = state.active.item,
+                object = state.active.object,
+                downtime = true,
+                durationMs = utility.config("downtimeActivityMs") or 6000,
+                supervisorToken = state.active.supervisorToken,
+            }) then
+                return failActivity(actor, state, "animation_rejected")
+            end
+            state.active.approaching = nil
+            state.active.actionAccepted = true
+            state.active.startedAt = current
+            transitionActivity(state.active, "animating", { action = state.active.kind })
+            return true, state.active.kind
+        end
+        local studying = state.active.kind == "study_corpse" or state.active.kind == "pay_respects"
+        if studying and not Study.stillThere(state.active) then
+            return failActivity(actor, state, state.active.kind == "pay_respects"
+                and "respects_body_gone" or "study_body_gone")
+        end
+        if studying and state.active.approaching then
+            if utility.distance(actor, state.active.square) > Study.REACH then
+                if not SC.Navigation or type(SC.Navigation.request) ~= "function" then
+                    return failActivity(actor, state, "navigation_unavailable")
+                end
+                local accepted, status = SC.Navigation.request(actor, state.active.square, "walk", {
+                    action = "move_to_corpse",
+                    targetSquare = state.active.square,
+                    object = state.active.object,
+                    supervisorToken = state.active.supervisorToken,
+                })
+                if not accepted then
+                    return failActivity(actor, state, status or "route_failed")
+                end
+                transitionActivity(state.active, "approaching", { status = status })
+                return true, "approaching_corpse"
+            end
+            local kind = state.active.kind
+            local expected, expectedReason = startSupervisedVisual(actor, state.active, {
+                action = kind,
+            })
+            if expected ~= true then return failActivity(actor, state,
+                expectedReason or "visual_registration_failed") end
+            if not utility.move(actor, "walk", {
+                action = kind,
+                object = state.active.object,
+                downtime = true,
+                durationMs = Study.duration(kind),
+                supervisorToken = state.active.supervisorToken,
+            }) then
+                return failActivity(actor, state, "animation_rejected")
+            end
+            state.active.approaching = nil
+            state.active.actionAccepted = true
+            state.active.startedAt = current
+            transitionActivity(state.active, "animating", { action = kind })
+            Study.speakNext(actor, state.active, current)
+            return true, kind
+        end
+        if studying then Study.speakNext(actor, state.active, current) end
+        if furniture and state.active.approaching then
+            if not utility.move(actor, "walk", {
+                action = state.active.kind,
+                object = state.active.object,
+                downtime = true,
+                supervisorToken = state.active.supervisorToken,
+            }) then
+                return failActivity(actor, state, "animation_rejected")
+            end
+            state.active.approaching = nil
+            state.active.actionAccepted = true
+            if state.active.kind == "rest_bed" or state.active.kind == "sit" then
+                state.active.entryStartedAt = current
+                state.active.startedAt = nil
+                transitionActivity(state.active, "approaching", {
+                    action = state.active.kind, finalAlignment = true,
+                })
+            else
+                state.active.startedAt = current
+                transitionActivity(state.active, "settling", { action = state.active.kind })
+            end
+            return true, state.active.kind
+        end
+        if (furniture or floorRest) and state.active.actionAccepted == true
+            and state.active.furnitureEntered ~= true then
+            local entryState, poseStartedAt = "none", nil
+            if state.active.kind == "rest_bed" and SC.NativeActions
+                and type(SC.NativeActions.bedStatus) == "function" then
+                entryState, poseStartedAt = SC.NativeActions.bedStatus(actor)
+            elseif state.active.kind == "sit" and SC.NativeActions
+                and type(SC.NativeActions.furnitureStatus) == "function" then
+                entryState, poseStartedAt = SC.NativeActions.furnitureStatus(actor)
+            elseif floorRest and SC.NativeActions
+                and type(SC.NativeActions.groundStatus) == "function" then
+                entryState = SC.NativeActions.groundStatus(actor)
+            elseif floorRest then
+                local seated, seatedOk = utility.call(actor, "isSitOnGround")
+                entryState = seatedOk and seated == true and "entered" or "entering"
+            end
+            -- Native approach and the final sit/get-on-bed clip are separate
+            -- phases. Give the final clip its own entry window once it begins.
+            if tonumber(poseStartedAt)
+                and tonumber(poseStartedAt) > (tonumber(state.active.entryStartedAt) or 0) then
+                state.active.entryStartedAt = tonumber(poseStartedAt)
+            end
+            if entryState == "entered" then
+                if state.active.kind == "rest_bed"
+                    and seatingStatus(actor) == "ground" then
+                    return failActivity(actor, state, "bed_entry_fell_back_to_floor")
+                end
+                state.active.furnitureEntered = true
+                state.active.startedAt = current
+                state.active.startedGameHour = gameHours()
+                local animated, animatedReason = transitionActivity(
+                    state.active, "animating", { action = state.active.kind, entered = true })
+                if animated ~= true then
+                    return failActivity(actor, state,
+                        animatedReason or "furniture_pose_transition_failed")
+                end
+                local transitioned, transitionReason = transitionActivity(
+                    state.active, "waiting", { action = state.active.kind, entered = true })
+                if transitioned ~= true then
+                    return failActivity(actor, state,
+                        transitionReason or "furniture_entry_transition_failed")
+                end
+                if state.active.kind == "rest_bed" then
+                    startBedSleep(actor, state.active)
+                    return true, "sleeping_on_bed"
+                end
+                if floorRest then return true, "resting_on_floor" end
+                return true, "sitting_on_furniture"
+            end
+            local elapsed = current - (tonumber(state.active.entryStartedAt) or current)
+            if entryState ~= "entering"
+                or elapsed >= (utility.config("bedEntryTimeoutMs") or 12000) then
+                local prefix = state.active.kind == "rest_bed" and "bed"
+                    or floorRest and "floor" or "furniture"
+                return failActivity(actor, state, entryState == "entering"
+                    and prefix .. "_entry_timeout" or prefix .. "_entry_failed")
+            end
+            if state.active.kind == "rest_bed" then return true, "getting_on_bed" end
+            if floorRest then return true, "sitting_on_floor" end
+            return true, "taking_seat"
+        end
+        local duration = state.active.durationMs or Study.duration(state.active.kind)
+        -- Work speed shapes chores; an activity with its own length keeps it.
+        if not state.active.durationMs and SC.Autonomy
+            and type(SC.Autonomy.workDuration) == "function" then
+            local ok, adjusted = pcall(SC.Autonomy.workDuration, actor, duration)
+            if ok and tonumber(adjusted) then duration = tonumber(adjusted) end
+        end
+        if state.active.startedAt and visualActivities[state.active.kind]
+            and SC.NativeActions and type(SC.NativeActions.visualStatus) == "function" then
+            local visualState = SC.NativeActions.visualStatus(actor, state.active.kind)
+            if visualState == "active" then
+                local service = supervisor()
+                if service and state.active.supervisorToken then
+                    service.progress(state.active.supervisorToken,
+                        "visual:" .. tostring(state.active.startedAt), {
+                            action = state.active.kind,
+                        })
+                end
+                return true, state.active.kind
+            end
+            if visualState == "completed" then
+                if type(SC.NativeActions.clearVisual) == "function" then
+                    SC.NativeActions.clearVisual(actor)
+                end
+                state.active.visualCompleted = true
+                local service = supervisor()
+                if service and state.active.supervisorToken then
+                    local verified, verifyReason = service.markVisualVerified(
+                        state.active.supervisorToken, { action = state.active.kind })
+                    if verified ~= true then return failActivity(actor, state,
+                        verifyReason or "animation_verification_failed") end
+                end
+                return finishActivity(actor, state, current)
+            end
+            return failActivity(actor, state,
+                "animation_" .. tostring(visualState))
+        elseif state.active.kind == "rest_bed" and state.active.startedAt then
+            local elapsed = recoverBedSleep(actor, state.active, current)
+            if elapsed >= (state.active.gameDurationHours or 6) then
+                state.active.fact.sleepHours = elapsed
+                return finishActivity(actor, state, current)
+            end
+            return true, "sleeping_on_bed"
+        elseif state.active.kind == "sit" and state.active.startedAt then
+            local hour = gameHours()
+            local elapsed = hour and state.active.startedGameHour
+                and hour - state.active.startedGameHour or nil
+            if (elapsed and elapsed >= (state.active.gameDurationHours or 0.5))
+                or (not elapsed and current - state.active.startedAt >= duration) then
+                return finishActivity(actor, state, current)
+            end
+            return true, "sitting_on_furniture"
+        elseif state.active.startedAt and current - state.active.startedAt >= duration then
+            return finishActivity(actor, state, current)
+        end
+        return true, state.active.kind
+    end
+
+    if current - state.safeSince < (utility.config("downtimeSafeMs") or 5000) then
+        if not state.idleStopped then utility.stop(actor) state.idleStopped = true end
+        return false, "settling"
+    end
+    if current < state.nextEvaluationAt then return false, "cooldown" end
+    state.nextEvaluationAt = current + (utility.config("downtimeIntervalMs") or 1500)
+    for _, activity in ipairs(candidates(actor, commands, state, current, desiredKind)) do
+        local ok, reason = beginActivity(actor, state, activity, commands, current)
+        if ok then return true, reason end
+    end
+    if not state.idleStopped then utility.stop(actor) state.idleStopped = true end
+    return false, "stable_idle"
+end
+
+function Downtime.peek(actor)
+    return actor and states[actor] or nil
+end
+
+function Downtime.prepareForSave(actor)
+    local state = actor and states[actor]
+    local activity = state and state.active
+    if not activity or activity.kind ~= "shower" then return true end
+    local cancelled, reason = Downtime.cancel(actor, "save_capture")
+    if cancelled ~= true then return false, reason or "shower_cancel_failed" end
+    if activity.showerClothes then return false, "shower_clothes_restore_failed" end
+    return true
+end
+
+function Downtime._readingForTests()
+    return readActivity, campReadingActivity, returnBorrowedReadingItem,
+        finishReadingPages
+end
+
+function Downtime._furnitureForTests()
+    return furnitureKind, seatActivity, approachFurniture, beginActivity,
+        coolFurniture, furnitureCooling, floorRestActivity, seatingStatus,
+        failActivity, reserve, release, stateFor, orderAllowsIdle
+end
+
+function Downtime._ambientForTests()
+    return windowWatchActivity, gearCheckActivity, approachWatchWindow,
+        watchWindowValid, radioCheckActivity, tidyCampActivity,
+        weatherRecoveryActivity, tidyCampValid, cleanBaseActivity,
+        cleanBaseValid
+end
+
+function Downtime.reset(actor)
+    if actor then
+        Downtime.cancel(actor, "reset")
+        states[actor] = nil
+    else
+        local actors = {}
+        for value in pairs(states) do actors[#actors + 1] = value end
+        for _, value in ipairs(actors) do Downtime.cancel(value, "reset_all") end
+        states = setmetatable({}, { __mode = "k" })
+        reservations = setmetatable({}, { __mode = "k" })
+        Study.lastPartyAt = -math.huge
+        Respect.lastPartyAt = -math.huge
+        lastSquadRadioCheckAt = -math.huge
+        if SC.TVWatching and type(SC.TVWatching.reset) == "function" then
+            SC.TVWatching.reset()
+        end
+    end
+end
+
+-- Test seam: the harness checks eligibility, curiosity and outfit groups.
+-- Test seam: wash source choice, approach, failure memory, the reach rule
+-- every start and commit shares, and the two commits themselves.
+function Downtime._washForTests()
+    return nearbyWashSource, approachWashSource, coolWashSource, washSourceCooling,
+        washSourceInReach, completeWashSelf, completeWashEquipment,
+        completeWashBandage, washActivity
+end
+
+function Downtime._showerForTests()
+    return showerActivity, undressForShower, restoreShowerClothes,
+        completeShower
+end
+
+-- Test seam: the camp-book checkout policy re-read at transfer time.
+function Downtime._borrowedCheckoutForTests()
+    return borrowedCheckoutAuthorized
+end
+
+function Downtime._studyForTests()
+    return Study
+end
+
+function Downtime._respectForTests()
+    return Respect
+end
+
+Study.register()
+Respect.register()
+
+return Downtime

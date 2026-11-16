@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/TLOU/backpack/M_Bag_SCARLeatherBackpack_M_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/TLOU/backpack/F_Bag_SCARLeatherBackpack_F_tombfit</m_FemaleModel>
+	<m_GUID>4ec25704-37bb-41b8-abb2-1ab1743079d4</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>SCARLeatherBackpack</textureChoices>
+</clothingItem>

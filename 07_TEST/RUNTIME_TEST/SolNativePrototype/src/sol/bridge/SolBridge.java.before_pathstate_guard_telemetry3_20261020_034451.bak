@@ -1,0 +1,350 @@
+package sol.bridge;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
+import zombie.MainThread;
+import zombie.characters.IsoPlayer;
+import zombie.characters.SurvivorDesc;
+import zombie.iso.IsoCell;
+
+public final class SolBridge {
+    public static final String PROTOCOL = "sol-native-prototype-2";
+    private static final ExecutorService HANDOFF = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "SolNativeShell-handoff");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final AtomicLong NEXT_REQUEST = new AtomicLong(1L);
+    private static volatile SolIsoPlayerShell testShell;
+    private static volatile String shellState = "idle";
+    private static volatile String shellFailure = "";
+    private static volatile long activeRequest = -1L;
+
+    private SolBridge() {}
+
+    public static String ping() { return "SOL_NATIVE_PONG"; }
+    public static String status() { return SolBootstrap.getStatus(); }
+
+    public static synchronized long requestTestShellSpawn(Object square) {
+        if (square == null) { shellFailure = "spawn square is null"; return -1L; }
+        if (testShell != null || "pending".equals(shellState)) {
+            shellFailure = "test shell already exists or is pending";
+            return -1L;
+        }
+        long id = NEXT_REQUEST.getAndIncrement();
+        activeRequest = id;
+        shellState = "pending";
+        shellFailure = "";
+        HANDOFF.execute(() -> MainThread.queueInvokeOnMainThread(() -> completeSpawn(id, square)));
+        return id;
+    }
+
+    public static String getTestShellState() { return shellState; }
+    public static String getTestShellFailure() { return shellFailure; }
+
+    public static String describeTestShell() {
+        SolIsoPlayerShell body = testShell;
+        if (body == null) return "state=" + shellState + " failure=" + shellFailure;
+        try {
+            Class<?> playerClass = Class.forName("zombie.characters.IsoPlayer", false, body.getClass().getClassLoader());
+            int index = playerClass.getField("playerIndex").getInt(body);
+            int serverIndex = playerClass.getField("serverPlayerIndex").getInt(body);
+            boolean remote = playerClass.getField("remote").getBoolean(body);
+            Object instance = playerClass.getMethod("getInstance").invoke(null);
+            boolean inLocalSlots = isInLocalPlayerSlots(body, playerClass);
+            Object currentSquare = invoke0(body, "getCurrentSquare");
+            Object model = invoke0(body, "getModelInstance");
+            Object added = invoke0(body, "isAddedToModelManager");
+            Object active = invoke0(body, "hasActiveModel");
+            Object alpha = invoke(body, "getAlpha", new Class<?>[] { int.class }, 0);
+            Object targetAlpha = invoke(body, "getTargetAlpha", new Class<?>[] { int.class }, 0);
+            return "state=" + shellState
+                + " class=" + body.getClass().getName()
+                + " playerIndex=" + index
+                + " serverPlayerIndex=" + serverIndex
+                + " remote=" + remote
+                + " local=" + body.isLocalPlayer()
+                + " inLocalSlots=" + inLocalSlots
+                + " isGlobalInstance=" + (instance == body)
+                + " square=" + currentSquare
+                + " addedToModelManager=" + added
+                + " activeModel=" + active
+                + " model=" + model
+                + " alpha0=" + alpha
+                + " targetAlpha0=" + targetAlpha;
+        } catch (Throwable failure) {
+            return "describe-error=" + failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+        }
+    }
+
+
+    public static synchronized long requestTestShellMove(float x, float y, float z) {
+        SolIsoPlayerShell body = testShell;
+        if (body == null || !"ready".equals(shellState)) return -1L;
+        long id = NEXT_REQUEST.getAndIncrement();
+        HANDOFF.execute(() -> MainThread.queueInvokeOnMainThread(() -> {
+            try {
+                body.pathToLocationF(x, y, z);
+                System.out.println("[SolNativeShell] MOVE_REQUEST id=" + id + " target=" + x + "," + y + "," + z);
+            } catch (Throwable failure) {
+                shellFailure = failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+                System.err.println("[SolNativeShell] MOVE_FAILED " + shellFailure);
+            }
+        }));
+        return id;
+    }
+
+    public static boolean stopTestShellMovement() {
+        SolIsoPlayerShell body = testShell;
+        if (body == null) return false;
+        try {
+            Object behavior = invoke0(body, "getPathFindBehavior2");
+            if (behavior != null) invoke0(behavior, "cancel");
+            Class<?> pathClass = Class.forName("zombie.pathfind.Path", false, body.getClass().getClassLoader());
+            invoke(body, "setPath2", new Class<?>[] { pathClass }, new Object[] { null });
+ body.stopSolPathOwnership();
+            return true;
+        } catch (Throwable failure) {
+            shellFailure = failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+            return false;
+        }
+    }
+
+    public static String describeTestShellMovement() {
+        SolIsoPlayerShell body = testShell;
+        if (body == null) return "state=" + shellState + " body=nil";
+        try {
+            Object behavior = invoke0(body, "getPathFindBehavior2");
+            Object x = invoke0(body, "getX");
+            Object y = invoke0(body, "getY");
+            Object z = invoke0(body, "getZ");
+            Object moving = invoke0(body, "isMoving");
+            Object playerMoving = invoke0(body, "isPlayerMoving");
+            Object bPathfind = invoke(body, "getVariableBoolean", new Class<?>[] { String.class }, "bPathfind");
+            Object should = behavior == null ? null : invoke0(behavior, "shouldBeMoving");
+            Object using = behavior == null ? null : invoke0(behavior, "isMovingUsingPathFind");
+            Object started = behavior == null ? null : invoke0(behavior, "hasStartedMoving");
+            Object path = invoke0(body, "getPath2");
+            Object finder = invoke0(body, "getFinder");
+            Object progress = null;
+            if (finder != null) {
+                java.lang.reflect.Field progressField = finder.getClass().getField("progress");
+                progress = progressField.get(finder);
+            }
+            Object cancelled = behavior == null ? null : invoke0(behavior, "getIsCancelled");
+            Object targetX = behavior == null ? null : invoke0(behavior, "getTargetX");
+            Object targetY = behavior == null ? null : invoke0(behavior, "getTargetY");
+            Object targetZ = behavior == null ? null : invoke0(behavior, "getTargetZ");
+            Object pathLength = behavior == null ? null : invoke0(behavior, "getPathLength");
+            Object updateCount = invoke0(body, "getSolUpdateCount");
+            Object pathExecAttempts = invoke0(body, "getSolPathExecuteAttempts");
+            Object pathExecSuccesses = invoke0(body, "getSolPathExecuteSuccesses");
+            return "state=" + shellState
+                + " pos=" + x + "," + y + "," + z
+                + " moving=" + moving
+                + " playerMoving=" + playerMoving
+                + " bPathfind=" + bPathfind
+                + " shouldBeMoving=" + should
+                + " usingPath=" + using
+                + " started=" + started
+                + " pathAttached=" + (path != null) + " progress=" + progress + " cancelled=" + cancelled + " target=" + targetX + "," + targetY + "," + targetZ + " pathLength=" + pathLength + " updateCount=" + updateCount + " pathExecAttempts=" + pathExecAttempts + " pathExecSuccesses=" + pathExecSuccesses;
+        } catch (Throwable failure) {
+            return "movement-describe-error=" + failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+        }
+    }
+
+    public static synchronized long requestTestShellRemove() {
+        if (testShell == null && !"pending".equals(shellState)) {
+            shellState = "idle";
+            return 0L;
+        }
+        long id = NEXT_REQUEST.getAndIncrement();
+        activeRequest = id;
+        shellState = "remove-pending";
+        HANDOFF.execute(() -> MainThread.queueInvokeOnMainThread(() -> completeRemove(id)));
+        return id;
+    }
+
+    private static void completeSpawn(long id, Object square) {
+        if (id != activeRequest || !"pending".equals(shellState)) return;
+        SolIsoPlayerShell body = null;
+        try {
+            if (Thread.currentThread() != MainThread.mainThread) {
+                throw new IllegalStateException("spawn not on main thread");
+            }
+            ClassLoader loader = SolBridge.class.getClassLoader();
+            Class<?> playerClass = Class.forName("zombie.characters.IsoPlayer", false, loader);
+            Object[] slotsBefore = snapshotLocalPlayers(playerClass);
+            Object instanceBefore = playerClass.getMethod("getInstance").invoke(null);
+            Object expectedInstance = slotsBefore.length > 0 && slotsBefore[0] != null
+                ? slotsBefore[0] : instanceBefore;
+
+            Object cellObject = invoke0(square, "getCell");
+            int x = ((Number) invoke0(square, "getX")).intValue();
+            int y = ((Number) invoke0(square, "getY")).intValue();
+            int z = ((Number) invoke0(square, "getZ")).intValue();
+
+            Class<?> survivorFactory = Class.forName("zombie.characters.SurvivorFactory", false, loader);
+            Object descriptorObject = survivorFactory.getMethod("CreateSurvivor").invoke(null);
+
+            try {
+                body = new SolIsoPlayerShell(
+                    (IsoCell) cellObject,
+                    (SurvivorDesc) descriptorObject,
+                    x, y, z, false
+                );
+            } finally {
+                playerClass.getMethod("setInstance", playerClass).invoke(null, expectedInstance);
+            }
+
+            int offSlot = allocateOffSlotPlayerIndex(playerClass);
+            playerClass.getMethod("setNpc", boolean.class).invoke(body, true);
+            playerClass.getField("remote").setBoolean(body, false);
+            playerClass.getField("playerIndex").setInt(body, offSlot);
+            playerClass.getField("serverPlayerIndex").setInt(body, -1);
+            playerClass.getMethod("setOnlineID", short.class).invoke(body, (short) -1);
+            playerClass.getMethod("setUsername", String.class).invoke(body, "Sol Native Test");
+
+            invoke(body, "setGhostMode", new Class<?>[] { boolean.class }, false);
+            invoke(body, "setX", new Class<?>[] { float.class }, x + 0.5f);
+            invoke(body, "setY", new Class<?>[] { float.class }, y + 0.5f);
+            invoke(body, "setZ", new Class<?>[] { float.class }, (float) z);
+
+            Class<?> squareClass = Class.forName("zombie.iso.IsoGridSquare", false, loader);
+            invoke(body, "setCurrentSquare", new Class<?>[] { squareClass }, square);
+            invoke(body, "setSquare", new Class<?>[] { squareClass }, square);
+            invoke(body, "setMovingSquare", new Class<?>[] { squareClass }, square);
+            invoke(body, "setAlphaAndTarget", new Class<?>[] { float.class }, 1.0f);
+            invoke(body, "setSceneCulled", new Class<?>[] { boolean.class }, false);
+
+            Class<?> movingClass = Class.forName("zombie.iso.IsoMovingObject", false, loader);
+            // Ensure this non-local IsoPlayer is ticked by MovingObjectUpdateScheduler.
+            invoke0(body, "addToWorld");
+            Object movingListObject = invoke0(square, "getMovingObjects");
+            if (!(movingListObject instanceof java.util.List)) {
+                throw new IllegalStateException("IsoGridSquare.getMovingObjects did not return List");
+            }
+            @SuppressWarnings("unchecked")
+            java.util.List<Object> movingList = (java.util.List<Object>) movingListObject;
+            if (!movingList.contains(body)) movingList.add(body);
+            boolean worldMember = movingList.contains(body);
+            if (!worldMember) throw new IllegalStateException("native shell not present in square moving objects");
+            Object objectListObject = invoke0(cellObject, "getObjectList");
+            if (!(objectListObject instanceof java.util.Set)) {
+                throw new IllegalStateException("IsoCell.getObjectList did not return Set");
+            }
+            @SuppressWarnings("unchecked")
+            java.util.Set<Object> objectList = (java.util.Set<Object>) objectListObject;
+            if (!objectList.contains(body)) objectList.add(body);
+            boolean scheduled = objectList.contains(body);
+            if (!scheduled) throw new IllegalStateException("native shell not scheduled in IsoCell object list");
+
+            Class<?> managerClass = Class.forName("zombie.core.skinnedmodel.ModelManager", false, loader);
+            Object manager = managerClass.getField("instance").get(null);
+            Class<?> characterClass = Class.forName("zombie.characters.IsoGameCharacter", false, loader);
+            invoke(manager, "Add", new Class<?>[] { characterClass }, body);
+
+            if (!sameSlots(slotsBefore, snapshotLocalPlayers(playerClass))) {
+                throw new IllegalStateException("local-player slots changed");
+            }
+            Object instanceAfter = playerClass.getMethod("getInstance").invoke(null);
+            if (instanceAfter != expectedInstance) {
+                playerClass.getMethod("setInstance", playerClass).invoke(null, expectedInstance);
+                throw new IllegalStateException("global IsoPlayer.instance changed");
+            }
+
+            testShell = body;
+            shellState = "ready";
+            shellFailure = "";
+            System.out.println("[SolNativeShell] READY worldMember=" + worldMember + " scheduled=" + scheduled + " " + describeTestShell());
+        } catch (Throwable failure) {
+            shellFailure = failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+            shellState = "failed";
+            if (body != null) safeRemove(body);
+            testShell = null;
+            System.err.println("[SolNativeShell] SPAWN_FAILED " + shellFailure);
+        }
+    }
+
+    private static void completeRemove(long id) {
+        if (id != activeRequest) return;
+        SolIsoPlayerShell body = testShell;
+        try {
+            if (body != null) safeRemove(body);
+            testShell = null;
+            shellFailure = "";
+            shellState = "idle";
+            System.out.println("[SolNativeShell] REMOVED");
+        } catch (Throwable failure) {
+            shellFailure = failure.getClass().getSimpleName() + ":" + clean(failure.getMessage());
+            shellState = "remove-failed";
+            System.err.println("[SolNativeShell] REMOVE_FAILED " + shellFailure);
+        }
+    }
+
+    private static void safeRemove(Object body) {
+        try {
+            ClassLoader loader = body.getClass().getClassLoader();
+            Class<?> managerClass = Class.forName("zombie.core.skinnedmodel.ModelManager", false, loader);
+            Object manager = managerClass.getField("instance").get(null);
+            Class<?> characterClass = Class.forName("zombie.characters.IsoGameCharacter", false, loader);
+            invoke(manager, "Remove", new Class<?>[] { characterClass }, body);
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> squareClass = Class.forName("zombie.iso.IsoGridSquare", false, body.getClass().getClassLoader());
+            invoke(body, "setMovingSquare", new Class<?>[] { squareClass }, new Object[] { null });
+        } catch (Throwable ignored) {}
+        try { invoke0(body, "removeFromWorld"); } catch (Throwable ignored) {}
+        try { invoke0(body, "removeFromSquare"); } catch (Throwable ignored) {}
+    }
+
+    private static int allocateOffSlotPlayerIndex(Class<?> playerClass) throws Exception {
+        Object players = playerClass.getField("players").get(null);
+        int length = Array.getLength(players);
+        for (int i = 1; i < length; i++) {
+            if (Array.get(players, i) == null) return i;
+        }
+        throw new IllegalStateException("no free non-local player index");
+    }
+
+    private static Object[] snapshotLocalPlayers(Class<?> playerClass) throws Exception {
+        Object players = playerClass.getField("players").get(null);
+        int length = Array.getLength(players);
+        Object[] result = new Object[length];
+        for (int i = 0; i < length; i++) result[i] = Array.get(players, i);
+        return result;
+    }
+
+    private static boolean sameSlots(Object[] first, Object[] second) {
+        if (first.length != second.length) return false;
+        for (int i = 0; i < first.length; i++) {
+            if (first[i] != second[i]) return false;
+        }
+        return true;
+    }
+
+    private static boolean isInLocalPlayerSlots(Object body, Class<?> playerClass) throws Exception {
+        for (Object player : snapshotLocalPlayers(playerClass)) {
+            if (player == body) return true;
+        }
+        return false;
+    }
+
+    private static Object invoke0(Object target, String name) throws Exception {
+        Method method = target.getClass().getMethod(name);
+        return method.invoke(target);
+    }
+
+    private static Object invoke(Object target, String name, Class<?>[] types, Object... args) throws Exception {
+        Method method = target.getClass().getMethod(name, types);
+        return method.invoke(target, args);
+    }
+
+    private static String clean(String value) {
+        if (value == null) return "";
+        return value.replace((char) 10, ' ').replace((char) 13, ' ');
+    }
+}

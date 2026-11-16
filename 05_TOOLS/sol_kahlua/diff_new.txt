@@ -1,0 +1,244 @@
+kahlua probes: 306 lupa probes: 306 ended: True
+GLOBAL next            K: nil
+                       L: function
+GLOBAL xpcall          K: nil
+                       L: function
+GLOBAL print           K: function
+                       L: userdata
+GLOBAL require         K: nil
+                       L: function
+GLOBAL load            K: nil
+                       L: function
+GLOBAL dofile          K: nil
+                       L: function
+GLOBAL loadfile        K: nil
+                       L: function
+GLOBAL module          K: nil
+                       L: function
+GLOBAL newproxy        K: nil
+                       L: function
+GLOBAL gcinfo          K: nil
+                       L: function
+GLOBAL io              K: nil
+                       L: table
+GLOBAL debug           K: nil
+                       L: table
+LIB string             K: __index byte char contains find format gmatch gsub len lower match rep reverse sort split sub trim upper
+                       L: byte char dump find format gfind gmatch gsub len lower match rep reverse sub upper
+LIB table              K: concat insert ipairs isempty newarray pairs remove sort wipe
+                       L: concat foreach foreachi getn insert maxn remove setn sort
+LIB math               K: abs acos asin atan atan2 ceil cos cosh deg exp floor fmod frexp huge ldexp log log10 max min modf pi pow rad sin sinh sqrt tan tanh
+                       L: abs acos asin atan atan2 ceil cos cosh deg exp floor fmod frexp huge ldexp log log10 max min mod modf pi pow rad random randomseed sin sinh sqrt tan tanh
+LIB os                 K: date difftime time
+                       L: clock date difftime execute exit getenv remove rename setlocale time tmpname
+LIB coroutine          K: __index create resume running status wrap yield
+                       L: create resume running status wrap yield
+tonumber(5,nil)        K: false, "class java.lang.Double cannot be cast to class java.lang.String (java.lang.Double and java.lang.String are in module java.base of loader 'bootstrap') java.lang.ClassCastException", "at tonumbe
+                       L: true, 5
+tonumber('5',nil)      K: true
+                       L: true, 5
+tonumber(5,10)         K: false, "class java.lang.Double cannot be cast to class java.lang.String (java.lang.Double and java.lang.String are in module java.base of loader 'bootstrap') java.lang.ClassCastException", "at tonumbe
+                       L: true, 5
+tonumber(gsub)         K: false, "base out of range java.lang.RuntimeException", "at tonumber
+                       L: false, "[string "<python>"]:22: bad argument #2 to 'tonumber' (base out of range)"
+tonumber()             K: false, "Not enough arguments java.lang.RuntimeException", "at tonumber
+                       L: false, "[string "<python>"]:24: bad argument #1 to 'tonumber' (value expected)"
+tonumber('0x10')       K: true
+                       L: true, 16
+tostring(1e15)         K: true, "1.0E15"
+                       L: true, "1e+15"
+tostring(0.1+0.2)      K: true, "0.30000000000000004"
+                       L: true, "0.3"
+nil concat             K: false, "__concat not defined for operands: a and null java.lang.RuntimeException", "at nil concat:38
+                       L: false, "[string "<python>"]:38: attempt to concatenate a nil value"
+bool concat            K: false, "__concat not defined for operands: a and true java.lang.RuntimeException", "at bool concat:39
+                       L: false, "[string "<python>"]:39: attempt to concatenate a boolean value"
+'a'+1                  K: false, "__add not defined for operands in 'a'+1 java.lang.RuntimeException", "at 'a'+1:41
+                       L: false, "[string "<python>"]:41: attempt to perform arithmetic on a string value"
+'5'<6                  K: false, "__lt not defined for operand java.lang.RuntimeException", "at '5'<6:42
+                       L: false, "[string "<python>"]:42: attempt to compare string with number"
+nil<1                  K: false, "__lt not defined for operand java.lang.RuntimeException", "at nil<1:43
+                       L: false, "[string "<python>"]:43: attempt to compare nil with number"
+#5                     K: false, "__len not defined for operand java.lang.RuntimeException", "at #5:45
+                       L: false, "[string "<python>"]:45: attempt to get length of local 'n' (a number value)"
+#nil                   K: false, "__len not defined for operand java.lang.RuntimeException", "at #nil:46
+                       L: false, "[string "<python>"]:46: attempt to get length of local 'n' (a nil value)"
+#arabic                K: true, 3
+                       L: true, 6
+len arabic             K: true, 3
+                       L: true, 6
+sub arabic             K: true, true
+                       L: true, false
+byte arabic            K: true, 51
+                       L: true, 216
+find arabic            K: true, 5, 7
+                       L: true, 8, 13
+char 1587              K: true, false
+                       L: false, "[string "<python>"]:54: bad argument #1 to 'char' (invalid value)"
+len(5)                 K: false, "__len not defined for operand java.lang.RuntimeException", "at len:86
+                       L: true, 1
+upper(nil)             K: false, "missing argument #1 to 'upper' java.lang.RuntimeException", "at upper
+                       L: false, "[string "<python>"]:59: bad argument #1 to 'upper' (string expected, got nil)"
+find nil               K: false, "java.lang.RuntimeException: missing argument #1 to 'find' java.lang.RuntimeException", "at find
+                       L: false, "[string "<python>"]:66: bad argument #1 to 'find' (string expected, got nil)"
+gsub func ret false    K: true, "null", 1
+                       L: true, "a", 1
+gsub func ret true     K: true, "null", 1
+                       L: false, "[string "<python>"]:73: invalid replacement value (a boolean)"
+gsub table             K: true, "1nullnull", 3
+                       L: false, "[string "<python>"]:74: invalid replacement value (a boolean)"
+gsub %1 nocap          K: false, "se.krka.kahlua.vm.KahluaException: invalid capture index java.lang.RuntimeException", "at gsub
+                       L: true, "a[b]c", 1
+gfind type             K: true, "nil"
+                       L: true, "function"
+bad pattern            K: false, "java.lang.RuntimeException: malformed pattern (missing ']') java.lang.RuntimeException", "at find
+                       L: false, "[string "<python>"]:89: malformed pattern (missing ']')"
+sub nil                K: false, "missing argument #2 to 'sub' java.lang.RuntimeException", "at sub
+                       L: false, "[string "<python>"]:96: bad argument #2 to 'sub' (number expected, got nil)"
+num:len                K: false, "attempted index: len of non-table: 5.0 java.lang.RuntimeException", "at num:len:101
+                       L: false, "[string "<python>"]:101: attempt to index local 'n' (a number value)"
+nil index              K: false, "attempted index: x of non-table: null java.lang.RuntimeException", "at nil index:102
+                       L: false, "[string "<python>"]:102: attempt to index local 'n' (a nil value)"
+bool index             K: false, "attempted index: x of non-table: true java.lang.RuntimeException", "at bool index:103
+                       L: false, "[string "<python>"]:103: attempt to index local 'n' (a boolean value)"
+num index              K: false, "attempted index: x of non-table: 1.0 java.lang.RuntimeException", "at num index:104
+                       L: false, "[string "<python>"]:104: attempt to index local 'n' (a number value)"
+call nil               K: false, " java.lang.RuntimeException", "at call nil:107
+                       L: false, "[string "<python>"]:107: attempt to call local 'n' (a nil value)"
+call field nil         K: false, " java.lang.RuntimeException", "at call field nil:108
+                       L: false, "[string "<python>"]:108: attempt to call field 'x' (a nil value)"
+call method nil        K: false, " java.lang.RuntimeException", "at call method nil:109
+                       L: false, "[string "<python>"]:109: attempt to call method 'x' (a nil value)"
+format %d nil          K: false, "missing argument #2 to 'format' java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:113: bad argument #2 to 'format' (number expected, got nil)"
+format %s nil          K: false, "missing argument #2 to 'format' java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:114: bad argument #2 to 'format' (string expected, got nil)"
+format %s bool         K: false, "bad argument #2 to 'format' (string expected, got nil) java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:115: bad argument #2 to 'format' (string expected, got boolean)"
+format %s table        K: false, "bad argument #2 to 'format' (string expected, got nil) java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:118: bad argument #2 to 'format' (string expected, got table)"
+format missing         K: false, "missing argument #2 to 'format' java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:119: bad argument #2 to 'format' (no value)"
+format %q              K: true, ""a\"b\
+                       L: true, ""a\"b\
+""
+format %y              K: false, "invalid option '%y' to 'format' java.lang.RuntimeException", "at format
+                       L: false, "[string "<python>"]:134: invalid option '%y' to 'format'"
+format %d huge         K: true, "1000000000000"
+                       L: true, "-2147483648"
+select -1              K: true
+                       L: true, "c"
+select 0               K: true
+                       L: false, "[string "<python>"]:140: bad argument #1 to 'select' (index out of range)"
+select nil             K: false, "Cannot invoke "java.lang.Double.doubleValue()" because "o" is null java.lang.NullPointerException", "at select
+                       L: false, "[string "<python>"]:144: bad argument #1 to 'select' (number expected, got nil)"
+unpack holes           K: true, 1
+                       L: true, 3
+unpack nil             K: false, "Cannot invoke "se.krka.kahlua.vm.KahluaTable.len()" because "t" is null java.lang.NullPointerException", "at unpack
+                       L: false, "[string "<python>"]:147: bad argument #1 to 'unpack' (table expected, got nil)"
+ipairs nil             K: false, "Expected a table java.lang.RuntimeException", "at table.ipairs
+                       L: false, "[string "<python>"]:149: bad argument #1 to 'ipairs' (table expected, got nil)"
+pairs nil              K: false, "Expected a table java.lang.RuntimeException", "at table.pairs
+                       L: false, "[string "<python>"]:150: bad argument #1 to 'pairs' (table expected, got nil)"
+pairs str              K: false, "Expected a table java.lang.RuntimeException", "at table.pairs
+                       L: false, "[string "<python>"]:152: bad argument #1 to 'pairs' (table expected, got string)"
+#holes mid             K: true, 1
+                       L: true, 3
+#holes ctor            K: true, 1
+                       L: true, 3
+#assign skip           K: true, 2
+                       L: true, 4
+nil key set            K: true, 1
+                       L: false, "[string "<python>"]:160: table index is nil"
+nan key                K: true, 1
+                       L: false, "[string "<python>"]:162: table index is NaN"
+insert nil tbl         K: false, "Cannot invoke "se.krka.kahlua.vm.KahluaTable.len()" because "t" is null java.lang.NullPointerException", "at table.insert
+                       L: false, "[string "<python>"]:168: bad argument #1 to 'insert' (table expected, got nil)"
+concat bool            K: true, "null"
+                       L: false, "[string "<python>"]:174: invalid value (boolean) at index 1 in table for 'concat'"
+concat holes           K: true, "1"
+                       L: false, "[string "<python>"]:175: invalid value (nil) at index 2 in table for 'concat'"
+sort mixed             K: false, "__lt not defined for operand java.lang.RuntimeException", "at partition_nocomp:35
+                       L: false, "attempt to compare string with number"
+sort bad cmp           K: true, 1
+                       L: false, "[string "<python>"]:180: invalid order function for sorting"
+table.getn             K: true, "nil"
+                       L: true, "function"
+table.maxn             K: true, "nil"
+                       L: true, "function"
+table.foreach          K: true, "nil"
+                       L: true, "function"
+table.wipe             K: true, "function"
+                       L: true, "nil"
+floor nil              K: false, "missing argument #1 to 'floor' java.lang.RuntimeException", "at math.floor
+                       L: false, "[string "<python>"]:190: bad argument #1 to 'floor' (number expected, got nil)"
+max none               K: true
+                       L: false, "[string "<python>"]:193: bad argument #1 to 'max' (number expected, got no value)"
+max str                K: false, "__lt not defined for operand java.lang.RuntimeException", "at max:118
+                       L: true, 2
+min nil                K: false, "__lt not defined for operand java.lang.RuntimeException", "at min:127
+                       L: false, "[string "<python>"]:195: bad argument #1 to 'min' (number expected, got nil)"
+random 0               K: false, "Object tried to call nil in random 0 java.lang.RuntimeException", "at random 0:196
+                       L: true, "number"
+random 1               K: false, "Object tried to call nil in random 1 java.lang.RuntimeException", "at random 1:197
+                       L: true, true
+random 2               K: false, "Object tried to call nil in random 2 java.lang.RuntimeException", "at random 2:198
+                       L: true, true
+random arg0            K: false, "Object tried to call nil in random arg0 java.lang.RuntimeException", "at random arg0:199
+                       L: false, "[string "<python>"]:199: bad argument #1 to 'random' (interval is empty)"
+random n,n             K: false, " java.lang.RuntimeException", "at random n,n:200
+                       L: true, 1
+random bad             K: false, "Object tried to call nil in random bad java.lang.RuntimeException", "at random bad:201
+                       L: false, "[string "<python>"]:201: bad argument #2 to 'random' (interval is empty)"
+random float           K: false, "Object tried to call nil in random float java.lang.RuntimeException", "at random float:202
+                       L: true, "number"
+pi                     K: true, 3.141592653589793
+                       L: true, 3.1415926535898
+math.mod               K: true, "nil"
+                       L: true, "function"
+atan2                  K: true, 0.7853981633974483
+                       L: true, 0.78539816339745
+atan 2arg              K: true, 0.7853981633974483
+                       L: true, 0.78539816339745
+rad                    K: true, 3.141592653589793
+                       L: true, 3.1415926535898
+frexp                  K: true, 1, 3
+                       L: true, 0.5, 4
+-5%3                   K: true, -2
+                       L: true, 1
+mod float neg          K: true, -1.5
+                       L: true, 0.5
+mod lit                K: true, -2
+                       L: true, 1
+5%-3                   K: true, 2
+                       L: true, -1
+os.clock               K: true, "nil"
+                       L: true, "function"
+os.getenv              K: true, "nil"
+                       L: true, "function"
+error str              K: false, "x", "at error
+                       L: false, "[string "<python>"]:239: x"
+error tbl              K: false, table 0x1031479068{ code=1 }, "at error
+                       L: false, table: 00000182A0AB1EA0
+error lvl              K: false, "x", "2at error
+                       L: false, "x"
+error nil              K: true
+                       L: false
+assert fail            K: false, "m", "at error
+                       L: false, "[string "<python>"]:244: m"
+assert nil             K: false, "assertion failed", "at error
+                       L: false, "[string "<python>"]:245: assertion failed!"
+rawget str             K: false, "class java.lang.String cannot be cast to class se.krka.kahlua.vm.KahluaTable (java.lang.String is in module java.base of loader 'bootstrap'; se.krka.kahlua.vm.KahluaTable is in unnamed module 
+                       L: false, "[string "<python>"]:246: bad argument #1 to 'rawget' (table expected, got string)"
+setmt nontable         K: false, "Could not set metatable for object java.lang.RuntimeException", "at setmetatable
+                       L: false, "[string "<python>"]:248: bad argument #1 to 'setmetatable' (table expected, got number)"
+vararg table           K: true, 1
+                       L: true, 3
+arg global             K: true, "nil"
+                       L: true, "table"
+pcall nonfn            K: true, false, "tried to call nil java.lang.RuntimeException", "", java.lang.RuntimeException: tried to call nil
+                       L: true, false, "attempt to call a nil value"
+cmp str num            K: false, "__lt not defined for operand java.lang.RuntimeException", "at cmp str num:271
+                       L: false, "[string "<python>"]:271: attempt to compare string with number"
+cmp bool               K: false, "__lt not defined for operand java.lang.RuntimeException", "at cmp bool:272
+                       L: false, "[string "<python>"]:272: attempt to compare two boolean values"

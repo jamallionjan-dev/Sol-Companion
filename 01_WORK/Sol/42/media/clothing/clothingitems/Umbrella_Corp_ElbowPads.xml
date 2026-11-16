@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/Umbrella/pad/M_Umbrella_Corp_ElbowPads_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/Umbrella/pad/F_Umbrella_Corp_ElbowPads_tombfit</m_FemaleModel>
+	<m_GUID>5b0eec20-afe3-4352-UMBR-3ba147eaf4ae</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_MasksFolder>Clothes\ArmsProtectionLower\Masks</m_MasksFolder>
+	<textureChoices>Clothes\Military\ArmourPads\Umbrella_Corp_ElbowPads</textureChoices>
+</clothingItem>

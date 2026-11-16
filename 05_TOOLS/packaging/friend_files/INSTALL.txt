@@ -1,0 +1,10 @@
+Sol 0.28.3 - quick install / تركيب سريع
+
+1. Copy Zomboid\mods\Sol to C:\Users\<you>\Zomboid\mods\ , and Zomboid\Lua\SolFixes_MAIN.txt to C:\Users\<you>\Zomboid\Lua\
+   انسخ Zomboid\mods\Sol لـ C:\Users\<اسمك>\Zomboid\mods\ ، وانسخ Zomboid\Lua\SolFixes_MAIN.txt لـ C:\Users\<اسمك>\Zomboid\Lua\
+2. Subscribe to ZombieBuddy on the Steam Workshop. In the game's Mods menu enable ZombieBuddy, then Sol. Approve Sol's Java file when ZombieBuddy asks.
+   اشترك بـ ZombieBuddy على الـWorkshop، وفعّل ZombieBuddy وبعدين Sol من قائمة المودات، ووافق على ملف جافا تبع سول لما يسألك.
+3. Double-click START_SOL_MIND.bat and keep its window open while playing (Python is included).
+   اكبس مرتين على START_SOL_MIND.bat وخلّي شباكو مفتوح وإنت عم تلعب (Python موجود جوّا الملف).
+4. In game open Sol's settings and set the model address (e.g. http://localhost:11434/v1 for Ollama) and the model name, or an API key.
+   باللعبة افتح إعدادات سول، وحط عنوان الموديل (مثلاً http://localhost:11434/v1 لـ Ollama) واسمو، أو مفتاح API.

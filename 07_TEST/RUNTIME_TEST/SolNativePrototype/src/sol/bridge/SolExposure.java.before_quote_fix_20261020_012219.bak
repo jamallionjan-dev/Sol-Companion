@@ -1,0 +1,88 @@
+package sol.bridge;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Map;
+import zombie.MainThread;
+
+final class SolExposure {
+    private SolExposure() {}
+    static boolean exposeNow() throws ReflectiveOperationException {
+        if (Thread.currentThread() != MainThread.mainThread) throw new IllegalStateException(
+"
+not main thread
+"
+);
+        ClassLoader loader = SolExposure.class.getClassLoader();
+        Class<?> manager = Class.forName(
+"
+zombie.Lua.LuaManager
+"
+, false, loader);
+        Field envField = manager.getField(
+"
+env
+"
+);
+        Field exposerField = manager.getField(
+"
+exposer
+"
+);
+        Object env = envField.get(null);
+        Object exposer = exposerField.get(null);
+        if (env == null || exposer == null) return false;
+        Class<?> tableClass = Class.forName(
+"
+se.krka.kahlua.vm.KahluaTable
+"
+, false, loader);
+        Method rawget = tableClass.getMethod(
+"
+rawget
+"
+, Object.class);
+        Field typeMapField = exposer.getClass().getField(
+"
+typeMap
+"
+);
+        Object typeMapValue = typeMapField.get(exposer);
+        boolean initialized = typeMapValue instanceof Map<?,?> m && m.containsKey(
+"
+function
+"
+) && m.containsKey(
+"
+table
+"
+) && rawget.invoke(env, 
+"
+IsoPlayer
+"
+) != null;
+        if (!initialized) return false;
+        if (rawget.invoke(env, 
+"
+SolBridge
+"
+) != null) return true;
+        Method setExposed = exposer.getClass().getMethod(
+"
+setExposed
+"
+, Class.class);
+        Method expose = exposer.getClass().getMethod(
+"
+exposeLikeJava
+"
+, Class.class, tableClass);
+        setExposed.invoke(exposer, SolBridge.class);
+        expose.invoke(exposer, SolBridge.class, env);
+        return rawget.invoke(env, 
+"
+SolBridge
+"
+) != null;
+    }
+}

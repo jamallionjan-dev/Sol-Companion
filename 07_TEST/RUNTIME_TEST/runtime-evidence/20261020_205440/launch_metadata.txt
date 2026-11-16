@@ -1,0 +1,16 @@
+﻿PROCEDURE=Project Zomboid bundled Java executable with the recovered test args file
+CREATED=2026-10-20T20:54:40.9545116+02:00
+JAVA=C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\jre64\bin\java.exe
+JAVA_FILE_VERSION=25.0.1
+ARGS_FILE=C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\pz-b42-sol-runtime.args
+ARGS_SHA256=96EFC8184E33F371F8946A366E485B6BFC261BC6411F8605B8A243D0BA6E6B20
+JAR=C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile\Zomboid\mods\Sol\42\media\java\SurvivorCompanionBridge.jar
+JAR_SHA256=04567303035A689DAF4744C7521637EEAEC4E7F6CBFAE99BC4B5C481BB520F3E
+WORKING_DIRECTORY=C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid
+PROFILE_ROOT=C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile
+INTENDED_COMMAND_LINE="C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\jre64\bin\java.exe" @"C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\pz-b42-sol-runtime.args"
+PRELAUNCH_PZ_COUNT=0
+PRELAUNCH_PIDS=
+PID=4484
+PROCESS_START_TIME=2026-10-20T20:54:40.9785345+02:00
+STARTED_COMMAND_LINE="C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\jre64\bin\java.exe" @"C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\pz-b42-sol-runtime.args"

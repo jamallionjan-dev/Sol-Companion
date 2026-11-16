@@ -1,0 +1,2982 @@
+module Base
+{
+    sound VoiceGraceAshcroft
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female,
+        } 
+    }
+
+    sound VoiceGraceAshcroftMeleeStab
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-12.ogg,
+			volume = 1.0,
+        } 
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-50.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-51.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-52.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-53.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-54.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-55.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-56.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-57.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-58.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-59.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-60.ogg,
+			volume = 1.0,
+        }
+    }
+
+    sound VoiceGraceAshcroftMeleeStabOnGround
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stab-12.ogg,
+			volume = 1.0,
+        } 
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-24.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-25.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-26.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-27.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-28.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-29.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-30.ogg,
+			volume = 1.0,
+        }
+    }
+
+    sound VoiceGraceAshcroftMeleeAttackHeavy
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-24.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-25.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-26.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-27.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-28.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-29.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-30.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-31.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-32.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-33.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-34.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-35.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt high-36.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftMeleeAttack
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-24.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-25.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-26.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-27.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-28.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-29.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-30.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-31.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-32.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-33.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-34.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-35.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-36.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-37.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-38.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-39.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-40.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-41.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-42.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-43.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-44.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-45.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-46.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-47.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-48.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-49.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-50.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-51.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-52.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-53.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-54.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-55.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-56.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-57.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-58.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-59.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-60.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-61.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-62.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-63.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-64.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-65.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-66.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-67.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-68.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-69.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-70.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-71.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-72.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-73.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-74.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-75.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-76.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-77.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-78.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-79.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-80.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftMeleeShove
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-24.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-25.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-26.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-27.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-28.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-29.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-30.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shove-31.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-64.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-65.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-66.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-67.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-68.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-69.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-70.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-71.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-72.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-73.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-74.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-75.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-76.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-77.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-78.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-79.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-80.ogg,
+			volume = 1.0,
+        } 
+    } 
+        
+    sound VoiceGraceAshcroftMeleeStomp
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/stomp-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-33.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-34.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-35.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-36.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-37.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-38.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-39.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-40.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-41.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-42.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-43.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-44.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-45.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-46.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-47.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-48.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/grunt-49.ogg,
+			volume = 1.0,
+        }
+    } 
+        
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftPainFromBite
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt bite-17.ogg,
+			volume = 1.0,
+        } 
+    }
+
+     sound VoiceGraceAshcroftPainFromScratch
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt low-24.ogg,
+			volume = 1.0,
+        }
+    }
+
+     sound VoiceGraceAshcroftPainFromLacerate
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-20.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftPainFromGlassCut
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/glass cut.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/glass cut-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/glass cut-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/glass cut-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/glass cut-5.ogg,
+			volume = 1.0,
+        } 
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt-20.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftPainFromFallHigh
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall high.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall high-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall high-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall high-4.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftPainFromFallLow
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt fall low-8.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftPainFromHitBlunt
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hurt blunt-12.ogg,
+			volume = 1.0,
+        } 
+    }
+
+    sound VoiceGraceAshcroftPainFromRunIntoWall
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/wall cough.ogg,
+			volume = 1.0,
+        }
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/wall hit.ogg,
+			volume = 1.0,
+        }
+
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/wall hit-2.ogg,
+			volume = 1.0,
+        } 
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftShoutHey
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-24.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/hey-25.ogg,
+			volume = 1.0,
+        } 
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftSneezeLight
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Sneeze/Light,
+        } 
+    }
+    
+    sound VoiceGraceAshcroftSneezeHeavy
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Sneeze/Heavy,
+        } 
+    }
+    
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftJumpLow
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-11.ogg,
+			volume = 1.0,
+        }  
+    }
+    
+    sound VoiceGraceAshcroftJumpHigh
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump high.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump high-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump high-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump high-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump high-5.ogg,
+			volume = 1.0,
+        }  
+    }
+    
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftDeathAlone
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death alone-11.ogg,
+			volume = 1.0,
+        }  
+    }
+    
+    sound VoiceGraceAshcroftDeathEaten
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death eaten.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death eaten-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death eaten-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death eaten-4.ogg,
+			volume = 1.0,
+        }  
+    }
+    
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftWhisperHey
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-16.ogg,
+			volume = 1.0,
+        }  
+    }
+    
+    sound VoiceGraceAshcroftWhisperPsst
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Whisper/Psst,
+        } 
+    }
+    
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftClimbWindow
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/jump low-11.ogg,
+			volume = 1.0,
+        }  
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftCough
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/cough.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/cough-2.ogg,
+			volume = 1.0,
+        }
+    }
+
+    sound VoiceGraceAshcroftSleep
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Sleep,
+        } 
+    }
+
+    sound VoiceGraceAshcroftVomit
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Vomit,
+        } 
+    }
+
+    sound VoiceGraceAshcroftSleep
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Sleep,
+        } 
+    }
+
+    sound VoiceGraceAshcroftApplyBandage
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/bandage-24.ogg,
+			volume = 1.0,
+        } 
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftSighBored
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh b.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-4.ogg,
+			volume = 1.0,
+        } 
+    } 
+
+    sound VoiceGraceAshcroftSighReliefed
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh r-4.ogg,
+			volume = 1.0,
+        } 
+    } 
+
+    sound VoiceGraceAshcroftSighSad
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/sigh-2.ogg,
+			volume = 1.0,
+        } 
+    } 
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftLureTsk
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Lure/Tsk,
+        }
+    }
+
+    sound VoiceGraceAshcroftLureCmon
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/whisper-16.ogg,
+			volume = 1.0,
+        }  
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftDeathFall
+    {
+        category = Player,	
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death high.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/death high-2.ogg,
+			volume = 1.0,
+        }  
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftDrunkHic
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Drunk/Hic,
+        }
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftExercise
+    {
+       category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Exercise,
+        }
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftFreezeShiver
+    {
+        category = Player,
+		
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shiver.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shiver-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shiver-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shiver-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/shiver-5.ogg,
+			volume = 1.0,
+        } 
+    }
+
+/******************************************************************************/
+
+    sound VoiceGraceAshcroftSmoke
+    {
+        category = Player,
+        clip
+        {
+            event = Character/Voice/Female/Smoke,
+        }
+    }
+
+    sound VoiceGraceAshcroftPainMoodle
+    {
+        category = Player,
+        clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain low-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-6.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-7.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-8.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-9.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-10.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-11.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-12.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-13.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-14.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-15.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-16.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-17.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-18.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-19.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-20.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-21.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-22.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain-23.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high-2.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high-3.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high-4.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high-5.ogg,
+			volume = 1.0,
+        }
+clip
+        {
+			file = media/sound/Voice/GraceAshcroft/pain high-6.ogg,
+			volume = 1.0,
+        }
+    }
+
+}

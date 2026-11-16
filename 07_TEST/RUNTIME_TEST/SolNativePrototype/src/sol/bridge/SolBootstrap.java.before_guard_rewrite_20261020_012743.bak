@@ -1,0 +1,44 @@
+package sol.bridge;
+
+import zombie.MainThread;
+
+public final class SolBootstrap {
+    private static volatile boolean started;
+    private static volatile boolean ready;
+    private static volatile String status = "not started";
+    private SolBootstrap() {}
+    public static synchronized void start() {
+        if (started) return;
+        started = true;
+        status = "waiting for LuaManager";
+        Thread t = new Thread(() -> {
+            long deadline = System.nanoTime() + 180_000_000_000L;
+            while (!ready && System.nanoTime() < deadline) {
+                try {
+                    if (MainThread.isRunning()) {
+                        MainThread.queueInvokeOnMainThread(() -> {
+                            try {
+                                if (SolExposure.exposeNow()) {
+                                    ready = true;
+                                    status = "ready";
+                                    System.out.println("[SolNativeBridge] READY");
+                                }
+                            } catch (Throwable x) {
+                                status = "exposure failed: " + x.getClass().getSimpleName();
+                                System.err.println("[SolNativeBridge] " + status);
+                            }
+                        });
+                    }
+                    Thread.sleep(100L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }, "SolNativeBridge-bootstrap");
+        t.setDaemon(true);
+        t.start();
+    }
+    public static boolean isReady() { return ready; }
+    public static String getStatus() { return status; }
+}

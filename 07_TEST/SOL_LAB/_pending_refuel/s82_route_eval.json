@@ -1,0 +1,859 @@
+[
+ {
+  "text": "سول سوقي السيارة",
+  "kind": "action",
+  "action": "drive",
+  "option": null,
+  "source": "log 2026-11-09 21:51:02"
+ },
+ {
+  "text": "عبي السيارة بنزين من المحطة",
+  "kind": "action",
+  "action": "refuel_at_station",
+  "option": null,
+  "source": "log 2026-11-09 21:53:39"
+ },
+ {
+  "text": "عبي السيارة بنزين من الكازية",
+  "kind": "action",
+  "action": "refuel_at_station",
+  "option": null,
+  "source": "log 2026-11-09 21:54:30"
+ },
+ {
+  "text": "عبي السيارة بنزين",
+  "kind": "action",
+  "action": "refuel_from_can",
+  "option": null,
+  "source": "log 2026-11-09 21:56:42"
+ },
+ {
+  "text": "عبي اليارة بنزين",
+  "kind": "action",
+  "action": "refuel_from_can",
+  "option": null,
+  "source": "log 2026-11-09 21:56:57"
+ },
+ {
+  "text": "سول ركبي السيارة",
+  "kind": "action",
+  "action": "board_car",
+  "option": null,
+  "source": "log 2026-11-09 22:22:08"
+ },
+ {
+  "text": "هاد بيتنا",
+  "kind": "action",
+  "action": "set_home",
+  "option": null,
+  "source": "log 2026-11-09 22:29:49"
+ },
+ {
+  "text": "سوقي السيارة عالبيت",
+  "kind": "action",
+  "action": "drive_home",
+  "option": null,
+  "source": "log 2026-11-09 22:36:32"
+ },
+ {
+  "text": "صفي السيارة بالكراج",
+  "kind": "action",
+  "action": "park",
+  "option": null,
+  "source": "log 2026-11-09 22:36:57"
+ },
+ {
+  "text": "سول صفي السيارة بالكراج",
+  "kind": "action",
+  "action": "park",
+  "option": null,
+  "source": "log 2026-11-09 22:43:28"
+ },
+ {
+  "text": "سول نزرلي من السيارة وتعالي لعندي بسرعة",
+  "kind": "action",
+  "action": "come_foot",
+  "option": null,
+  "source": "log 2026-11-09 23:01:58 (s85: two actions, out of the car then come)",
+  "steps": [
+   {
+    "action": "exit_car",
+    "option": null
+   },
+   {
+    "action": "come_foot",
+    "option": null
+   }
+  ]
+ },
+ {
+  "text": "سول نزلي من السيارة",
+  "kind": "action",
+  "action": "exit_car",
+  "option": null,
+  "source": "log 2026-11-09 23:05:23"
+ },
+ {
+  "text": "رتاحي بالبيت",
+  "kind": "action",
+  "action": "go_home_rest",
+  "option": null,
+  "source": "log 2026-11-09 23:05:39"
+ },
+ {
+  "text": "سول نزلي من السلم وتعالي",
+  "kind": "action",
+  "action": "exit_car",
+  "option": null,
+  "source": "log 2026-11-10 01:03:31"
+ },
+ {
+  "text": "تعالي لعندي",
+  "kind": "action",
+  "action": "come_car",
+  "option": null,
+  "source": "log 2026-11-10 01:03:55 (Jamal 2026-11-10: bare \"تعالي لعندي\" is come_car)"
+ },
+ {
+  "text": "سوقي السيارة للمكان المحدد عالخريطة",
+  "kind": "action",
+  "action": "drive_marker",
+  "option": null,
+  "source": "log 2026-11-10 01:04:49"
+ },
+ {
+  "text": "سول عبي السيارة بنزين من الكازية",
+  "kind": "action",
+  "action": "refuel_at_station",
+  "option": null,
+  "source": "log 2026-11-10 01:09:13"
+ },
+ {
+  "text": "سول عبي السيارة بنزيم من الكازية",
+  "kind": "action",
+  "action": "refuel_at_station",
+  "option": null,
+  "source": "log 2026-11-10 01:17:14"
+ },
+ {
+  "text": "شوفي عنا بالمخزون",
+  "kind": "action",
+  "action": "farm_report",
+  "option": null,
+  "source": "log 2026-11-10 01:44:45"
+ },
+ {
+  "text": "شغلي ضو السيارة",
+  "kind": "action",
+  "action": "sol_headlights",
+  "option": "on",
+  "source": "log 2026-11-10 01:49:43 (corrected)"
+ },
+ {
+  "text": "نزلي من السيارة",
+  "kind": "action",
+  "action": "exit_car",
+  "option": null,
+  "source": "log 2026-11-10 01:56:21"
+ },
+ {
+  "text": "ركبي معي بالسيارة",
+  "kind": "action",
+  "action": "board_car",
+  "option": null,
+  "source": "log 2026-11-10 01:56:54"
+ },
+ {
+  "text": "سوقي السيارة عالمكان المحدد عالخريطة",
+  "kind": "action",
+  "action": "drive_marker",
+  "option": null,
+  "source": "log 2026-11-10 01:58:30"
+ },
+ {
+  "text": "سوقي عالبيت وصفي السيارة بالكراج",
+  "kind": "action",
+  "action": "drive_home",
+  "option": null,
+  "source": "log 2026-11-10 02:01:25"
+ },
+ {
+  "text": "سوقي عالبيت",
+  "kind": "action",
+  "action": "drive_home",
+  "option": null,
+  "source": "log 2026-11-10 02:01:44"
+ },
+ {
+  "text": "سول هاد بيتنا",
+  "kind": "action",
+  "action": "set_home",
+  "option": null,
+  "source": "log 2026-11-10 03:38:13"
+ },
+ {
+  "text": "سوقي هي السيارة",
+  "kind": "action",
+  "action": "drive",
+  "option": null,
+  "source": "log 2026-11-10 04:07:36"
+ },
+ {
+  "text": "ركبي بالسيارة",
+  "kind": "action",
+  "action": "come_car",
+  "option": null,
+  "source": "log 2026-11-10 04:10:50"
+ },
+ {
+  "text": "صفي بكراج البيت",
+  "kind": "action",
+  "action": "park",
+  "option": null,
+  "source": "log 2026-11-10 04:36:43"
+ },
+ {
+  "text": "طفي السيارة",
+  "kind": "action",
+  "action": "sol_engine",
+  "option": "off",
+  "source": "log 2026-11-10 04:37:21"
+ },
+ {
+  "text": "ونزلي من السيارة",
+  "kind": "action",
+  "action": "exit_car",
+  "option": null,
+  "source": "log 2026-11-10 04:37:36"
+ },
+ {
+  "text": "سول لو سمحتي احرثي الارض",
+  "kind": "action",
+  "action": "plow",
+  "option": null,
+  "source": "log 2026-11-10 05:11:38 (corrected)"
+ },
+ {
+  "text": "سول لو سمحتي ازرعي البذور المناسبة",
+  "kind": "action",
+  "action": "plant",
+  "option": null,
+  "source": "log 2026-11-10 05:22:13"
+ },
+ {
+  "text": "زكاتك اسقي الزرع",
+  "kind": "action",
+  "action": "water",
+  "option": null,
+  "source": "log 2026-11-10 05:33:22"
+ },
+ {
+  "text": "سول خلص روحي رتاحي بالبيت",
+  "kind": "action",
+  "action": "go_home_rest",
+  "option": null,
+  "source": "log 2026-11-10 06:03:03"
+ },
+ {
+  "text": "سول انتي فايقة",
+  "kind": "action",
+  "action": "awake",
+  "option": null,
+  "source": "log 2026-11-10 17:39:17"
+ },
+ {
+  "text": "ركبي السيارة",
+  "kind": "action",
+  "action": "board_car",
+  "option": null,
+  "source": "log 2026-11-10 17:39:38"
+ },
+ {
+  "text": "شغلي الضو",
+  "kind": "action",
+  "action": "sol_headlights",
+  "option": "on",
+  "source": "log 2026-11-10 17:53:45"
+ },
+ {
+  "text": "طفي ضو السيارة",
+  "kind": "action",
+  "action": "sol_headlights",
+  "option": "off",
+  "source": "log 2026-11-10 17:54:10"
+ },
+ {
+  "text": "طفي محرك السيارة",
+  "kind": "action",
+  "action": "sol_engine",
+  "option": "off",
+  "source": "log 2026-11-10 17:54:22"
+ },
+ {
+  "text": "سوقي السيارة",
+  "kind": "action",
+  "action": "drive",
+  "option": null,
+  "source": "log 2026-11-10 17:55:39"
+ },
+ {
+  "text": "صفي باقرب كراج",
+  "kind": "action",
+  "action": "park",
+  "option": null,
+  "source": "log 2026-11-10 17:57:25"
+ },
+ {
+  "text": "طيب خلص طفي محرك السيارة ونزلي منها",
+  "kind": "action",
+  "action": "exit_car",
+  "option": null,
+  "source": "log 2026-11-10 18:07:47 (s85: two actions, engine off then out)",
+  "steps": [
+   {
+    "action": "sol_engine",
+    "option": "off"
+   },
+   {
+    "action": "exit_car",
+    "option": null
+   }
+  ]
+ },
+ {
+  "text": "رتّبي الأغراض",
+  "kind": "action",
+  "action": "sort_items",
+  "option": null,
+  "source": "log 2026-11-10 18:08:42"
+ },
+ {
+  "text": "انتي فايقة؟",
+  "kind": "action",
+  "action": "awake",
+  "option": null,
+  "source": "log 2026-11-10 19:43:38"
+ },
+ {
+  "text": "شو في سيارات حواليكي؟",
+  "kind": "action",
+  "action": "cars_near",
+  "option": null,
+  "source": "log 2026-11-10 19:44:00 (corrected)"
+ },
+ {
+  "text": "تعال بالسيارة",
+  "kind": "action",
+  "action": "come_car",
+  "option": null,
+  "source": "log 2026-11-10 19:45:33"
+ },
+ {
+  "text": "تعال مشي",
+  "kind": "action",
+  "action": "come_foot",
+  "option": null,
+  "source": "log 2026-11-10 19:51:03"
+ },
+ {
+  "text": "دبريلي الارض بغيابي",
+  "kind": "action",
+  "action": "farm_keeper",
+  "option": null,
+  "source": "log 2026-11-10 20:00:02"
+ },
+ {
+  "text": "سول اسقي الزرع",
+  "kind": "action",
+  "action": "water",
+  "option": null,
+  "source": "log 2026-11-10 20:03:29"
+ },
+ {
+  "text": "عطيني سلاحي السري",
+  "kind": "action",
+  "action": "secret_loadout",
+  "option": null,
+  "source": "log 2026-11-10 20:35:54"
+ },
+ {
+  "text": "شوفي سيارات حوليكي",
+  "kind": "action",
+  "action": "cars_near",
+  "option": null,
+  "source": "log 2026-11-10 20:41:44 (corrected)"
+ },
+ {
+  "text": "تعالي بالسيارة",
+  "kind": "action",
+  "action": "come_car",
+  "option": null,
+  "source": "log 2026-11-10 20:44:49"
+ },
+ {
+  "text": "سول افحصي المكان حوليكي",
+  "kind": "action",
+  "action": "survey",
+  "option": null,
+  "source": "log 2026-11-10 20:45:53"
+ },
+ {
+  "text": "اركبي السيارة",
+  "kind": "action",
+  "action": "board_car",
+  "option": null,
+  "source": "log 2026-11-10 20:46:14"
+ },
+ {
+  "text": "سول عطيني سلاحي السري",
+  "kind": "action",
+  "action": "secret_loadout",
+  "option": null,
+  "source": "log 2026-11-10 21:29:17"
+ },
+ {
+  "text": "سول سوقي عالبيت",
+  "kind": "action",
+  "action": "drive_home",
+  "option": null,
+  "source": "log 2026-11-10 21:30:25"
+ },
+ {
+  "text": "سول طفي محرك السيارة",
+  "kind": "action",
+  "action": "sol_engine",
+  "option": "off",
+  "source": "log 2026-11-10 21:32:03"
+ },
+ {
+  "text": "سول رتاحي بالبيت",
+  "kind": "action",
+  "action": "go_home_rest",
+  "option": null,
+  "source": "log 2026-11-10 21:33:04"
+ },
+ {
+  "text": "سول شو في سيارات حواليكي",
+  "kind": "action",
+  "action": "cars_near",
+  "option": null,
+  "source": "log 2026-11-10 21:35:08"
+ },
+ {
+  "text": "سول افحصي المكان حواليكي",
+  "kind": "action",
+  "action": "survey",
+  "option": null,
+  "source": "log 2026-11-10 21:35:28"
+ },
+ {
+  "text": "سول شو في سيارات حواليكي؟",
+  "kind": "action",
+  "action": "cars_near",
+  "option": null,
+  "source": "log 2026-11-10 21:36:03"
+ },
+ {
+  "text": "سول شغلي ضو السيارة",
+  "kind": "action",
+  "action": "sol_headlights",
+  "option": "on",
+  "source": "log 2026-11-10 21:46:52"
+ },
+ {
+  "text": "سول زمري بالسيارة",
+  "kind": "action",
+  "action": "sol_horn",
+  "option": "once",
+  "source": "log 2026-11-10 21:47:20"
+ },
+ {
+  "text": "سول طفي ضو السيارة",
+  "kind": "action",
+  "action": "sol_headlights",
+  "option": "off",
+  "source": "log 2026-11-10 22:03:18"
+ },
+ {
+  "text": "سول طفي متور السيارة",
+  "kind": "action",
+  "action": "sol_engine",
+  "option": "off",
+  "source": "log 2026-11-10 22:15:41 (corrected)"
+ },
+ {
+  "text": "شو اسم المدينة",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "شو اسم هالشارع",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "شو اسم هالمدينة",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "شو اسم هي المدينة",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "شو اسم هاد الشارع",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "بأي شارع نحنا",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "وين نحنا هلأ",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "بأي ضيعة نحنا",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "شو هالكازية",
+  "kind": "memory",
+  "action": "none",
+  "option": null,
+  "source": "map answer (path=memory before 2026-11-10 22:22)"
+ },
+ {
+  "text": "اركبي بالسيارة بأي محل فاضي",
+  "kind": "action",
+  "action": "board_vehicle",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "فلي من هالسيارة",
+  "kind": "action",
+  "action": "exit_vehicle",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "احملي زيادة عادي ما في مشكلة",
+  "kind": "action",
+  "action": "set_allow_overload",
+  "option": "on",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "انتشروا وانتو ورايي",
+  "kind": "action",
+  "action": "set_follow_fan_out",
+  "option": "on",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "لا تطخي هلأ",
+  "kind": "action",
+  "action": "set_hold_fire",
+  "option": "on",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "لا تركبي معي بالسيارة",
+  "kind": "action",
+  "action": "set_ride_with_player",
+  "option": "off",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "فتشي عالأغراض إذا الوضع أمان",
+  "kind": "action",
+  "action": "set_scavenge",
+  "option": "on",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "اضربي الزومبي القريب",
+  "kind": "action",
+  "action": "sol_attack_nearest",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "ضمديلي جرحي بسرعة",
+  "kind": "action",
+  "action": "sol_bandage_player",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "استنيني بالسيارة لحتى إرجع",
+  "kind": "action",
+  "action": "sol_car_wait",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "سكري هالباب",
+  "kind": "action",
+  "action": "sol_close_door",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "اطبخي بيض لو سمحتي",
+  "kind": "action",
+  "action": "sol_cook",
+  "option": "egg",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "اطبخيلي شي وجيبيلي ياه عالسريع",
+  "kind": "action",
+  "action": "sol_cook_and_serve",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "اشربي شوية مي",
+  "kind": "action",
+  "action": "sol_drink",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "سوقينا عالمستشفى بسرعة",
+  "kind": "action",
+  "action": "sol_drive",
+  "option": "المستشفى",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "كلي شي انتي",
+  "kind": "action",
+  "action": "sol_eat",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "طلعي البارودة هلأ",
+  "kind": "action",
+  "action": "sol_equip_best",
+  "option": "gun",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "جيبيلي كتاب من الخزانة اللي هونيك",
+  "kind": "action",
+  "action": "sol_fetch",
+  "option": "book",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "عبي القنينة مي من الحنفية",
+  "kind": "action",
+  "action": "sol_fill_water",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "شغلي مضخة البنزين هون",
+  "kind": "action",
+  "action": "sol_fuel",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "عطيني شوية مي",
+  "kind": "action",
+  "action": "sol_give",
+  "option": "water",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "فوتي لجوا البيت",
+  "kind": "action",
+  "action": "sol_go_inside",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "امشي لعند البيت هلأ",
+  "kind": "action",
+  "action": "sol_goto",
+  "option": "home",
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "امسحي الوجهة من الجي بي اس هلأ",
+  "kind": "action",
+  "action": "sol_gps_clear",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "افتحي هالباب",
+  "kind": "action",
+  "action": "sol_open_door",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "افتحي الشباك شوي",
+  "kind": "action",
+  "action": "sol_open_window",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "الغي الخطة",
+  "kind": "action",
+  "action": "sol_plan_cancel",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "شو صار بالخطة هلأ",
+  "kind": "action",
+  "action": "sol_plan_status",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "اقري كتاب شوي",
+  "kind": "action",
+  "action": "sol_read",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "بدلي مخزن الفرد",
+  "kind": "action",
+  "action": "sol_reload",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "غيري الشاش الوسخ تبعك",
+  "kind": "action",
+  "action": "sol_replace_bandage",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "تمددي شوي عالتخت",
+  "kind": "action",
+  "action": "sol_rest",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "قعدي جنبي قدام بالسيارة",
+  "kind": "action",
+  "action": "sol_sit_beside",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "طفي الغاز بسرعة",
+  "kind": "action",
+  "action": "sol_stove_off",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "ولعي الغاز لنطبخ",
+  "kind": "action",
+  "action": "sol_stove_on",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "خدي حبة مسكن للوجع",
+  "kind": "action",
+  "action": "sol_take_pill",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "قعدي ورا الدركسيون بس لا تمشي",
+  "kind": "action",
+  "action": "sol_take_wheel",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "روحي اغسلي حالك",
+  "kind": "action",
+  "action": "sol_wash",
+  "option": null,
+  "mock": "card",
+  "source": "s90: an action the old card never showed (two-tier card, its examples for this line)"
+ },
+ {
+  "text": "سول عطيني الدركسيون",
+  "kind": "action",
+  "action": "sol_let_player_drive",
+  "option": null,
+  "mock": "card",
+  "source": "s122: direct handoff from Sol to the player in the same vehicle"
+ }
+]

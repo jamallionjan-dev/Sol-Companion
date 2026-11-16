@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "capabilities": [
+    {
+      "id": "movement.follow",
+      "owner": "SCCommands/SCNavigation",
+      "status": "runtime_proven_history",
+      "sources": ["client/SCCommands.lua", "client/SCNavigation.lua"],
+      "contracts": ["handleFollow", "follow_formation"]
+    },
+    {
+      "id": "movement.go_to",
+      "owner": "SCAIToolGateway/SCCommands/SCNavigation",
+      "status": "runtime_proven_history",
+      "sources": ["client/SCAIToolGateway.lua", "client/SCCommands.lua", "client/SCNavigation.lua"],
+      "contracts": ["go_to", "move_to"]
+    },
+    {
+      "id": "scavenge.world_containers",
+      "owner": "SCEncounter",
+      "status": "source_and_offline",
+      "sources": ["client/SCEncounter.lua"],
+      "contracts": ["candidateContainers", "scavengeOffsets", "loot_container", "scoreContainer"]
+    },
+    {
+      "id": "loadout.weapon_need",
+      "owner": "SCLogistics/SCEncounter",
+      "status": "source_and_offline",
+      "sources": ["client/SCLogistics.lua", "client/SCEncounter.lua"],
+      "contracts": ["TIER.desperate", "needTier", "weaponAvailability", "wanted.weapon"]
+    },
+    {
+      "id": "loadout.ammunition_need",
+      "owner": "SCLogistics",
+      "status": "source_and_offline",
+      "sources": ["client/SCLogistics.lua"],
+      "contracts": ["category == \"ammunition\"", "TIER.important"]
+    },
+    {
+      "id": "combat.weapon_select_equip_reload",
+      "owner": "SCCombat",
+      "status": "source_and_offline",
+      "sources": ["client/SCCombat.lua"],
+      "contracts": ["chooseWeapon", "equipPreferred", "hasReloadAmmo", "reload"]
+    },
+    {
+      "id": "combat.target_control",
+      "owner": "SCAIToolGateway/SCCombat",
+      "status": "offline",
+      "sources": ["client/SCAIToolGateway.lua", "client/SCCombat.lua"],
+      "contracts": ["designate_target", "fire_at_will", "hold_fire"]
+    },
+    {
+      "id": "vehicle.board_driver",
+      "owner": "SCVehicle",
+      "status": "offline_requires_runtime",
+      "sources": ["client/SCVehicle.lua"],
+      "contracts": ["boardDriver", "driverSeat = true", "seat zero"]
+    },
+    {
+      "id": "vehicle.route_drive",
+      "owner": "SCDriving/native bridge",
+      "status": "runtime_blocked",
+      "sources": ["client/SCDriving.lua", "client/SolGPS.lua"],
+      "contracts": ["driveStart", "driveFollow", "Driving.drive", "player_aboard"]
+    },
+    {
+      "id": "vehicle.solo_rescue_drive",
+      "owner": "SolGPS",
+      "status": "offline_requires_runtime",
+      "sources": ["client/SolGPS.lua"],
+      "contracts": ["G.solo", "gpsStart", "solo driving"]
+    },
+    {
+      "id": "persistence.identity",
+      "owner": "SCPersistence/SCRegistry",
+      "status": "source_requires_runtime_continuity",
+      "sources": ["client/SCPersistence.lua", "shared/SCRegistry.lua"],
+      "contracts": ["saved.id", "requestedId", "record.id"]
+    }
+  ],
+  "behavior_requirements": {
+    "emergency_rescue": [
+      "movement.go_to",
+      "vehicle.board_driver",
+      "vehicle.route_drive",
+      "vehicle.solo_rescue_drive",
+      "combat.target_control"
+    ],
+    "emergency_rescue_showcase": [
+      "movement.go_to",
+      "scavenge.world_containers",
+      "loadout.weapon_need",
+      "loadout.ammunition_need",
+      "combat.weapon_select_equip_reload",
+      "vehicle.board_driver",
+      "vehicle.route_drive",
+      "vehicle.solo_rescue_drive",
+      "combat.target_control"
+    ]
+  }
+}

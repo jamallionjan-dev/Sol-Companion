@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/UndeadSurvivor/M_NomadBoots_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/UndeadSurvivor/F_NomadBoots_tombfit</m_FemaleModel>
+	<m_GUID>c96b4f79-bb11-4625-bde5-b1c9f18d607a</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone></m_AttachBone>
+	<m_MasksFolder>media/textures/Clothes/Hat/Masks</m_MasksFolder>
+	<textureChoices>clothes\NomadBoots</textureChoices>
+</clothingItem>

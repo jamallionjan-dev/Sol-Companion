@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/SCPPack/m_scpguardvest_light_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/SCPPack/f_scpguardvest_light_tombfit</m_FemaleModel>
+	<m_GUID>ffb1be85-b3c8-4e2e-9ea8-12c621b6daf3</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>clothes\vest\scpguardvest</textureChoices>
+</clothingItem>

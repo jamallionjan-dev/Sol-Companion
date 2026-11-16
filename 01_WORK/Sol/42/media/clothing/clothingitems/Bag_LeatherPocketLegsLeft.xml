@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/TLOU/accessory/M_Bag_LeatherPocketLeg_Left_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/TLOU/accessory/F_Bag_LeatherPocketLeg_Left_tombfit</m_FemaleModel>
+	<m_GUID>44aae196-987d-4c4c-9e05-9e2d872ff6e0</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>TLOULeatherPocket</textureChoices>
+	<m_MasksFolder>media/textures/Clothes/Hat/Masks</m_MasksFolder>
+</clothingItem>

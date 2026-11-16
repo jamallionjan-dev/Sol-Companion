@@ -1,0 +1,2152 @@
+-- SPDX-License-Identifier: MIT
+
+if type(require) == "function" then
+    require "SCNamespace"
+    require "SCCall"
+    require "SCConfig"
+    require "SCRegistry"
+    require "SCDiagnostics"
+    require "SCActionSupervisor"
+end
+
+local SC = SurvivorCompanion
+SC.Vehicle = SC.Vehicle or {}
+
+local vehicleService = SC.Vehicle
+local storedById = {}
+local reservations = {}
+local manifests = {}
+local lastVehicleShotAt = setmetatable({}, { __mode = "k" })
+local transactions = setmetatable({}, { __mode = "k" })
+local seatResources = {}
+local driverKeyRecoveries = {}
+local stationary
+
+local function traceBoarding(actor, event, detail)
+    if not SC.Diagnostics or type(SC.Diagnostics.report) ~= "function" then return end
+    local id = SC.Registry and type(SC.Registry.idOf) == "function"
+        and SC.Registry.idOf(actor) or nil
+    SC.Diagnostics.report("vehicle-boarding-" .. tostring(event), id,
+        tostring(event), detail)
+end
+
+local function method(object, name)
+    if object == nil then return nil end
+    local ok, value = pcall(function() return object[name] end)
+    return ok and type(value) == "function" and value or nil
+end
+
+local function invoke(object, name, ...)
+    return SC.Call.method(object, name, ...)
+end
+
+local function finite(value, fallback)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge then
+        return fallback
+    end
+    return value
+end
+
+local function vehicleIdentity(vehicle)
+    if vehicle == nil then return nil end
+    local idOk, id = invoke(vehicle, "getId")
+    local scriptOk, script = invoke(vehicle, "getScriptName")
+    local xOk, x = invoke(vehicle, "getX")
+    local yOk, y = invoke(vehicle, "getY")
+    local zOk, z = invoke(vehicle, "getZ")
+    if not idOk or id == nil or not xOk or not yOk then return nil end
+    -- getId() is a runtime slot the game reassigns whenever it loads the car.
+    -- The vehicle database id survives unloading and restarts.
+    local sqlOk, sqlId = invoke(vehicle, "getSqlId")
+    sqlId = sqlOk and math.floor(finite(sqlId, -1)) or -1
+    return {
+        id = math.floor(finite(id, -1)),
+        sqlId = sqlId >= 0 and sqlId or nil,
+        script = scriptOk and tostring(script or "") or "",
+        x = finite(x, 0),
+        y = finite(y, 0),
+        z = zOk and finite(z, 0) or 0,
+    }
+end
+
+local function keyFor(identity)
+    if type(identity) ~= "table" then return nil end
+    return tostring(identity.id) .. ":" .. tostring(identity.script or "")
+end
+
+local function seatKey(identity, seat)
+    local key = keyFor(identity)
+    return key and (key .. ":" .. tostring(seat)) or nil
+end
+
+local function seatResource(reservation)
+    if reservation == nil then return nil end
+    local resource = seatResources[reservation]
+    if resource == nil then
+        resource = { kind = "vehicle_seat", key = reservation }
+        seatResources[reservation] = resource
+    end
+    return resource
+end
+
+local function supervisor()
+    return type(SC.ActionSupervisor) == "table" and SC.ActionSupervisor or nil
+end
+
+local function transactionIsCurrent(transaction)
+    local service = supervisor()
+    return type(transaction) == "table" and service ~= nil
+        and type(service.isCurrent) == "function"
+        and service.isCurrent(transaction.supervisorToken)
+end
+
+local function clearTransaction(actor, transaction)
+    if transactions[actor] == transaction then transactions[actor] = nil end
+end
+
+local function actorIsOnFoot(actor)
+    local vehicleOk, current = invoke(actor, "getVehicle")
+    return vehicleOk and current == nil
+end
+
+local function cancelTransactionState(actor, reason, token)
+    local transaction = transactions[actor]
+    if transaction == nil or transaction.supervisorToken ~= token then return true end
+    if transaction.moduleReservationClaimed == true and actorIsOnFoot(actor)
+        and reservations[transaction.reservation] == transaction.actorId then
+        reservations[transaction.reservation] = nil
+    end
+    traceBoarding(actor, "cancelled", "seat=" .. tostring(transaction.seat)
+        .. " reason=" .. tostring(reason))
+    clearTransaction(actor, transaction)
+    return true, reason or "vehicle_transaction_cancelled"
+end
+
+local function finishTransaction(transaction, succeeded, reason, detail)
+    if type(transaction) ~= "table" then return false, "vehicle_transaction_missing" end
+    local service = supervisor()
+    local token = transaction.supervisorToken
+    if succeeded ~= true and transaction.moduleReservationClaimed == true
+        and not (type(detail) == "table" and detail.preserveReservation == true)
+        and actorIsOnFoot(transaction.actor)
+        and reservations[transaction.reservation] == transaction.actorId then
+        reservations[transaction.reservation] = nil
+    end
+    traceBoarding(transaction.actor, succeeded == true and "complete" or "failed",
+        "seat=" .. tostring(transaction.seat) .. " reason=" .. tostring(reason))
+    clearTransaction(transaction.actor, transaction)
+    if service == nil or type(token) ~= "table" then return succeeded, reason end
+    if succeeded == true and type(service.complete) == "function" then
+        service.complete(token, reason or "vehicle_transaction_complete", detail)
+    elseif succeeded ~= true and type(service.fail) == "function" then
+        service.fail(token, reason or "vehicle_transaction_failed", detail)
+    end
+    if transaction.actor ~= nil and SC.Actor
+        and type(SC.Actor.isCompanion) == "function"
+        and not SC.Actor.isCompanion(transaction.actor)
+        and type(SC.Actor.finishDeferredRuntimeRelease) == "function" then
+        SC.Actor.finishDeferredRuntimeRelease(transaction.actor,
+            "vehicle_transaction_terminal")
+    end
+    return succeeded, reason
+end
+
+local function beginTransaction(actor, vehicle, seat, action, intent)
+    local service = supervisor()
+    if service == nil or type(service.begin) ~= "function"
+        or type(service.reserve) ~= "function" then
+        return nil, "action_supervisor_unavailable"
+    end
+    if not SC.Actor.isCompanion(actor) then return nil, "actor is not an active companion" end
+    local identity = vehicleIdentity(vehicle)
+    if identity == nil then return nil, "vehicle identity is unavailable" end
+    seat = math.floor(finite(seat, -1))
+    -- Seat zero is the driver's. Boarding it needs the driving path's flag;
+    -- leaving it, like any seat the companion really sits in, is always allowed.
+    local driverAllowed = action ~= "board_vehicle"
+        or type(intent) == "table" and intent.driverSeat == true
+    if seat < 0 or seat == 0 and not driverAllowed then
+        return nil, "native vehicle seat is invalid"
+    end
+    local reservation = seatKey(identity, seat)
+    local id = SC.Registry.idOf(actor)
+    if id == nil then return nil, "companion identity is unavailable" end
+    local existing = transactions[actor]
+    if transactionIsCurrent(existing) then
+        if existing.action == action and existing.vehicle == vehicle and existing.seat == seat then
+            return existing, "already_active"
+        end
+    else
+        transactions[actor] = nil
+    end
+    local explicit = type(intent) == "table" and (intent.immediateCommand == true
+        or intent.playerCommand == true)
+    local targetKey = action .. ":" .. tostring(reservation)
+    local token, beginReason, retry = service.begin(actor, {
+        owner = "vehicle",
+        action = action,
+        priority = explicit and service.Priority.PLAYER or service.Priority.TRAVEL,
+        targetKey = targetKey,
+        targetLabel = tostring(identity.script or "vehicle") .. " seat " .. tostring(seat),
+        phase = action == "board_vehicle" and "approaching" or "selected",
+        -- Followers can start from well outside the passenger-door radius and
+        -- must queue around other companions. The generic 15 second approach
+        -- deadline falsely expired a valid manifest before they reached the car.
+        deadlines = action == "board_vehicle" and { approaching = 60000 } or nil,
+        allowedActions = {
+            approach_vehicle = true,
+            board_vehicle = true,
+            exit_vehicle = true,
+            ready_weapon = true,
+            lower_weapon = true,
+        },
+        metadata = { seat = seat, vehicleKey = keyFor(identity) },
+        onCancel = cancelTransactionState,
+        -- Sol: a fresh order from the player or Sol Mind is a new decision, not
+        -- a retry. Without this, four failed attempts left the ledger
+        -- "exhausted" with no expiry and every later board/wheel order was
+        -- refused with retry_exhausted for the rest of the session.
+        ignoreRetry = explicit and (type(rawget(_G, "SolAuthority")) == "table" and type(SolAuthority.on) == "function" and SolAuthority.on("retry_reset")) or false,   -- Sol fix 1
+    })
+    if token == nil then
+        if service.containsDeferredStatus and service.containsDeferredStatus(beginReason) then
+            -- Urgent survival work was dispatched for this actor during begin(); the
+    -- companion is committed to it this cycle.  That is the urgent succeeding,
+    -- not this action failing, so report a deferral the decision layer can
+    -- recognise instead of a refusal that would cool the target down.
+            return nil, "deferred:" .. tostring(beginReason)
+        end
+        return nil, beginReason, retry
+    end
+    local resource = seatResource(reservation)
+    local reserved, reserveReason = service.reserve(token, resource,
+        "passenger seat " .. tostring(seat))
+    if reserved ~= true then
+        service.fail(token, "vehicle_seat_reservation_failed", { reason = reserveReason })
+        return nil, reserveReason
+    end
+    local claimed = reservations[reservation] == nil
+    if reservations[reservation] ~= nil and reservations[reservation] ~= id then
+        service.fail(token, "vehicle_seat_reserved_by_other", { seat = seat })
+        return nil, "vehicle seat is reserved by another companion"
+    end
+    reservations[reservation] = id
+    local transaction = {
+        actor = actor,
+        actorId = id,
+        action = action,
+        vehicle = vehicle,
+        identity = identity,
+        vehicleKey = keyFor(identity),
+        seat = seat,
+        reservation = reservation,
+        resource = resource,
+        moduleReservationClaimed = claimed,
+        supervisorToken = token,
+    }
+    transactions[actor] = transaction
+    return transaction, "started"
+end
+
+local function coordinates(value)
+    local xOk, x = invoke(value, "getX")
+    local yOk, y = invoke(value, "getY")
+    local zOk, z = invoke(value, "getZ")
+    if not xOk or not yOk then return nil end
+    return finite(x, nil), finite(y, nil), zOk and finite(z, 0) or 0
+end
+
+-- getEnterSeatDistance takes a Java int seat. A nil seat throws inside the
+-- game, and the engine logs each throw even though the call is protected.
+local function doorDistanceSquared(vehicle, seat, x, y)
+    if type(seat) ~= "number" then return nil end
+    local ok, distance = invoke(vehicle, "getEnterSeatDistance", seat, x, y)
+    distance = ok and finite(distance, -1) or -1
+    return distance >= 0 and distance or nil
+end
+
+local nearbyVehicleSquares
+
+local function exteriorArea(vehicle, seat)
+    local scriptOk, script = invoke(vehicle, "getScript")
+    if scriptOk and script ~= nil then
+        local passengerOk, passenger = invoke(script, "getPassenger", seat)
+        if passengerOk and passenger ~= nil then
+            local positionOk, position = invoke(passenger,
+                "getPositionById", "outside")
+            if positionOk then
+                if position == nil then return nil, true end
+                local areaOk, area = invoke(position, "getArea")
+                if areaOk then return area, true end
+            end
+        end
+    end
+    local positionOk, position = invoke(vehicle,
+        "getPassengerPosition", seat, "outside")
+    if not positionOk then return nil, false end
+    -- A provider may omit this accessor even when native seat distance and
+    -- exit-square checks work. Only a missing scripted outside position is
+    -- authoritative evidence that the seat has no exterior entry.
+    if position == nil then return nil, false end
+    local areaOk, area = invoke(position, "getArea")
+    return areaOk and area or nil, areaOk
+end
+
+-- A VanSeats rear seat inherits the middle-door area even though it must be
+-- reached by switching seats. Use script areas, since the native position
+-- accessor may return nil for a middle seat after it becomes occupied.
+local function hasExteriorEntry(vehicle, seat)
+    local area, known = exteriorArea(vehicle, seat)
+    if not known then return true end -- Lightweight providers.
+    if type(area) ~= "string" or area == "" then return false end
+    -- A vehicle with one door for everybody (an APC's rear ramp): nobody has to climb past anybody.
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    local firstArea = select(1, exteriorArea(vehicle, 0))
+    local oneDoor = countOk and type(count) == "number" and count > 1 and firstArea == area
+    if oneDoor then
+        for otherSeat = 1, count - 1 do
+            local otherArea = select(1, exteriorArea(vehicle, otherSeat))
+            if type(otherArea) == "string" and otherArea ~= "" and otherArea ~= area then oneDoor = false; break end
+        end
+    end
+    if oneDoor then return true end
+    for otherSeat = 0, seat - 1 do
+            local otherArea = select(1, exteriorArea(vehicle, otherSeat))
+            local switchOk, canSwitch = invoke(vehicle,
+                "canSwitchSeat", otherSeat, seat)
+            if otherArea == area and switchOk and canSwitch == true then
+                return false
+            end
+    end
+    return true
+end
+
+-- A car whose chunk has unloaded still answers some calls, and sitting in it corrupts the saved car (NPE VehiclesDB2, 2026-11-09 10:38).
+local function goneFromWorld(vehicle)
+    local ok, removed = invoke(vehicle, "isRemovedFromWorld")
+    return ok and removed == true
+end
+
+local function availableSeat(vehicle, identity, seat, actorId)
+    local installedOk, installed = invoke(vehicle, "isSeatInstalled", seat)
+    local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", seat)
+    if not installedOk or installed ~= true or not occupiedOk or occupied == true then
+        return false
+    end
+    local reservation = seatKey(identity, seat)
+    local owner = reservation ~= nil and reservations[reservation] or nil
+    return reservation ~= nil and (owner == nil or owner == actorId)
+end
+
+local function frontSeatOnly(actor)
+    local id = actor and SC.Registry and SC.Registry.idOf(actor)
+    local record = id and SC.Registry.byId(id)
+    if not record or record.recruited ~= true or not SC.Oddballs
+        or type(SC.Oddballs.groupForActor) ~= "function" then return false end
+    local group = SC.Oddballs.groupForActor(actor)
+    return group and group.oddball
+        and group.oddball.id == "loretta_ten_and_two" or false
+end
+
+local function chooseSeat(vehicle, actor, requested, identity, allowDriver)
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    count = countOk and math.floor(finite(count, -1)) or -1
+    if count < 2 or count > 32 then
+        return nil, "vehicle has no bounded passenger seat"
+    end
+    local requestedNumber = tonumber(requested)
+    local actorId = SC.Registry and SC.Registry.idOf(actor) or nil
+    local onlyFront = frontSeatOnly(actor)
+    if requestedNumber ~= nil then
+        local seat = math.floor(requestedNumber)
+        -- Seat zero is the driver. A follower never takes it and never competes
+        -- with the local player; only the driving path (boardDriver) may ask.
+        local lowest = allowDriver == true and 0 or 1
+        if seat < lowest or seat >= count or onlyFront and seat ~= 1
+            or not availableSeat(vehicle, identity, seat, actorId) then
+            return nil, "requested vehicle seat is unavailable"
+        end
+        return seat
+    end
+
+    -- the rule: the first free passenger seat, every time; the driver's seat only on a driving order (above)
+    for seat = 1, count - 1 do
+        if (not onlyFront or seat == 1)
+            and availableSeat(vehicle, identity, seat, actorId) then
+            return seat
+        end
+    end
+    return nil, "vehicle has no available passenger seat"
+end
+
+local function commandState(actor)
+    if SC.Commands and type(SC.Commands.peek) == "function" then
+        local ok, state = pcall(SC.Commands.peek, actor)
+        if ok and type(state) == "table" then return state end
+    end
+    return nil
+end
+
+local function eligibleFollower(actor, vehicle)
+    local state = commandState(actor)
+    if type(state) ~= "table" or state.recruited ~= true
+        or state.rideWithPlayer == false
+        or (state.order ~= "follow" and state.order ~= "regroup") then return false end
+    local vehicleOk, current = invoke(actor, "getVehicle")
+    return vehicleOk and (current == nil or current == vehicle)
+end
+
+local function releaseManifest(manifest)
+    if type(manifest) ~= "table" or type(manifest.identity) ~= "table" then return end
+    for id, seat in pairs(manifest.assignments or {}) do
+        local reservation = seatKey(manifest.identity, seat)
+        if reservation ~= nil and reservations[reservation] == id then
+            reservations[reservation] = nil
+        end
+    end
+end
+
+local function manifestCandidate(actor, player)
+    local id = SC.Registry and SC.Registry.idOf(actor) or nil
+    if id == nil then return nil end
+    local actorX, actorY = coordinates(actor)
+    local playerX, playerY = coordinates(player)
+    -- A passenger with no loaded world position cannot walk to this car.
+    -- Reserving a seat for one can strand present followers, especially when
+    -- its low health gives it the first priority band.
+    if actorX == nil or playerX == nil then return nil end
+    local distance = (actorX - playerX) ^ 2 + (actorY - playerY) ^ 2
+    local bodyOk, body = invoke(actor, "getBodyDamage")
+    local healthOk, health = false, 100
+    if bodyOk then
+        local ok, value = invoke(body, "getHealth")
+        healthOk, health = ok, value
+    end
+    health = healthOk and finite(health, 100) or 100
+    local priority = health <= 35 and 0 or health < 75 and 1 or 2
+    return { actor = actor, id = id, distance = distance, priority = priority,
+        frontSeatOnly = frontSeatOnly(actor) }
+end
+
+local function buildManifest(vehicle, player)
+    local identity = vehicleIdentity(vehicle)
+    local key = keyFor(identity)
+    if key == nil then return nil, "vehicle identity is unavailable" end
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    count = countOk and math.floor(finite(count, -1)) or -1
+    if count < 2 or count > finite(SC.Config.get("vehicleManifestLimit"), 32) then
+        return nil, "vehicle has no bounded passenger seat"
+    end
+
+    local previous = manifests[key]
+    if previous then releaseManifest(previous) end
+    local manifest = {
+        vehicle = vehicle,
+        identity = identity,
+        seatCount = count,
+        seatState = {},
+        assignmentBySeat = {},
+        assignments = {},
+        actors = {},
+        waiting = {},
+        capacity = 0,
+        assigned = 0,
+    }
+    local freeSeats = {}
+    local occupiedIds = {}
+    for seat = 1, count - 1 do
+        local installedOk, installed = invoke(vehicle, "isSeatInstalled", seat)
+        local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", seat)
+        manifest.seatState[seat] = installedOk and installed == true
+            and occupiedOk and (occupied == true and "occupied" or "free") or "missing"
+        if installedOk and installed == true and occupiedOk then
+            if occupied == true then
+                local characterOk, character = invoke(vehicle, "getCharacter", seat)
+                local id = characterOk and SC.Registry and SC.Registry.idOf(character) or nil
+                if id ~= nil and eligibleFollower(character, vehicle) then
+                    manifest.capacity = manifest.capacity + 1
+                    manifest.assignments[id] = seat
+                    manifest.assignmentBySeat[seat] = id
+                    manifest.actors[id] = character
+                    occupiedIds[id] = true
+                    reservations[seatKey(identity, seat)] = id
+                end
+            else
+                local reservation = reservations[seatKey(identity, seat)]
+                if reservation == nil then
+                    manifest.capacity = manifest.capacity + 1
+                    freeSeats[#freeSeats + 1] = seat
+                end
+            end
+        end
+    end
+
+    local candidates = {}
+    local living = SC.Registry and SC.Registry.living and SC.Registry.living() or {}
+    -- The registry also contains neutral survivors and household members.
+    -- Scan eligible recruits across the registry, or a follower sorted after
+    -- enough neutrals never gets a passenger assignment.
+    for _, actor in ipairs(living) do
+        if eligibleFollower(actor, vehicle) then
+            local candidate = manifestCandidate(actor, player)
+            if candidate and not occupiedIds[candidate.id] then candidates[#candidates + 1] = candidate end
+        end
+    end
+    table.sort(candidates, function(left, right)
+        if left.priority ~= right.priority then return left.priority < right.priority end
+        if left.distance ~= right.distance then return left.distance < right.distance end
+        return tostring(left.id) < tostring(right.id)
+    end)
+    table.sort(freeSeats)
+    local frontCandidate
+    for _, candidate in ipairs(candidates) do
+        if candidate.frontSeatOnly then
+            frontCandidate = candidate
+            break
+        end
+    end
+    if frontCandidate then
+        local frontIndex
+        for index, seat in ipairs(freeSeats) do
+            if seat == 1 then frontIndex = index break end
+        end
+        if frontIndex then
+            table.remove(freeSeats, frontIndex)
+            manifest.assignments[frontCandidate.id] = 1
+            manifest.assignmentBySeat[1] = frontCandidate.id
+            manifest.actors[frontCandidate.id] = frontCandidate.actor
+            reservations[seatKey(identity, 1)] = frontCandidate.id
+        else
+            manifest.waiting[frontCandidate.id] = true
+        end
+    end
+    local freeIndex = 1
+    for _, candidate in ipairs(candidates) do
+        if candidate.frontSeatOnly then
+            if manifest.assignments[candidate.id] == nil then
+                manifest.waiting[candidate.id] = true
+            end
+        else
+        local seat = freeSeats[freeIndex]
+        if seat == nil then
+            manifest.waiting[candidate.id] = true
+        else
+            manifest.assignments[candidate.id] = seat
+            manifest.assignmentBySeat[seat] = candidate.id
+            manifest.actors[candidate.id] = candidate.actor
+            reservations[seatKey(identity, seat)] = candidate.id
+            freeIndex = freeIndex + 1
+        end
+        end
+    end
+    for _ in pairs(manifest.assignments) do manifest.assigned = manifest.assigned + 1 end
+    manifests[key] = manifest
+    return manifest
+end
+
+local function manifestIsCurrent(manifest, vehicle)
+    if type(manifest) ~= "table" or manifest.vehicle ~= vehicle then return false end
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    count = countOk and math.floor(finite(count, -1)) or -1
+    if count ~= manifest.seatCount then return false end
+
+    for seat = 1, count - 1 do
+        local installedOk, installed = invoke(vehicle, "isSeatInstalled", seat)
+        local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", seat)
+        if not installedOk or not occupiedOk then return false end
+        local installedNow = installed == true
+        local assignedId = manifest.assignmentBySeat[seat]
+        if assignedId ~= nil then
+            local actor = manifest.actors[assignedId]
+            local deadOk, dead = invoke(actor, "isDead")
+            if actor == nil or SC.Registry.idOf(actor) ~= assignedId
+                or (deadOk and dead == true) or not eligibleFollower(actor, vehicle)
+                or not installedNow then return false end
+            if occupied == true then
+                local characterOk, character = invoke(vehicle, "getCharacter", seat)
+                if not characterOk or character ~= actor then return false end
+            elseif reservations[seatKey(manifest.identity, seat)] ~= assignedId then
+                return false
+            end
+        else
+            local prior = manifest.seatState[seat]
+            if (prior == "missing") ~= (not installedNow) then return false end
+            if prior == "occupied" and occupied ~= true then return false end
+            if prior == "free" and occupied == true then return false end
+        end
+    end
+    for id in pairs(manifest.waiting or {}) do
+        local record = SC.Registry.byId(id)
+        local actor = record and record.actor or nil
+        local deadOk, dead = invoke(actor, "isDead")
+        if actor == nil or (deadOk and dead == true)
+            or not eligibleFollower(actor, vehicle) then return false end
+    end
+    return true
+end
+
+local function manifestFor(vehicle, player)
+    local identity = vehicleIdentity(vehicle)
+    local key = keyFor(identity)
+    if key == nil then return nil, "vehicle identity is unavailable" end
+    local manifest = manifests[key]
+    if manifest == nil or not manifestIsCurrent(manifest, vehicle) then
+        return buildManifest(vehicle, player)
+    end
+    return manifest
+end
+
+local function directEntryAvailable(vehicle, seat, actor)
+    if not hasExteriorEntry(vehicle, seat) then return false end
+    local cellOk, cell = invoke(vehicle, "getCell")
+    if not cellOk or cell == nil then return true end -- Lightweight providers.
+    return select(1, nearbyVehicleSquares(vehicle, seat, actor)) ~= nil
+end
+
+local function passengerDoorLocked(vehicle, seat)
+    local partOk, part = invoke(vehicle, "getPassengerDoor", seat)
+    local doorOk, door = false, nil
+    if partOk and part ~= nil then doorOk, door = invoke(part, "getDoor") end
+    if not doorOk or door == nil then return false end
+    local lockedOk, locked = invoke(door, "isLocked")
+    return lockedOk and locked == true
+end
+
+-- Shift seated companions along native seat-switch links until a real outside
+-- door becomes free for the waiting companion. VanSeats may need two hops:
+-- front passenger -> middle -> rear.
+local function openInteriorSeat(manifest, waitingActor, targetSeat)
+    local vehicle = manifest.vehicle
+    local waitingId = SC.Registry.idOf(waitingActor)
+    if waitingId == nil or select(1, stationary(vehicle)) ~= true then return nil end
+    local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", targetSeat)
+    if not occupiedOk or occupied ~= false then return nil end
+    local count = manifest.seatCount
+    local function findPath(toSeat, seen)
+        if seen[toSeat] then return nil end
+        seen[toSeat] = true
+        for fromSeat = 1, count - 1 do
+            local donorId = manifest.assignmentBySeat[fromSeat]
+            local donor = donorId and manifest.actors[donorId] or nil
+            local actorOk, current = invoke(vehicle, "getCharacter", fromSeat)
+            local switchOk, canSwitch = invoke(vehicle,
+                "canSwitchSeat", fromSeat, toSeat)
+            if not seen[fromSeat] and donor ~= nil and donor ~= waitingActor
+                and actorOk and current == donor
+                and eligibleFollower(donor, vehicle)
+                and not transactionIsCurrent(transactions[donor])
+                and switchOk and canSwitch == true then
+                local direct = directEntryAvailable(vehicle, fromSeat, waitingActor)
+                if direct then return { fromSeat, toSeat } end
+                local earlier = findPath(fromSeat, seen)
+                if earlier then
+                    earlier[#earlier + 1] = toSeat
+                    return earlier
+                end
+            end
+        end
+        seen[toSeat] = nil
+        return nil
+    end
+    local path = findPath(targetSeat, {})
+    if path == nil then return nil end
+    for index = #path - 1, 1, -1 do
+        local fromSeat, toSeat = path[index], path[index + 1]
+        local donorId = manifest.assignmentBySeat[fromSeat]
+        local displacedId = manifest.assignmentBySeat[toSeat]
+        local donor = donorId and manifest.actors[donorId] or nil
+        local emptyOk, empty = invoke(vehicle, "isSeatOccupied", toSeat)
+        if donor == nil or not emptyOk or empty ~= false then return nil end
+        local switchOk = invoke(vehicle, "switchSeat", donor, toSeat)
+        local seatOk, actualSeat = invoke(vehicle, "getSeat", donor)
+        local actorOk, occupant = invoke(vehicle, "getCharacter", toSeat)
+        local oldOk, oldOccupant = invoke(vehicle, "getCharacter", fromSeat)
+        if not switchOk or not seatOk or tonumber(actualSeat) ~= toSeat
+            or not actorOk or occupant ~= donor or not oldOk
+            or oldOccupant ~= nil then return nil end
+        invoke(vehicle, "playPassengerAnim", toSeat, "idle")
+        manifest.assignments[donorId] = toSeat
+        manifest.assignmentBySeat[toSeat] = donorId
+        manifest.assignmentBySeat[fromSeat] = displacedId
+        if displacedId ~= nil then manifest.assignments[displacedId] = fromSeat end
+        reservations[seatKey(manifest.identity, toSeat)] = donorId
+        reservations[seatKey(manifest.identity, fromSeat)] = displacedId
+        local record = SC.Registry.byId(donorId)
+        if record then
+            record.runtime = type(record.runtime) == "table" and record.runtime or {}
+            record.runtime.vehicle = { native = true, vehicle = vehicle,
+                seat = toSeat }
+        end
+        traceBoarding(donor, "switched_inside",
+            "from=" .. tostring(fromSeat) .. " to=" .. tostring(toSeat))
+    end
+    local entry = manifest.assignments[waitingId]
+    if entry ~= path[1] then return nil end
+    return entry
+end
+
+function vehicleService.invalidateManifests(vehicle)
+    if vehicle ~= nil then
+        local key = keyFor(vehicleIdentity(vehicle))
+        local manifest = key and manifests[key] or nil
+        if manifest then releaseManifest(manifest) manifests[key] = nil end
+        return
+    end
+    for _, manifest in pairs(manifests) do releaseManifest(manifest) end
+    manifests = {}
+end
+
+function vehicleService.assignmentFor(actor, vehicle, player)
+    if not SC.Actor.isCompanion(actor) then return nil, "actor is not an active companion" end
+    if not eligibleFollower(actor, vehicle) then return nil, "ride_with_player_disabled" end
+    local manifest, reason = manifestFor(vehicle, player)
+    if manifest == nil then return nil, reason end
+    local id = SC.Registry.idOf(actor)
+    local seat = manifest.assignments[id]
+    if seat == nil then
+        return nil, "vehicle_capacity_wait", {
+            assigned = manifest.assigned,
+            capacity = manifest.capacity,
+            waiting = manifest.waiting,
+        }
+    end
+    if not directEntryAvailable(vehicle, seat, actor)
+        or (seat > 1 and passengerDoorLocked(vehicle, seat)) then
+        seat = openInteriorSeat(manifest, actor, seat)
+        if seat == nil then return nil, "vehicle_entry_seat_wait", {
+            assigned = manifest.assigned, capacity = manifest.capacity,
+            waiting = manifest.waiting,
+        } end
+    end
+    return {
+        seat = seat,
+        assigned = manifest.assigned,
+        capacity = manifest.capacity,
+        waiting = manifest.waiting,
+    }
+end
+
+function vehicleService.statusFor(actor, player)
+    local state = commandState(actor) or {}
+    local seated, actorVehicle, actorSeat = vehicleService.isNativeSeated(actor)
+    if seated and actorVehicle ~= nil then
+        local stopped = select(1, stationary(actorVehicle)) == true
+        local waitingForSafeExit = state.rideWithPlayer == false and not stopped
+        return {
+            status = waitingForSafeExit and "waiting_safe_exit" or "in_vehicle",
+            seat = actorSeat,
+            canExitNow = stopped,
+            policyEnabled = state.rideWithPlayer ~= false,
+        }
+    end
+    local playerOk, vehicle = invoke(player, "getVehicle")
+    if not playerOk or vehicle == nil or state.rideWithPlayer == false
+        or not eligibleFollower(actor, vehicle) then
+        return { status = "on_foot", canExitNow = false,
+            policyEnabled = state.rideWithPlayer ~= false }
+    end
+    local manifest = manifestFor(vehicle, player)
+    if manifest == nil then
+        return { status = "on_foot", canExitNow = false, policyEnabled = true }
+    end
+    local id = SC.Registry.idOf(actor)
+    local waiting = 0
+    for _ in pairs(manifest.waiting) do waiting = waiting + 1 end
+    return {
+        status = manifest.assignments[id] ~= nil and "approaching_vehicle" or "on_foot",
+        seat = manifest.assignments[id],
+        assigned = manifest.assigned,
+        capacity = manifest.capacity,
+        waiting = waiting,
+        capacityWait = manifest.waiting[id] == true,
+        canExitNow = false,
+        policyEnabled = true,
+    }
+end
+
+vehicleService.manifestStatus = vehicleService.statusFor
+
+function vehicleService.canPassengerFire(actor, target, doctrine)
+    if doctrine ~= "ranged_support" and doctrine ~= "weapons_free" then
+        return false, "vehicle_fire_blocked_by_doctrine"
+    end
+    local seated, vehicle, seat = vehicleService.isNativeSeated(actor)
+    if not seated or vehicle == nil or seat == nil or seat < 1 then
+        return false, "vehicle_fire_requires_passenger_seat"
+    end
+    local doorOk, door = invoke(vehicle, "getPassengerDoor", seat)
+    if not doorOk or door == nil then return false, "passenger_door_unavailable" end
+    local windowOk, window = invoke(door, "findWindow")
+    if not windowOk or window == nil then return false, "passenger_window_unavailable" end
+    local hittableOk, hittable = invoke(window, "isHittable")
+    if not hittableOk or hittable == true then return false, "passenger_window_closed" end
+    local speedOk, speed = invoke(vehicle, "getCurrentSpeedKmHour")
+    if not speedOk then return false, "vehicle_speed_unavailable" end
+    speed = math.abs(finite(speed, math.huge))
+    local maximum = doctrine == "ranged_support"
+        and finite(SC.Config.get("vehicleRangedSupportMaxSpeedKph"), 15)
+        or finite(SC.Config.get("vehicleWeaponsFreeMaxSpeedKph"), 30)
+    if speed > maximum then return false, "vehicle_too_fast_to_fire" end
+    if target == nil then return false, "vehicle_fire_target_unavailable" end
+    return true, "vehicle_fire_ready", { vehicle = vehicle, seat = seat, speed = speed }
+end
+
+function vehicleService.claimPassengerShot(actor, target, doctrine)
+    local ready, reason, details = vehicleService.canPassengerFire(actor, target, doctrine)
+    if not ready then return false, reason end
+    local timestamp = type(getTimestampMs) == "function" and tonumber((getTimestampMs())) or nil
+    local now = timestamp or math.floor((os.clock and os.clock() or 0) * 1000)
+    local last = tonumber(lastVehicleShotAt[details.vehicle]) or -math.huge
+    local spacing = math.max(0, finite(SC.Config.get("vehicleFireSpacingMs"), 240))
+    if now - last < spacing then return false, "vehicle_fire_lane_busy" end
+    lastVehicleShotAt[details.vehicle] = now
+    return true, "vehicle_fire_lane_claimed", details
+end
+
+local function rollbackNativeEntry(actor, vehicle)
+    local currentOk, current = invoke(actor, "getVehicle")
+    if currentOk and current == nil then return true end
+    if currentOk and current ~= vehicle then return false end
+    local exitOk, exited = invoke(vehicle, "exit", actor)
+    local verifyOk, after = invoke(actor, "getVehicle")
+    return exitOk and exited == true and verifyOk and after == nil
+end
+
+local function settleNativeSeat(actor, vehicle, seat)
+    local positionOk, inside = invoke(vehicle, "getPassengerPosition", seat, "inside")
+    if not positionOk or inside == nil then
+        return false, "native vehicle inside passenger position is unavailable"
+    end
+    -- BaseVehicle.enter(seat, actor) starts at the scripted outside offset.
+    -- Vanilla ISEnterVehicle:perform moves that offset inside before travel.
+    if not invoke(vehicle, "setCharacterPosition", actor, seat, "inside") then
+        return false, "native vehicle inside passenger placement failed"
+    end
+    if not invoke(vehicle, "transmitCharacterPosition", seat, "inside") then
+        return false, "native vehicle inside passenger transmission failed"
+    end
+    if not invoke(vehicle, "playPassengerAnim", seat, "idle") then
+        return false, "native vehicle passenger idle animation failed"
+    end
+    return true
+end
+
+local function preparePassengerDoor(actor, vehicle, seat)
+    local partOk, part = invoke(vehicle, "getPassengerDoor", seat)
+    -- Some vehicles have no usable door part. Vanilla enters those seats
+    -- directly too; a present door must be opened before native seating.
+    if not partOk or part == nil then return true, nil end
+    local doorOk, door = invoke(part, "getDoor")
+    if not doorOk or door == nil then return true, nil end
+    local lockedOk, locked = invoke(door, "isLocked")
+    if not lockedOk then return false, "passenger door lock state is unavailable" end
+    if locked == true then
+        invoke(vehicle, "toggleLockedDoor", part, actor, false)
+        lockedOk, locked = invoke(door, "isLocked")
+        if not lockedOk then return false, "passenger door lock state is unavailable" end
+        if locked == true and seat == 0 then
+            -- The driver may reach the lock through a broken window. Smash
+            -- only after the ordinary unlock attempt failed, and verify that
+            -- the window really opened before touching the lock directly.
+            local windowPartOk, windowPart = invoke(part, "getChildWindow")
+            local windowOk, window = invoke(windowPart, "getWindow")
+            if not windowOk or window == nil then
+                windowOk, window = invoke(part, "findWindow")
+            end
+            if not windowOk or window == nil then
+                return false, "driver window is unavailable"
+            end
+            local hittableOk, hittable = invoke(window, "isHittable")
+            if not hittableOk then return false, "driver window state is unavailable" end
+            if hittable == true then
+                if windowPartOk and windowPart ~= nil then
+                    invoke(actor, "smashCarWindow", windowPart)
+                end
+                hittableOk, hittable = invoke(window, "isHittable")
+                -- The native attack can be delayed by its animation. Apply
+                -- the same window hit as the vanilla action completion if
+                -- the glass is still intact at this transaction boundary.
+                if hittableOk and hittable == true then
+                    invoke(window, "hit", actor)
+                    hittableOk, hittable = invoke(window, "isHittable")
+                end
+                if not hittableOk or hittable == true then
+                    return false, "driver window could not be smashed"
+                end
+            end
+            invoke(vehicle, "toggleLockedDoor", part, actor, false)
+            lockedOk, locked = invoke(door, "isLocked")
+            if not lockedOk then return false, "driver door lock state is unavailable" end
+            if locked == true then
+                local unlocked = invoke(door, "setLocked", false)
+                if not unlocked then return false, "driver door could not be unlocked" end
+                invoke(vehicle, "transmitPartDoor", part)
+                lockedOk, locked = invoke(door, "isLocked")
+            end
+        end
+        if not lockedOk or locked == true then
+            return false, "passenger door is locked"
+        end
+    end
+    local openOk, opened = invoke(door, "isOpen")
+    if not openOk then return false, "passenger door state is unavailable" end
+    if opened ~= true then
+        local changed = invoke(door, "setOpen", true)
+        if not changed then return false, "passenger door could not be opened" end
+        invoke(vehicle, "transmitPartDoor", part)
+        openOk, opened = invoke(door, "isOpen")
+        if not openOk or opened ~= true then
+            return false, "passenger door did not open"
+        end
+    end
+    return true, part
+end
+
+local function nativeBoard(actor, vehicle, seat)
+    local positionOk, inside = invoke(vehicle, "getPassengerPosition", seat, "inside")
+    if not positionOk or inside == nil then
+        return false, "native vehicle inside passenger position is unavailable", true
+    end
+    local doorReady, doorPart = preparePassengerDoor(actor, vehicle, seat)
+    if not doorReady then return false, doorPart, true end
+    local enteredOk, entered = invoke(vehicle, "enter", seat, actor)
+    if not enteredOk or entered ~= true then
+        if rollbackNativeEntry(actor, vehicle) then
+            return false, "native vehicle entry was rejected", true
+        end
+        return false, "native vehicle entry failed and rollback was not verified", false
+    end
+    local vehicleOk, currentVehicle = invoke(actor, "getVehicle")
+    local seatOk, currentSeat = invoke(vehicle, "getSeat", actor)
+    local characterOk, character = invoke(vehicle, "getCharacter", seat)
+    if not vehicleOk or currentVehicle ~= vehicle or not seatOk or tonumber(currentSeat) ~= seat
+        or not characterOk or character ~= actor then
+        if rollbackNativeEntry(actor, vehicle) then
+            return false, "native vehicle entry could not be verified; rollback verified", true
+        end
+        return false, "native vehicle entry and rollback could not be verified", false
+    end
+    local settled, settleReason = settleNativeSeat(actor, vehicle, seat)
+    if not settled then
+        if rollbackNativeEntry(actor, vehicle) then
+            return false, settleReason .. "; rollback verified", true
+        end
+        return false, settleReason .. "; rollback was not verified", false
+    end
+    if doorPart ~= nil then
+        local doorOk, door = invoke(doorPart, "getDoor")
+        if doorOk and door ~= nil then
+            invoke(door, "setOpen", false)
+            invoke(vehicle, "transmitPartDoor", doorPart)
+        end
+    end
+    return true, "native_seat", false
+end
+
+local function safeSquare(square)
+    if square == nil then return false end
+    local solidOk, solid = invoke(square, "isSolid")
+    local transOk, trans = invoke(square, "isSolidTrans")
+    local floorOk, floor = invoke(square, "TreatAsSolidFloor")
+    local freeOk, free = invoke(square, "isFree", true)
+    return solidOk and solid ~= true and transOk and trans ~= true
+        and floorOk and floor == true and freeOk and free == true
+end
+
+nearbyVehicleSquares = function(vehicle, seat, actor)
+    local xOk, x = invoke(vehicle, "getX")
+    local yOk, y = invoke(vehicle, "getY")
+    local zOk, z = invoke(vehicle, "getZ")
+    local cellOk, cell = invoke(vehicle, "getCell")
+    if (not cellOk or cell == nil) and actor ~= nil then
+        cellOk, cell = invoke(actor, "getCell")
+    end
+    if not xOk or not yOk or not zOk or not cellOk or cell == nil then
+        return nil, "vehicle world position is unavailable"
+    end
+    local actorX, actorY = coordinates(actor)
+    local radius = math.max(2, math.floor(finite(SC.Config.get("vehicleApproachRadius"), 4)))
+    local baseX, baseY, floorZ = math.floor(x), math.floor(y), math.floor(z)
+    local candidates = {}
+    local boardRange = finite(SC.Config.get("vehicleBoardRangeSquared"), 2.56)
+    for dx = -radius, radius do
+        for dy = -radius, radius do
+            local ok, square = invoke(cell, "getGridSquare", baseX + dx, baseY + dy, floorZ)
+            if ok and safeSquare(square) then
+                local squareX, squareY = coordinates(square)
+                if squareX == nil then
+                    squareX, squareY = baseX + dx + 0.5, baseY + dy + 0.5
+                else
+                    -- Grid-square coordinates identify the tile corner; a
+                    -- standing character occupies its center.
+                    squareX, squareY = math.floor(squareX) + 0.5, math.floor(squareY) + 0.5
+                end
+                -- Only offer tiles from which native entry can actually pass
+                -- preflight. The closest tile may sit inside the car collision
+                -- polygon or behind an obstacle; Navigation can try the rest.
+                -- A stored passenger placed beside the car has no seat to
+                -- enter, so its tiles rank by distance from the car instead.
+                local doorDistance
+                if seat ~= nil then
+                    doorDistance = doorDistanceSquared(vehicle, seat, squareX, squareY)
+                    if doorDistance ~= nil and doorDistance > boardRange then
+                        doorDistance = nil
+                    end
+                else
+                    doorDistance = dx * dx + dy * dy
+                end
+                if doorDistance ~= nil then
+                    local actorDistance = actorX
+                        and ((squareX - actorX) ^ 2 + (squareY - actorY) ^ 2) or 0
+                    candidates[#candidates + 1] = {
+                        square = square, doorDistance = doorDistance,
+                        actorDistance = actorDistance,
+                    }
+                end
+            end
+        end
+    end
+    if #candidates == 0 then return nil, "no safe loaded passenger-door square" end
+    table.sort(candidates, function(first, second)
+        if first.doorDistance ~= second.doorDistance then
+            return first.doorDistance < second.doorDistance
+        end
+        return first.actorDistance < second.actorDistance
+    end)
+    local squares = {}
+    for index = 1, math.min(#candidates, 16) do
+        squares[index] = candidates[index].square
+    end
+    return squares
+end
+
+local function exitSquare(vehicle, player, seat)
+    local squares, reason = nearbyVehicleSquares(vehicle, seat, player)
+    return squares and squares[1] or nil, reason
+end
+
+local function moveToExteriorExitSeat(actor, vehicle, seat, identity)
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    count = countOk and math.floor(finite(count, -1)) or -1
+    if count < 2 or count > 32 then return nil, "vehicle_exit_access_wait" end
+    local id = SC.Registry.idOf(actor)
+    local function findPath(fromSeat, seen)
+        if seen[fromSeat] then return nil end
+        if hasExteriorEntry(vehicle, fromSeat)
+            and select(1, exitSquare(vehicle, nil, fromSeat)) ~= nil then
+            return { fromSeat }
+        end
+        seen[fromSeat] = true
+        for toSeat = 1, count - 1 do
+            local installedOk, installed = invoke(vehicle, "isSeatInstalled", toSeat)
+            local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", toSeat)
+            local canOk, canSwitch = invoke(vehicle,
+                "canSwitchSeat", fromSeat, toSeat)
+            local reservation = seatKey(identity, toSeat)
+            local reservedBy = reservation and reservations[reservation] or nil
+            if not seen[toSeat] and installedOk and installed == true
+                and occupiedOk and occupied == false and canOk
+                and canSwitch == true and (reservedBy == nil or reservedBy == id) then
+                local onward = findPath(toSeat, seen)
+                if onward then
+                    table.insert(onward, 1, fromSeat)
+                    return onward
+                end
+            end
+        end
+        seen[fromSeat] = nil
+        return nil
+    end
+    local path = findPath(seat, {})
+    if path == nil then return nil, "vehicle_exit_access_wait" end
+    if #path == 1 then return seat end
+    if SC.Actor.stop(actor) ~= true then return nil, "vehicle_exit_stop_failed" end
+    local key = keyFor(identity)
+    local manifest = key and manifests[key] or nil
+    for index = 2, #path do
+        local fromSeat, toSeat = path[index - 1], path[index]
+        local switchOk = invoke(vehicle, "switchSeat", actor, toSeat)
+        local seatOk, actualSeat = invoke(vehicle, "getSeat", actor)
+        local actorOk, occupant = invoke(vehicle, "getCharacter", toSeat)
+        if not switchOk or not seatOk or tonumber(actualSeat) ~= toSeat
+            or not actorOk or occupant ~= actor then
+            return nil, "vehicle_exit_seat_switch_failed"
+        end
+        invoke(vehicle, "playPassengerAnim", toSeat, "idle")
+        local oldReservation = seatKey(identity, fromSeat)
+        if oldReservation and reservations[oldReservation] == id then
+            reservations[oldReservation] = nil
+        end
+        local reservation = seatKey(identity, toSeat)
+        if reservation then reservations[reservation] = id end
+        if manifest and manifest.assignments[id] == fromSeat then
+            manifest.assignments[id] = toSeat
+            manifest.assignmentBySeat[fromSeat] = nil
+            manifest.assignmentBySeat[toSeat] = id
+        end
+        local record = SC.Registry.byId(id)
+        if record then
+            record.runtime = type(record.runtime) == "table" and record.runtime or {}
+            record.runtime.vehicle = { native = true, vehicle = vehicle,
+                seat = toSeat }
+        end
+        traceBoarding(actor, "switched_for_exit",
+            "from=" .. tostring(fromSeat) .. " to=" .. tostring(toSeat))
+    end
+    return path[#path]
+end
+
+function vehicleService.safeExitSquares(vehicle, seat)
+    if vehicle == nil or type(seat) ~= "number" or seat < 0
+        or seat ~= math.floor(seat) then
+        return nil, "invalid_vehicle_seat"
+    end
+    return nearbyVehicleSquares(vehicle, seat, nil)
+end
+
+stationary = function(vehicle)
+    local speedOk, speed = invoke(vehicle, "getCurrentSpeedKmHour")
+    if not speedOk then return false, "vehicle speed is unavailable" end
+    speed = math.abs(finite(speed, math.huge))
+    local maximum = math.max(0, finite(SC.Config.get("vehicleBoardMaxSpeedKph"), 0.5))
+    if speed > maximum then return false, "vehicle is moving" end
+    return true
+end
+
+-- Anyone aboard who is not a companion: the player, or a stranger. Unknown
+-- occupancy counts as someone, so the driver's seat is never taken blind.
+local function strangerAboard(vehicle)
+    local countOk, count = invoke(vehicle, "getMaxPassengers")
+    count = countOk and math.floor(finite(count, 0)) or 0
+    if not countOk or count < 1 or count > 32 then return true end
+    for seat = 0, count - 1 do
+        local ok, occupant = invoke(vehicle, "getCharacter", seat)
+        if not ok then return true end
+        if occupant ~= nil and not SC.Actor.isCompanion(occupant) then return true end
+    end
+    return false
+end
+
+-- A parked driving lease must also yield when the player gets in. Unknown
+-- occupancy and foreign occupants count conservatively as a player aboard;
+-- owned companions, including a promoted expedition leader, do not.
+function vehicleService.hasPlayerAboard(vehicle)
+    return strangerAboard(vehicle)
+end
+
+local function multiplayerActive()
+    for _, name in ipairs({ "isClient", "isServer" }) do
+        local probe = rawget(_G, name)
+        if type(probe) == "function" then
+            local ok, value = pcall(probe)
+            if ok and value == true then return true end
+        end
+    end
+    return false
+end
+
+function vehicleService.preflightBoard(actor, vehicle, requestedSeat, allowDriver)
+    if not SC.Actor.isCompanion(actor) then
+        return nil, "actor is not an active companion"
+    end
+    if vehicle == nil then return nil, "vehicle is required" end
+    local currentOk, current = invoke(actor, "getVehicle")
+    if not currentOk or current ~= nil then
+        return nil, "actor is already in a vehicle or native state is unavailable"
+    end
+    local identity = vehicleIdentity(vehicle)
+    if identity == nil then return nil, "vehicle identity is unavailable" end
+    if goneFromWorld(vehicle) then return nil, "vehicle is not in the loaded world" end
+    local stopped, stoppedReason = stationary(vehicle)
+    if not stopped then return nil, stoppedReason end
+    local actorX, actorY, actorZ = coordinates(actor)
+    if actorX == nil then return nil, "companion world position is unavailable" end
+    if math.floor(actorZ) ~= math.floor(identity.z) then
+        return nil, "companion and vehicle are on different floors"
+    end
+    local seat, seatReason = chooseSeat(vehicle, actor, requestedSeat, identity, allowDriver)
+    if seat == nil then return nil, seatReason end
+    if seat == 0 then
+        if multiplayerActive() then return nil, "companion driving is single-player only" end
+        -- Sol fix (drive_passenger): the player may ride along, so he no longer keeps her out of a free driver's seat
+        local authority = rawget(_G, "SolAuthority")
+        local playerMayRide = type(authority) == "table" and type(authority.on) == "function" and authority.on("drive_passenger") == true
+        if not playerMayRide and strangerAboard(vehicle) then
+            return nil, "someone who is not a companion is in this vehicle"
+        end
+    end
+    local entranceDistance = doorDistanceSquared(vehicle, seat, actorX, actorY)
+    if entranceDistance == nil then return nil, "passenger door position is unavailable" end
+    -- Sol fix: getEnterSeatDistance is squared, so 2.56 is 1.6 tiles from the door's outside point. The walk ends a step short of
+    -- that often enough to leave her refused beside the door. 2.5 tiles for the driver's seat is still short of the far side of a car.
+    local boardRange = finite(SC.Config.get("vehicleBoardRangeSquared"), 2.56)
+    if seat == 0 then boardRange = math.max(boardRange, 6.25) end
+    if entranceDistance > boardRange then
+        return nil, "companion is not at the passenger door"
+    end
+    local reservation = seatKey(identity, seat)
+    local actorId = SC.Registry.idOf(actor)
+    if actorId == nil then return nil, "companion identity is unavailable" end
+    if reservations[reservation] ~= nil and reservations[reservation] ~= actorId then
+        return nil, "vehicle seat is reserved by another companion"
+    end
+    return {
+        actorId = actorId,
+        vehicle = vehicle,
+        identity = identity,
+        vehicleKey = keyFor(identity),
+        seat = seat,
+        entranceDistance = entranceDistance,
+        reservation = reservation,
+    }
+end
+
+function vehicleService.isStationary(vehicle)
+    return stationary(vehicle)
+end
+
+function vehicleService.boardingSquares(actor, vehicle, requestedSeat, allowDriver)
+    if not SC.Actor.isCompanion(actor) then
+        return nil, nil, "actor is not an active companion"
+    end
+    if vehicle == nil then return nil, nil, "vehicle is required" end
+    local identity = vehicleIdentity(vehicle)
+    if identity == nil then return nil, nil, "vehicle identity is unavailable" end
+    if goneFromWorld(vehicle) then return nil, nil, "vehicle is not in the loaded world" end
+    local seat, reason = chooseSeat(vehicle, actor, requestedSeat, identity,
+        allowDriver == true)
+    if seat == nil then return nil, nil, reason end
+    local squares, squareReason = nearbyVehicleSquares(vehicle, seat, actor)
+    if squares == nil then return nil, nil, squareReason end
+    return squares, seat
+end
+
+function vehicleService.boardingSquare(actor, vehicle, requestedSeat, allowDriver)
+    local squares, seat, reason = vehicleService.boardingSquares(
+        actor, vehicle, requestedSeat, allowDriver)
+    return squares and squares[1] or nil, seat, reason
+end
+
+-- Sol fix: seated in the car with the driver's seat free, she slides over with the game's own seat switch instead of getting out
+-- and walking round. Returns true, or nil and the reason; the caller then falls back to the door walk.
+function vehicleService.shiftToDriver(actor, vehicle)
+    if not SC.Actor.isCompanion(actor) then return nil, "actor is not an active companion" end
+    if vehicle == nil then return nil, "vehicle is required" end
+    if multiplayerActive() then return nil, "companion driving is single-player only" end
+    local identity = vehicleIdentity(vehicle)
+    local id = SC.Registry.idOf(actor)
+    if identity == nil or id == nil then return nil, "vehicle or companion identity is unavailable" end
+    if goneFromWorld(vehicle) then return nil, "vehicle is not in the loaded world" end
+    local seatOk, fromSeat = invoke(vehicle, "getSeat", actor)
+    fromSeat = seatOk and math.floor(finite(fromSeat, -1)) or -1
+    if fromSeat < 1 then return nil, "not_in_a_passenger_seat:" .. tostring(fromSeat) end
+    local stopped, stoppedReason = stationary(vehicle)
+    if not stopped then return nil, stoppedReason end
+    local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", 0)
+    if not occupiedOk or occupied ~= false then return nil, "driver_seat_taken" end
+    local reservation = seatKey(identity, 0)
+    if reservation and reservations[reservation] ~= nil and reservations[reservation] ~= id then
+        return nil, "driver_seat_reserved"
+    end
+    if SC.Actor.stop(actor) ~= true then return nil, "could_not_stop_for_seat_change" end
+    local switchCalled, switchResult = invoke(vehicle, "switchSeat", actor, 0)
+    local nowOk, nowSeat = invoke(vehicle, "getSeat", actor)
+    local whoOk, who = invoke(vehicle, "getCharacter", 0)
+    if not switchCalled or switchResult == false or not nowOk or tonumber(nowSeat) ~= 0 or not whoOk or who ~= actor then
+        return nil, "seat_switch_failed"
+    end
+    invoke(vehicle, "playPassengerAnim", 0, "idle")
+    local old = seatKey(identity, fromSeat)
+    if old and reservations[old] == id then reservations[old] = nil end
+    if reservation then reservations[reservation] = id end
+    local key = keyFor(identity)
+    local manifest = key and manifests[key] or nil
+    if manifest and manifest.assignments[id] == fromSeat then
+        manifest.assignments[id] = 0
+        manifest.assignmentBySeat[fromSeat] = nil
+        manifest.assignmentBySeat[0] = id
+    end
+    local record = SC.Registry.byId(id)
+    if record then
+        record.runtime = type(record.runtime) == "table" and record.runtime or {}
+        record.runtime.vehicle = { native = true, vehicle = vehicle, seat = 0 }
+    end
+    return true, "switched_from_seat_" .. tostring(fromSeat)
+end
+
+-- Let the player take over without ejecting Sol: move her from seat 0 to a
+-- reachable, installed, empty passenger seat in this same stationary vehicle.
+-- This works for cars, helicopters, and tracked vehicles when their native
+-- seat-switch graph exposes a passenger seat.
+function vehicleService.shiftFromDriver(actor, vehicle)
+    if not SC.Actor.isCompanion(actor) then return nil, "actor is not an active companion" end
+    if vehicle == nil then return nil, "vehicle is required" end
+    if multiplayerActive() then return nil, "companion seat handoff is single-player only" end
+    local identity = vehicleIdentity(vehicle)
+    local id = SC.Registry.idOf(actor)
+    if identity == nil or id == nil then return nil, "vehicle or companion identity is unavailable" end
+    if goneFromWorld(vehicle) then return nil, "vehicle is not in the loaded world" end
+    local seatOk, fromSeat = invoke(vehicle, "getSeat", actor)
+    fromSeat = seatOk and math.floor(finite(fromSeat, -1)) or -1
+    if fromSeat ~= 0 then return nil, "companion_is_not_driver:" .. tostring(fromSeat) end
+    local stopped, stoppedReason = stationary(vehicle)
+    if not stopped then return nil, stoppedReason end
+    local countOk, seatCount = invoke(vehicle, "getMaxPassengers")
+    seatCount = countOk and math.floor(finite(seatCount, -1)) or -1
+    if seatCount < 2 or seatCount > 32 then return nil, "no_passenger_seats" end
+
+    local candidates = {}
+    for candidate = 1, seatCount - 1 do
+        local installedOk, installed = invoke(vehicle, "isSeatInstalled", candidate)
+        local occupiedOk, occupied = invoke(vehicle, "isSeatOccupied", candidate)
+        local canOk, canSwitch = invoke(vehicle, "canSwitchSeat", 0, candidate)
+        local candidateReservation = seatKey(identity, candidate)
+        local reservedBy = candidateReservation and reservations[candidateReservation] or nil
+        if installedOk and installed == true and occupiedOk and occupied == false
+            and (reservedBy == nil or reservedBy == id) then
+            candidates[#candidates + 1] = {
+                seat = candidate, reservation = candidateReservation,
+                reachable = canOk and canSwitch == true,
+            }
+        end
+    end
+    table.sort(candidates, function(a, b)
+        if a.reachable ~= b.reachable then return a.reachable end
+        return a.seat < b.seat
+    end)
+    if #candidates == 0 then return nil, "no_reachable_empty_passenger_seat" end
+    if SC.Actor.stop(actor) ~= true then return nil, "could_not_stop_for_seat_change" end
+    local toSeat, reservation
+    for _, candidate in ipairs(candidates) do
+        local switchCalled, switchResult = invoke(vehicle, "switchSeat", actor, candidate.seat)
+        local nowOk, nowSeat = invoke(vehicle, "getSeat", actor)
+        local whoOk, who = invoke(vehicle, "getCharacter", candidate.seat)
+        if switchCalled and switchResult ~= false and nowOk and tonumber(nowSeat) == candidate.seat
+            and whoOk and who == actor then
+            toSeat, reservation = candidate.seat, candidate.reservation
+            break
+        end
+    end
+    if toSeat == nil then return nil, "seat_switch_failed" end
+    invoke(vehicle, "playPassengerAnim", toSeat, "idle")
+    local oldReservation = seatKey(identity, 0)
+    if oldReservation and reservations[oldReservation] == id then reservations[oldReservation] = nil end
+    if reservation then reservations[reservation] = id end
+    local key = keyFor(identity)
+    local manifest = key and manifests[key] or nil
+    if manifest and manifest.assignments[id] == 0 then
+        manifest.assignments[id] = toSeat
+        manifest.assignmentBySeat[0] = nil
+        manifest.assignmentBySeat[toSeat] = id
+    end
+    local record = SC.Registry.byId(id)
+    if record then
+        record.runtime = type(record.runtime) == "table" and record.runtime or {}
+        record.runtime.vehicle = { native = true, vehicle = vehicle, seat = toSeat }
+    end
+    traceBoarding(actor, "driver_handoff", "from=0 to=" .. tostring(toSeat))
+    return true, "switched_to_passenger_seat_" .. tostring(toSeat)
+end
+
+function vehicleService.isNativeSeated(actor)
+    local vehicleOk, vehicle = invoke(actor, "getVehicle")
+    if not vehicleOk or vehicle == nil then return false, nil, nil end
+    local seatOk, seat = invoke(vehicle, "getSeat", actor)
+    seat = seatOk and math.floor(finite(seat, -1)) or -1
+    if seat < 0 then return false, vehicle, nil end
+    local characterOk, character = invoke(vehicle, "getCharacter", seat)
+    if characterOk and character ~= actor then return false, vehicle, seat end
+    return true, vehicle, seat
+end
+
+local function loadedVehicleBySqlId(sqlId)
+    if sqlId == nil or sqlId < 0 or type(getCell) ~= "function" then return nil end
+    local cellOk, cell = pcall(getCell)
+    if not cellOk or cell == nil then return nil end
+    local listOk, vehicles = invoke(cell, "getVehicles")
+    local sizeOk, size = invoke(vehicles, "size")
+    if not listOk or not sizeOk then return nil end
+    -- Build 42 returns a Set, not an indexed List. Use the game's exposed
+    -- Collection constructor; Iterator implementation classes are not all
+    -- exposed to Kahlua. Older indexed collections keep their existing path.
+    if method(vehicles, "get") == nil then
+        if finite(size, 0) > 512 then return nil end
+        local copied, list = pcall(function() return ArrayList.new(vehicles) end)
+        if not copied or list == nil then return nil end
+        vehicles = list
+    end
+    for index = 0, math.min(math.floor(finite(size, 0)), 512) - 1 do
+        local itemOk, vehicle = invoke(vehicles, "get", index)
+        local idOk, id = invoke(vehicle, "getSqlId")
+        if itemOk and idOk and math.floor(finite(id, -1)) == sqlId then
+            local removedOk, removed = invoke(vehicle, "isRemovedFromWorld")
+            if not removedOk or removed ~= true then return vehicle end
+        end
+    end
+    return nil
+end
+
+function vehicleService.loadedBySqlId(sqlId)
+    sqlId = finite(sqlId, -1)
+    if sqlId < 0 or sqlId ~= math.floor(sqlId) then return nil end
+    return loadedVehicleBySqlId(sqlId)
+end
+
+function vehicleService.loadedVehicles()
+    if type(getCell) ~= "function" then return {} end
+    local ok, cell = pcall(getCell)
+    if not ok or cell == nil then return {} end
+    local listOk, vehicles = invoke(cell, "getVehicles")
+    if not listOk or vehicles == nil then return {} end
+    local sizeOk, size = invoke(vehicles, "size")
+    size = sizeOk and finite(size, -1) or -1
+    if size < 0 or size > 512 then return {} end
+    if method(vehicles, "get") == nil then
+        local copied, list = pcall(function() return ArrayList.new(vehicles) end)
+        if not copied or list == nil then return {} end
+        vehicles = list
+    end
+    local result = {}
+    for index = 0, math.floor(size) - 1 do
+        local got, vehicle = invoke(vehicles, "get", index)
+        if got and vehicle ~= nil then result[#result + 1] = vehicle end
+    end
+    return result
+end
+
+local function exactItemCount(container, item)
+    local called, list = invoke(container, "getItems")
+    if not called or list == nil then return nil end
+    local sizeOk, size = invoke(list, "size")
+    if not sizeOk and type(list) == "table" and method(list, "size") == nil then size = #list end
+    if not sizeOk and method(list, "size") ~= nil then return nil end
+    size = finite(size, nil)
+    if size == nil or size < 0 or size > 4096 or size % 1 ~= 0 then return nil end
+    local count = 0
+    for index = 0, size - 1 do
+        local ok, candidate = invoke(list, "get", index)
+        if not ok and type(list) == "table" and method(list, "get") == nil then
+            ok, candidate = true, list[index + 1]
+        end
+        if not ok then return nil end
+        if candidate == item then count = count + 1 end
+    end
+    return count
+end
+
+local function keyAt(recovery, destination)
+    local ownerOk, owner = invoke(recovery.key, "getContainer")
+    local sourceCount = exactItemCount(recovery.source, recovery.key)
+    local targetCount = exactItemCount(recovery.target, recovery.key)
+    local keyOk, current = invoke(recovery.vehicle, "getCurrentKey")
+    local ignitionOk, ignition = invoke(recovery.vehicle, "isKeysInIgnition")
+    if not ownerOk or sourceCount == nil or targetCount == nil or not keyOk or not ignitionOk then
+        return false
+    end
+    if destination then
+        return owner == recovery.target and targetCount == 1 and sourceCount == 0
+            and current == nil and ignition == false
+    end
+    return owner == recovery.source and sourceCount == 1 and targetCount == 0
+        and current == recovery.key and ignition == true
+end
+
+local function keyVehicleFree(recovery)
+    if loadedVehicleBySqlId(recovery.sqlId) ~= recovery.vehicle then return false end
+    local called, driver = invoke(recovery.vehicle, "getDriver")
+    return called and driver == nil and not strangerAboard(recovery.vehicle)
+end
+
+local function rollbackDriverKey(recovery)
+    if keyAt(recovery, false) then return true end
+    local called, owner = invoke(recovery.key, "getContainer")
+    local currentOk, current = invoke(recovery.vehicle, "getCurrentKey")
+    if not called or owner ~= nil and owner ~= recovery.source and owner ~= recovery.target
+        or not currentOk or current ~= nil and current ~= recovery.key
+        or not keyVehicleFree(recovery) then return false end
+    invoke(recovery.source, "AddItem", recovery.key)
+    return keyAt(recovery, false)
+end
+
+local function completeDriverKey(recovery)
+    if not keyAt(recovery, true) then return false end
+    if not recovery.hotSaved then
+        local saved = invoke(recovery.vehicle, "flagForHotSave")
+        if not saved then return false end
+        recovery.hotSaved = true
+    end
+    if SC.InventoryIndex and type(SC.InventoryIndex.release) == "function" then
+        local released = pcall(SC.InventoryIndex.release, recovery.actor)
+        if not released then return false end
+    end
+    driverKeyRecoveries[recovery.actor] = nil
+    return true
+end
+
+local function advanceDriverKeyUnsafe(recovery, settling)
+    if not settling then recovery.attempts = recovery.attempts + 1 end
+    local reason = "driver_key_transfer_unverified"
+    if keyAt(recovery, true) then
+        if completeDriverKey(recovery) then return true end
+        reason = recovery.hotSaved and "driver_key_index_release_failed" or "driver_key_hot_save_failed"
+    elseif not settling and keyVehicleFree(recovery) and keyAt(recovery, false) then
+        local record = SC.Registry.byId(recovery.id)
+        local footOk, vehicle = invoke(recovery.actor, "getVehicle")
+        local runtime = record and record.runtime
+        if record and record.actor == recovery.actor and SC.Actor.isCompanion(recovery.actor)
+            and footOk and vehicle == nil
+            and not (runtime and (runtime.inactive or runtime.removalPending)) then
+            recovery.uncertain = true
+            local called, returned = invoke(recovery.target, "AddItem", recovery.key)
+            if called and returned == recovery.key then
+                if completeDriverKey(recovery) then return true end
+                if recovery.hotSaved then reason = "driver_key_index_release_failed" end
+            elseif called then reason = "driver_key_id_conflict" end
+        else reason = "driver_key_actor_unavailable" end
+    end
+    local committed = recovery.hotSaved and keyAt(recovery, true)
+    local rolledBack = not committed and rollbackDriverKey(recovery)
+    recovery.uncertain = not committed and not rolledBack
+    recovery.reason = reason
+    if rolledBack and (settling or recovery.attempts >= 6) then
+        driverKeyRecoveries[recovery.actor] = nil
+        return true, reason
+    end
+    recovery.nextAt = (type(getTimestampMs) == "function" and tonumber((getTimestampMs())) or 0)
+        + math.min(30000, 1000 * 2 ^ math.max(0, recovery.attempts - 1))
+    if SC.Diagnostics and SC.Diagnostics.report then
+        pcall(SC.Diagnostics.report, "vehicle-key", recovery.id, reason,
+            "attempt=" .. tostring(recovery.attempts) .. " rollback=" .. tostring(rolledBack))
+    end
+    return false, reason
+end
+
+local function advanceDriverKey(recovery, settling)
+    local called, completed, reason = pcall(advanceDriverKeyUnsafe, recovery, settling)
+    if called then return completed, reason end
+    recovery.uncertain, recovery.reason = true, "driver_key_recovery_error:" .. tostring(completed)
+    recovery.nextAt = (type(getTimestampMs) == "function" and tonumber((getTimestampMs())) or 0) + 1000
+    return false, recovery.reason
+end
+
+-- Only a fully committed, on-foot saved driver may take the car's existing key.
+-- A retry owns the exact objects; it never constructs a replacement key.
+function vehicleService.recoverRestoredDriverKey(actor, saved)
+    if actor == nil or type(saved) ~= "table" then return true, "not_saved_driver" end
+    if driverKeyRecoveries[actor] then return false, "driver_key_recovery_pending" end
+    local seat = saved.vehicle
+    if type(seat) ~= "table" or seat.stored ~= false or seat.seat ~= 0
+        or type(seat.vehicle) ~= "table" then return true, "not_saved_driver" end
+    local record = SC.Registry.byId(saved.id)
+    local footOk, nativeVehicle = invoke(actor, "getVehicle")
+    if not record or record.actor ~= actor or not SC.Actor.isCompanion(actor)
+        or not footOk or nativeVehicle ~= nil
+        or (record.runtime and (record.runtime.inactive or record.runtime.removalPending)) then
+        return true, "driver_not_committed_on_foot"
+    end
+    local sqlId = finite(seat.vehicle.sqlId, nil)
+    local vehicle = sqlId and loadedVehicleBySqlId(sqlId) or nil
+    if vehicle == nil then return true, "car_not_loaded" end
+    local freeOk, driver = invoke(vehicle, "getDriver")
+    if not freeOk or driver ~= nil or strangerAboard(vehicle) then return true, "car_driver_occupied" end
+    local targetOk, target = invoke(actor, "getInventory")
+    local keyIdOk, keyId = invoke(vehicle, "getKeyId")
+    if not targetOk or target == nil or not keyIdOk or finite(keyId, nil) == nil then
+        return false, "driver_key_inventory_unavailable"
+    end
+    local hasOk, heldKey = invoke(target, "haveThisKeyId", keyId)
+    if not hasOk then return false, "driver_key_inventory_unavailable" end
+    if heldKey ~= nil and heldKey ~= false then return true, "driver_already_has_key" end
+    local keyOk, key = invoke(vehicle, "getCurrentKey")
+    if not keyOk or key == nil then return true, "ignition_key_unavailable" end
+    local idOk, itemKeyId = invoke(key, "getKeyId")
+    local sourceOk, source = invoke(key, "getContainer")
+    if not idOk or itemKeyId ~= keyId or not sourceOk or source == nil or source == target then
+        return false, "ignition_key_owner_unavailable"
+    end
+    local recovery = { actor = actor, id = saved.id, vehicle = vehicle, sqlId = sqlId,
+        key = key, source = source, target = target, attempts = 0, nextAt = 0 }
+    if not keyAt(recovery, false) then return false, "ignition_key_owner_unverified" end
+    driverKeyRecoveries[actor] = recovery
+    return advanceDriverKey(recovery, false)
+end
+
+function vehicleService.recoverDriverKeyAfterExit(actor, sqlId)
+    local id = actor and SC.Registry and SC.Registry.idOf(actor)
+    sqlId = finite(sqlId, -1)
+    if id == nil or sqlId < 0 then return false, "driver_key_identity_unavailable" end
+    return vehicleService.recoverRestoredDriverKey(actor, {
+        id = id, vehicle = { stored = false, seat = 0,
+            vehicle = { sqlId = math.floor(sqlId) } },
+    })
+end
+
+function vehicleService.validateDriverKeyRecovery()
+    for _, recovery in pairs(driverKeyRecoveries) do
+        if recovery.uncertain then
+            return false, "driver key recovery is unresolved: " .. tostring(recovery.id)
+                .. ": " .. tostring(recovery.reason)
+        end
+    end
+    return true
+end
+
+function vehicleService.prepareDriverKeyReset(actor)
+    local actors = {}
+    if actor ~= nil then actors[1] = actor
+    else for value in pairs(driverKeyRecoveries) do actors[#actors + 1] = value end end
+    for _, value in ipairs(actors) do
+        local recovery = driverKeyRecoveries[value]
+        if recovery and not advanceDriverKey(recovery, true) then
+            return false, "driver_key_recovery_pending"
+        end
+    end
+    return true
+end
+
+-- Build 42 removes a parked car from the world when its area unloads, and
+-- later loads it again as a new object. A companion still seated in the
+-- removed object is out of the world until a restart. Free that seat and
+-- report where the car was, so the runtime can put the companion back beside
+-- it once the area loads. vehicle:exit() is not used: it writes the removed
+-- object back to the vehicle database over the car's saved state.
+function vehicleService.releaseUnloadedSeat(actor)
+    local seated, vehicle, seat = vehicleService.isNativeSeated(actor)
+    if not seated then return false, "not_seated" end
+    local removedOk, removed = invoke(vehicle, "isRemovedFromWorld")
+    if not removedOk or removed ~= true then return false, "vehicle_loaded" end
+    local identity = vehicleIdentity(vehicle)
+    local clearedOk, cleared = invoke(vehicle, "clearPassenger", seat)
+    if not clearedOk or cleared ~= true then return false, "unloaded_seat_release_failed" end
+    invoke(actor, "setVehicle", nil)
+    invoke(actor, "setCollidable", true)
+    local afterOk, after = invoke(actor, "getVehicle")
+    if not afterOk or after ~= nil then return false, "unloaded_seat_release_unverified" end
+    -- A seated companion stays on the cell update list. Without a seat or a
+    -- loaded square it must not update until it is placed again.
+    invoke(actor, "ensureUnscheduled")
+    if identity ~= nil then reservations[seatKey(identity, seat)] = nil end
+    vehicleService.invalidateManifests(vehicle)
+    local transaction = transactions[actor]
+    if transaction ~= nil then clearTransaction(actor, transaction) end
+    local record = SC.Registry.byId(SC.Registry.idOf(actor))
+    if record ~= nil and type(record.runtime) == "table" then record.runtime.vehicle = nil end
+    return true, {
+        sqlId = identity and identity.sqlId or nil, seat = seat,
+        x = identity and identity.x or nil, y = identity and identity.y or nil,
+        z = identity and identity.z or nil,
+    }
+end
+
+-- The door-side square of a car found again by its database id, for a
+-- companion that was released from it while its area was unloaded.
+function vehicleService.reloadedCarSquare(anchor)
+    if type(anchor) ~= "table" then return nil, "no_car_anchor" end
+    local vehicle = loadedVehicleBySqlId(tonumber(anchor.sqlId))
+    if vehicle == nil then return nil, "car_not_loaded" end
+    local seat = tonumber(anchor.seat)
+    local square, reason = nil, "no safe loaded passenger-door square"
+    if seat ~= nil then square, reason = exitSquare(vehicle, nil, seat) end
+    if square == nil then
+        local countOk, count = invoke(vehicle, "getMaxPassengers")
+        for other = 0, math.min(math.floor(finite(countOk and count or 0, 0)), 32) - 1 do
+            if other ~= seat then square = exitSquare(vehicle, nil, other) end
+            if square ~= nil then break end
+        end
+    end
+    return square, square and "car_door" or reason
+end
+
+function vehicleService.isSeatReserved(vehicle, seat)
+    local identity = vehicleIdentity(vehicle)
+    local reservation = seatKey(identity, math.floor(finite(seat, -1)))
+    if reservation == nil then return false, nil end
+    return reservations[reservation] ~= nil, reservations[reservation]
+end
+
+function vehicleService.beginBoarding(actor, vehicle, requestedSeat, intent)
+    intent = type(intent) == "table" and intent or {}
+    if vehicle == nil then return nil, "vehicle is required" end
+    local identity = vehicleIdentity(vehicle)
+    if identity == nil then return nil, "vehicle identity is unavailable" end
+    if goneFromWorld(vehicle) then return nil, "vehicle is not in the loaded world" end
+    local seat, reason = chooseSeat(vehicle, actor, requestedSeat, identity,
+        intent.driverSeat == true)
+    if seat == nil then return nil, reason end
+    local stopped, stopReason = stationary(vehicle)
+    if stopped ~= true then return nil, stopReason end
+    return beginTransaction(actor, vehicle, seat, "board_vehicle", intent)
+end
+
+function vehicleService.cancelTransaction(actor, reason)
+    local transaction = actor and transactions[actor] or nil
+    if transaction == nil then return true, "no_vehicle_transaction" end
+    local service = supervisor()
+    if service == nil or type(service.cancel) ~= "function" then
+        cancelTransactionState(actor, reason, transaction.supervisorToken)
+        return true, "vehicle_transaction_cleared"
+    end
+    return service.cancel(actor, reason or "vehicle_transaction_cancelled", nil, true)
+end
+
+function vehicleService.failTransaction(actor, reason, detail)
+    local transaction = actor and transactions[actor] or nil
+    if transaction == nil then return false, "no_vehicle_transaction" end
+    if transaction.moduleReservationClaimed == true and actorIsOnFoot(actor)
+        and reservations[transaction.reservation] == transaction.actorId then
+        reservations[transaction.reservation] = nil
+    end
+    return finishTransaction(transaction, false,
+        reason or "vehicle_transaction_failed", detail)
+end
+
+function vehicleService.transactionStatus(actor)
+    local transaction = actor and transactions[actor] or nil
+    if not transactionIsCurrent(transaction) then return nil end
+    local service = supervisor()
+    local snapshot = service and service.snapshot and service.snapshot(actor) or nil
+    return {
+        action = transaction.action,
+        phase = snapshot and snapshot.phase or "unknown",
+        vehicle = transaction.vehicle,
+        seat = transaction.seat,
+        targetKey = snapshot and snapshot.targetKey or nil,
+    }
+end
+
+function vehicleService.board(actor, vehicle, requestedSeat, intent)
+    intent = type(intent) == "table" and intent or {}
+    local supplied = intent.preflight
+    if requestedSeat == nil and type(supplied) == "table" then
+        requestedSeat = supplied.seat
+    end
+    local prepared, prepareReason = vehicleService.preflightBoard(actor, vehicle, requestedSeat,
+        intent.driverSeat == true)
+    if prepared == nil then
+        vehicleService.failTransaction(actor, "vehicle_board_preflight_failed", {
+            reason = prepareReason,
+        })
+        return false, prepareReason
+    end
+    if supplied ~= nil and (type(supplied) ~= "table" or supplied.actorId ~= prepared.actorId
+        or supplied.vehicle ~= vehicle or supplied.seat ~= prepared.seat
+        or supplied.reservation ~= prepared.reservation
+        or supplied.vehicleKey ~= prepared.vehicleKey) then
+        vehicleService.failTransaction(actor, "vehicle_board_preflight_stale")
+        return false, "vehicle boarding preflight is stale or belongs to another actor"
+    end
+    local transaction = transactions[actor]
+    if not transactionIsCurrent(transaction) or transaction.action ~= "board_vehicle"
+        or transaction.vehicle ~= vehicle or transaction.seat ~= prepared.seat then
+        transaction, prepareReason = beginTransaction(actor, vehicle, prepared.seat,
+            "board_vehicle", intent)
+        if transaction == nil then return false, prepareReason end
+    end
+    intent.supervisorToken = transaction.supervisorToken
+    local reservation = prepared.reservation
+    local id = prepared.actorId
+    if SC.Actor.stop(actor) ~= true then
+        finishTransaction(transaction, false, "vehicle_board_stop_failed")
+        return false, "companion could not stop safely at the passenger door"
+    end
+    reservations[reservation] = id
+
+    local service = supervisor()
+    local committing, commitReason = service.transition(
+        transaction.supervisorToken, "committing", {
+            seat = prepared.seat, vehicleKey = prepared.vehicleKey,
+        })
+    if committing ~= true then
+        return finishTransaction(transaction, false,
+            commitReason or "vehicle_board_commit_rejected")
+    end
+
+    local entered, nativeReason, safeFallback = nativeBoard(actor, vehicle, prepared.seat)
+    if entered then
+        local verifying, verifyReason = service.transition(
+            transaction.supervisorToken, "verifying", {
+                result = nativeReason, seat = prepared.seat,
+            })
+        if verifying ~= true then
+            local rolledBack = rollbackNativeEntry(actor, vehicle)
+            return finishTransaction(transaction, false,
+                verifyReason or "vehicle_board_verification_rejected",
+                { preserveReservation = rolledBack ~= true })
+        end
+        local record = SC.Registry.byId(id)
+        if record ~= nil then
+            record.runtime = type(record.runtime) == "table" and record.runtime or {}
+            record.runtime.vehicle = { native = true, vehicle = vehicle, seat = prepared.seat }
+        end
+        return finishTransaction(transaction, true, nativeReason, {
+            vehicleKey = prepared.vehicleKey, seat = prepared.seat, native = true,
+        })
+    end
+
+    if safeFallback ~= true then
+        if transaction.moduleReservationClaimed == true then reservations[reservation] = nil end
+        return finishTransaction(transaction, false, nativeReason, {
+            rollbackVerified = false, preserveReservation = true,
+        })
+    end
+    if intent.allowVirtualSeat ~= true then
+        if transaction.moduleReservationClaimed == true then reservations[reservation] = nil end
+        return finishTransaction(transaction, false, nativeReason, {
+            rollbackVerified = true,
+        })
+    end
+    if SC.Persistence == nil or type(SC.Persistence.captureRecord) ~= "function" then
+        if transaction.moduleReservationClaimed == true then reservations[reservation] = nil end
+        return finishTransaction(transaction, false,
+            "persistence adapter is unavailable for virtual seating")
+    end
+    local record = SC.Registry.byId(id)
+    local saved, captureReason = SC.Persistence.captureRecord(record, {
+        stored = true,
+        vehicle = prepared.identity,
+        seat = prepared.seat,
+    })
+    if saved == nil then
+        if transaction.moduleReservationClaimed == true then reservations[reservation] = nil end
+        return finishTransaction(transaction, false, captureReason)
+    end
+    record.runtime = type(record.runtime) == "table" and record.runtime or {}
+    record.runtime.lastStableSnapshot = saved
+    local removed, removedRecord = SC.Actor.remove(actor)
+    if not removed then
+        if transaction.moduleReservationClaimed == true then reservations[reservation] = nil end
+        return finishTransaction(transaction, false, tostring(removedRecord))
+    end
+    storedById[id] = {
+        id = id,
+        record = saved,
+        vehicle = prepared.identity,
+        seat = prepared.seat,
+        reservation = reservation,
+    }
+    service.transition(transaction.supervisorToken, "verifying", {
+        stored = true, seat = prepared.seat,
+    })
+    return finishTransaction(transaction, true, "virtual_seat", {
+        vehicleKey = prepared.vehicleKey, seat = prepared.seat, stored = true,
+    })
+end
+
+-- The driver's seat, for a companion about to drive (SC.Driving). Same
+-- transaction, verification and rollback as a passenger seat; ride-along
+-- boarding still refuses seat zero. Never with the player or a stranger aboard.
+function vehicleService.boardDriver(actor, vehicle, intent)
+    intent = type(intent) == "table" and intent or {}
+    intent.driverSeat = true
+    return vehicleService.board(actor, vehicle, 0, intent)
+end
+
+function vehicleService.preflightDriver(actor, vehicle)
+    return vehicleService.preflightBoard(actor, vehicle, 0, true)
+end
+
+function vehicleService.exit(actor, vehicle, requestedSeat, intent)
+    intent = type(intent) == "table" and intent or {}
+    if not SC.Actor.isCompanion(actor) then
+        return false, "actor is not an active companion"
+    end
+    local currentOk, current = invoke(actor, "getVehicle")
+    vehicle = vehicle or (currentOk and current or nil)
+    if vehicle == nil then return false, "actor is not in a native vehicle seat" end
+    local stopped, stopReason = stationary(vehicle)
+    if stopped ~= true then return false, stopReason or "vehicle is moving" end
+    local seatOk, seat = invoke(vehicle, "getSeat", actor)
+    local identity = vehicleIdentity(vehicle)
+    if not seatOk or finite(seat, -1) < 0 then return false, "native vehicle seat is invalid" end
+    seat = math.floor(seat)
+    local exteriorSeat, exteriorReason = moveToExteriorExitSeat(actor, vehicle, seat, identity)
+    if exteriorSeat == nil then return false, exteriorReason end
+    seat = exteriorSeat
+    local transaction = transactions[actor]
+    if not transactionIsCurrent(transaction) or transaction.action ~= "exit_vehicle"
+        or transaction.vehicle ~= vehicle or transaction.seat ~= seat then
+        transaction, stopReason = beginTransaction(actor, vehicle, seat,
+            "exit_vehicle", intent)
+        if transaction == nil then return false, stopReason end
+    end
+    intent.supervisorToken = transaction.supervisorToken
+    local square, squareReason = exitSquare(vehicle, nil, seat)
+    if square == nil then
+        return finishTransaction(transaction, false, squareReason)
+    end
+    if SC.Actor.stop(actor) ~= true then
+        finishTransaction(transaction, false, "vehicle_exit_stop_failed")
+        return false, "companion could not stop before vehicle exit"
+    end
+    local service = supervisor()
+    local committing, commitReason = service.transition(
+        transaction.supervisorToken, "committing", { seat = seat })
+    if committing ~= true then
+        return finishTransaction(transaction, false,
+            commitReason or "vehicle_exit_commit_rejected")
+    end
+    local exitedOk, exited = invoke(vehicle, "exit", actor)
+    if not exitedOk or exited ~= true then
+        return finishTransaction(transaction, false, "native vehicle exit was rejected")
+    end
+    local verifying, verifyReason = service.transition(
+        transaction.supervisorToken, "verifying", { seat = seat })
+    if verifying ~= true then
+        local rollbackOk, rollbackEntered = invoke(vehicle, "enter", seat, actor)
+        local vehicleOk, restoredVehicle = invoke(actor, "getVehicle")
+        local seatOk, restoredSeat = invoke(vehicle, "getSeat", actor)
+        local restored = rollbackOk and rollbackEntered == true
+            and vehicleOk and restoredVehicle == vehicle
+            and seatOk and tonumber(restoredSeat) == seat
+        if restored then restored = settleNativeSeat(actor, vehicle, seat) == true end
+        return finishTransaction(transaction, false,
+            verifyReason or "vehicle_exit_verification_rejected",
+            { preserveReservation = true, rollbackVerified = restored })
+    end
+    local verifyOk, after = invoke(actor, "getVehicle")
+    if not verifyOk or after ~= nil then
+        return finishTransaction(transaction, false,
+            "native vehicle exit could not be verified", { preserveReservation = true })
+    end
+    local recovered, recoverReason = SC.Actor.recover(actor, square)
+    if recovered ~= true then
+        local rollbackOk, rollbackEntered = invoke(vehicle, "enter", seat, actor)
+        local rollbackVehicleOk, rollbackVehicle = invoke(actor, "getVehicle")
+        local restored = rollbackOk and rollbackEntered == true
+            and rollbackVehicleOk and rollbackVehicle == vehicle
+        if restored then restored = settleNativeSeat(actor, vehicle, seat) == true end
+        if restored then
+            return finishTransaction(transaction, false,
+                "native vehicle exit placement failed; seat rollback verified: "
+                    .. tostring(recoverReason), { preserveReservation = true })
+        end
+        return finishTransaction(transaction, false,
+            "native vehicle exit placement and rollback failed: " .. tostring(recoverReason),
+            { preserveReservation = true })
+    end
+    if seatOk and identity ~= nil then reservations[seatKey(identity, seat)] = nil end
+    local record = SC.Registry.byId(SC.Registry.idOf(actor))
+    if record ~= nil then record.runtime.vehicle = nil end
+    vehicleService.invalidateManifests(vehicle)
+    return finishTransaction(transaction, true, "native_exit", {
+        vehicleKey = keyFor(identity), seat = seat,
+    })
+end
+
+-- Number of virtual passengers still stored for a vehicle key. The runtime uses
+-- this to keep retrying placement instead of consuming the exit after one attempt
+-- (a missing exit square or a temporary spawn rejection is not permanent). (LF-04)
+local function storedRemainingForKey(key)
+    if key == nil then return 0 end
+    local remaining = 0
+    for _, stored in pairs(storedById) do
+        if keyFor(stored.vehicle) == key then remaining = remaining + 1 end
+    end
+    return remaining
+end
+
+function vehicleService.storedCountFor(vehicle)
+    return storedRemainingForKey(keyFor(vehicleIdentity(vehicle)))
+end
+
+function vehicleService.restoreForVehicle(vehicle, player)
+    local identity = vehicleIdentity(vehicle)
+    local key = keyFor(identity)
+    if key == nil then return 0, 0 end
+    vehicleService.invalidateManifests(vehicle)
+    if SC.Persistence == nil or type(SC.Persistence.restoreAt) ~= "function" then
+        return 0, storedRemainingForKey(key)
+    end
+    -- Every exit from a car runs this; only search for tiles when someone
+    -- stored in this car is actually waiting to be placed.
+    if storedRemainingForKey(key) == 0 then return 0, 0 end
+    local square = exitSquare(vehicle, player, nil)
+    -- No safe loaded exit square is a temporary condition: leave the passengers
+    -- stored and report how many still await placement so the caller retries.
+    if square == nil then return 0, storedRemainingForKey(key) end
+    local restored = 0
+    local ids = {}
+    for id, stored in pairs(storedById) do
+        if keyFor(stored.vehicle) == key then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local stored = storedById[id]
+        if SC.Registry.byId(id) ~= nil then
+            storedById[id] = nil
+            reservations[stored.reservation] = nil
+        elseif stored.spawnTicket ~= nil then
+            -- Placement is already in flight; restorePulse owns this ticket. Do not
+            -- launch a second spawn for the same passenger.
+        else
+            local actor, reason, ticket = SC.Persistence.restoreAt(stored.record, square)
+            if actor ~= nil then
+                storedById[id] = nil
+                reservations[stored.reservation] = nil
+                restored = restored + 1
+            elseif reason == "spawn_pending" and ticket ~= nil then
+                stored.spawnTicket = ticket
+            else
+                SC.Diagnostics.report("vehicle", id, "virtual-seat restore deferred", reason)
+            end
+        end
+    end
+    return restored, storedRemainingForKey(key)
+end
+
+function vehicleService.restorePulse()
+    local current = type(getTimestampMs) == "function" and tonumber((getTimestampMs())) or 0
+    local retries = {}
+    for actor, recovery in pairs(driverKeyRecoveries) do
+        if recovery.attempts < 6 and current >= recovery.nextAt then retries[#retries + 1] = actor end
+    end
+    for index, actor in ipairs(retries) do
+        if index > 4 then break end
+        advanceDriverKey(driverKeyRecoveries[actor], false)
+    end
+    local restored = 0
+    local ids = {}
+    for id, stored in pairs(storedById) do
+        if stored.spawnTicket ~= nil then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local stored = storedById[id]
+        if stored ~= nil and stored.spawnTicket ~= nil then
+            local actor, reason = SC.Actor.pollSpawn(stored.spawnTicket)
+            if actor ~= nil then
+                storedById[id] = nil
+                reservations[stored.reservation] = nil
+                restored = restored + 1
+            elseif reason ~= "spawn_pending" then
+                stored.spawnTicket = nil
+                SC.Diagnostics.report("vehicle", id, "virtual-seat restore deferred", reason)
+            end
+        end
+    end
+    return restored
+end
+
+function vehicleService.importStored(record)
+    if type(record) ~= "table" or not SC.Registry.isValidId(record.id)
+        or type(record.vehicle) ~= "table" or record.vehicle.stored ~= true
+        or type(record.vehicle.vehicle) ~= "table" then
+        return false, "invalid virtual vehicle save record"
+    end
+    if SC.Registry.byId(record.id) ~= nil or storedById[record.id] ~= nil then
+        return false, "duplicate vehicle-stored companion id"
+    end
+    local seat = math.floor(finite(record.vehicle.seat, -1))
+    local reservation = seatKey(record.vehicle.vehicle, seat)
+    if seat < 0 or reservation == nil or reservations[reservation] ~= nil then
+        return false, "invalid or occupied virtual seat reservation"
+    end
+    storedById[record.id] = {
+        id = record.id,
+        record = record,
+        vehicle = record.vehicle.vehicle,
+        seat = seat,
+        reservation = reservation,
+    }
+    reservations[reservation] = record.id
+    return true
+end
+
+function vehicleService.importNativeSeat(record)
+    if type(record) ~= "table" or type(record.vehicle) ~= "table"
+        or record.vehicle.stored ~= false then
+        return false, "invalid native-seated companion save record"
+    end
+    -- A Java actor cannot be trusted to survive a mod-managed load in a native
+    -- seat. Convert the stable record to the same reserved virtual-seat form
+    -- used by a verified fallback, without mutating the caller on failure.
+    local converted = {}
+    for key, value in pairs(record) do converted[key] = value end
+    converted.vehicle = {}
+    for key, value in pairs(record.vehicle) do converted.vehicle[key] = value end
+    converted.vehicle.stored = true
+    local imported, reason = vehicleService.importStored(converted)
+    if not imported then return false, reason end
+    return true, "native seat converted to a reserved virtual seat"
+end
+
+function vehicleService.exportStored()
+    local result = {}
+    for id, stored in pairs(storedById) do result[id] = stored.record end
+    return result
+end
+
+function vehicleService.stateFor(actor)
+    local vehicleOk, vehicle = invoke(actor, "getVehicle")
+    if not vehicleOk or vehicle == nil then return nil end
+    local identity = vehicleIdentity(vehicle)
+    local seatOk, seat = invoke(vehicle, "getSeat", actor)
+    if identity == nil or not seatOk then return nil end
+    return { stored = false, vehicle = identity, seat = math.floor(finite(seat, -1)) }
+end
+
+function vehicleService.storedCount()
+    local count = 0
+    for _ in pairs(storedById) do count = count + 1 end
+    return count
+end
+
+function vehicleService.contains(id)
+    return storedById[id] ~= nil
+end
+
+function vehicleService.releaseActor(actor)
+    if actor == nil then return false end
+    local settled, keyReason = vehicleService.prepareDriverKeyReset(actor)
+    if not settled then return false, keyReason end
+    if SC.Driving and type(SC.Driving.releaseActor) == "function" then
+        local called, stopped = pcall(SC.Driving.releaseActor, actor, "vehicle_release")
+        if not called or stopped ~= true then return false, "drive_release_failed" end
+    end
+    lastVehicleShotAt[actor] = nil
+    local transaction = transactions[actor]
+    if transaction == nil then return true end
+    local service = supervisor()
+    local token = service and type(service.current) == "function"
+        and service.current(actor) or nil
+    if token and token == transaction.supervisorToken
+        and token.owner == "vehicle" and token.action == "board_vehicle"
+        and token.phase == "committing" then
+        return true
+    end
+    if transaction.moduleReservationClaimed == true
+        and reservations[transaction.reservation] == transaction.actorId then
+        reservations[transaction.reservation] = nil
+    end
+    clearTransaction(actor, transaction)
+    return true
+end
+
+function vehicleService.reset()
+    local settled, keyReason = vehicleService.prepareDriverKeyReset()
+    if not settled then return false, keyReason end
+    if SC.Driving and type(SC.Driving.reset) == "function" then
+        local called, released = pcall(SC.Driving.reset)
+        if not called or released ~= true then return false, "drive_release_failed" end
+    end
+    local activeActors = {}
+    for actor in pairs(transactions) do activeActors[#activeActors + 1] = actor end
+    for _, actor in ipairs(activeActors) do
+        vehicleService.cancelTransaction(actor, "vehicle_reset")
+    end
+    for _, stored in pairs(storedById) do
+        if stored.spawnTicket ~= nil and SC.Actor ~= nil
+            and type(SC.Actor.cancelSpawn) == "function" then
+            pcall(SC.Actor.cancelSpawn, stored.spawnTicket)
+        end
+    end
+    storedById = {}
+    reservations = {}
+    manifests = {}
+    transactions = setmetatable({}, { __mode = "k" })
+    seatResources = {}
+    lastVehicleShotAt = setmetatable({}, { __mode = "k" })
+end
+
+return vehicleService

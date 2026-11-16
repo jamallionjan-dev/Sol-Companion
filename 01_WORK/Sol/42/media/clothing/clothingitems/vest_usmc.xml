@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/RiotArmor/m_usmcriotvest_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/RiotArmor/f_usmcriotvest_tombfit</m_FemaleModel>
+	<m_GUID>e52e4424-dc8c-485b-879b-5d4f04a8d00e</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>clothes\vest\riotvest_usmc</textureChoices>
+</clothingItem>

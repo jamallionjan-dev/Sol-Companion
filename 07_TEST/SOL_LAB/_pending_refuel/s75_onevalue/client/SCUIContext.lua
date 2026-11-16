@@ -1,0 +1,1797 @@
+-- SPDX-License-Identifier: MIT
+
+require "ISUI/ISContextMenu"
+require "ISUI/ISWorldObjectContextMenu"
+require "ISUI/ISInventoryPaneContextMenu"
+require "ISUI/ISTextBox"
+require "SCInteraction"
+require "SCConstructionPlanner"
+require "SCGameplayUtil"
+
+SurvivorCompanion = SurvivorCompanion or {}
+local SC = SurvivorCompanion
+SC.UIContext = SC.UIContext or {}
+local Context = SC.UIContext
+
+Context._installed = Context._installed or false
+Context.maximumShortcutDistance = 16
+
+-- Vanilla routes readable letters through this one entry point, including
+-- the multi-item Read action. Keep the original callback and restore it when
+-- UI hooks are removed so sealed post is detected without changing other
+-- literature or keeping a stale wrapper after returning to the main menu.
+function Context.readItemWithOddballMail(item, playerIndex)
+    if SC.OddballVirgil and type(SC.OddballVirgil.isSealedMail) == "function"
+        and SC.OddballVirgil.isSealedMail(item) == true
+        and type(SC.OddballVirgil.openMailFor) == "function" then
+        local player = type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(playerIndex) or nil
+        SC.OddballVirgil.openMailFor(item, player)
+    end
+    if type(Context._originalReadItem) == "function" then
+        return Context._originalReadItem(item, playerIndex)
+    end
+end
+
+local function text(key, ...)
+    if SC.UI and type(SC.UI.text) == "function" then
+        return SC.UI.text(key, ...)
+    end
+    if getText then
+        return getText(key, ...)
+    end
+    return key
+end
+
+local function safeMethod(object, methodName, ...)
+    if not object then
+        return nil
+    end
+    local method = object[methodName]
+    if type(method) ~= "function" then
+        return nil
+    end
+    local ok, value = pcall(method, object, ...)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+-- Vanilla's Medical Check sends a consent request to another player. Native
+-- companions are IsoPlayers but cannot answer it. Route the real right-click
+-- option directly to a local-player check and treatment session instead.
+function Context.medicalCheckCompanion(requester, target)
+    local function reject(reason, argument)
+        if requester then safeMethod(requester, "setHaloNote",
+            argument and text(reason, argument) or text(reason)) end
+        return false, reason
+    end
+    if not requester or not target or not SC.Actor
+        or type(SC.Actor.isCompanion) ~= "function" then
+        return reject("UI_SC_Disabled_InvalidActor")
+    end
+    local valid, companion = pcall(SC.Actor.isCompanion, target)
+    if not valid or companion ~= true or safeMethod(target, "isDead") == true then
+        return reject("UI_SC_Disabled_InvalidActor")
+    end
+    if not SC.UI or type(SC.UI.openHealth) ~= "function" then
+        return reject("UI_SC_Disabled_HealthUnavailable")
+    end
+    local ok, opened, reason, argument = pcall(SC.UI.openHealth, target, requester)
+    if not ok or opened ~= true then
+        return reject(reason or "UI_SC_Disabled_HealthUnavailable", argument)
+    end
+    safeMethod(requester, "setHaloNote", text("UI_SC_MedicalCheck_Opened"))
+    return true, "health_opened"
+end
+
+-- The vanilla option may be omitted for a native companion or another mod may
+-- have captured its callback before our wrapper was installed. Bind the actual
+-- clicked menu option as well, without adding a duplicate Medical Check entry.
+function Context.ensureCompanionMedicalOption(context, worldObjects, player, row)
+    if not context or not row or not row.actor then return nil end
+    local name = getText and getText("ContextMenu_Medical_Check") or "Medical Check"
+    local option = type(context.getOptionFromName) == "function"
+        and context:getOptionFromName(name) or nil
+    if not option then
+        option = context:addOption(name, worldObjects, Context.onMedicalCheck,
+            player, row.actor)
+    else
+        option.target = worldObjects
+        option.onSelect = Context.onMedicalCheck
+        option.param1 = player
+        option.param2 = row.actor
+    end
+    local available, reason, argument
+    if SC.MedicalUI and type(SC.MedicalUI.availability) == "function" then
+        available, reason, argument = SC.MedicalUI.availability(row.actor, player)
+    else
+        available, reason = false, "UI_SC_Disabled_HealthUnavailable"
+    end
+    option.notAvailable = available ~= true
+    if option.notAvailable and type(ISToolTip) == "table" then
+        local tooltip = ISToolTip:new()
+        tooltip:initialise()
+        tooltip:setVisible(false)
+        tooltip.description = argument and text(reason, argument) or text(reason)
+        option.toolTip = tooltip
+    else
+        option.toolTip = nil
+    end
+    return option
+end
+
+function Context.onMedicalCheck(worldObjects, requester, target)
+    local valid, companion = pcall(function()
+        return SC.Actor and type(SC.Actor.isCompanion) == "function"
+            and SC.Actor.isCompanion(target) == true
+    end)
+    if valid and companion then
+        return Context.medicalCheckCompanion(requester, target)
+    end
+    if Context._originalMedicalCheck then
+        return Context._originalMedicalCheck(worldObjects, requester, target)
+    end
+end
+
+local function hasMethod(object, methodName)
+    if not object then return false end
+    local ok, value = pcall(function() return object[methodName] end)
+    return ok and type(value) == "function"
+end
+
+local function executeFromContext(companionId, command, payload, player)
+    if payload == nil and SC.Interaction and SC.Interaction.descriptor(command)
+        and SC.Registry and type(SC.Registry.byId) == "function" then
+        local record = SC.Registry.byId(companionId)
+        local row = record and SC.UI and SC.UI.describeEntry
+            and SC.UI.describeEntry(record, player) or nil
+        local accepted, reason = SC.Interaction.issue(row, command, player)
+        if player then safeMethod(player, "setHaloNote", accepted
+            and text("UI_SC_CommandAccepted")
+            or SC.Interaction.reasonText(reason)) end
+        if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+        return
+    end
+    if SC.Commands and type(SC.Commands.issue) == "function" then
+        local ok, first, second, third = pcall(SC.Commands.issue, companionId, command, payload, player)
+        if command == "status" and ok and first ~= false and SC.UI then
+            local description = nil
+            if type(first) == "table" then description = first end
+            if type(second) == "table" then description = second end
+            if type(third) == "table" then description = third end
+            if description and type(SC.UI.showStatus) == "function" then
+                SC.UI.showStatus(description)
+            elseif type(SC.UI.open) == "function" then
+                SC.UI.open("status", companionId)
+            end
+        elseif (command == "designate_target" or command == "avoid_target"
+            or command == "assign_objective") and player then
+            local acceptedKey = command == "assign_objective" and "UI_SC_Objective_Assigned"
+                or command == "designate_target" and second == "target_pushed"
+                    and "UI_SC_Target_Pushed"
+                or command == "designate_target" and "UI_SC_Target_Designated"
+                or "UI_SC_Target_Avoided"
+            local rejectedKey = command == "assign_objective"
+                and "UI_SC_Objective_Rejected" or "UI_SC_Target_Rejected"
+            safeMethod(player, "setHaloNote", ok and first == true
+                and text(acceptedKey)
+                or text(rejectedKey, tostring(second or first or "unavailable")))
+            if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+        elseif SC.UI and type(SC.UI.refresh) == "function" then
+            SC.UI.refresh()
+        end
+    end
+end
+
+local function companionName(companionId)
+    if SC.UI and SC.UI.instance and SC.UI.instance.selectedRow
+        and SC.UI.instance.selectedRow.id == companionId then
+        return SC.UI.instance.selectedRow.name
+    end
+    if SC.Registry and type(SC.Registry.byId) == "function" then
+        local ok, record = pcall(SC.Registry.byId, companionId)
+        if ok and type(record) == "table" and record.actor then
+            if SC.Names and type(SC.Names.displayName) == "function" then
+                local show = not SC.UI or type(SC.UI.getSettings) ~= "function"
+                    or SC.UI.getSettings().showNicknames ~= false
+                local named, display = pcall(SC.Names.displayName, record, show)
+                if named and type(display) == "string" and display ~= "" then
+                    return display
+                end
+            end
+            local name = safeMethod(record.actor, "getFullName")
+                or safeMethod(record.actor, "getDisplayName")
+            if name and name ~= "" then return name end
+        end
+    end
+    return companionId
+end
+
+local function nicknameRecord(row)
+    if type(row) ~= "table" or type(row.id) ~= "string"
+        or not SC.Registry or type(SC.Registry.byId) ~= "function" then return nil end
+    local ok, record = pcall(SC.Registry.byId, row.id)
+    if not ok or type(record) ~= "table" or record.recruited ~= true
+        or record.actor == nil or row.actor ~= record.actor then return nil end
+    return record
+end
+
+function Context.nicknameValid(_target, candidate)
+    return SC.Names and type(SC.Names.normalize) == "function"
+        and type(SC.Names.normalize(candidate)) == "string"
+end
+
+local function acknowledgeNickname(record, nickname)
+    local actor = record and record.actor
+    if not actor then return end
+    local likes = type(record.nickname) == "table" and record.nickname.likes ~= false
+    local topic = likes and "nickname.player.accept" or "nickname.player.reject"
+    if SC.Dialogue and type(SC.Dialogue.has) == "function"
+        and SC.Dialogue.has(topic) == true and type(SC.Dialogue.say) == "function" then
+        local ok, spoken = pcall(SC.Dialogue.say, actor, topic, nil, { nickname },
+            { salt = tostring(record.id) .. ":" .. tostring(nickname) })
+        if ok and spoken == true then return end
+    end
+    if type(SolSpeechAR) == "table" and type(SolSpeechAR.isSol) == "function" and SolSpeechAR.isSol(actor) then return end     -- nothing in English above her head
+    safeMethod(actor, "Say", likes and (nickname .. "? Alright. I'll answer to it.")
+        or ("I'm not answering to " .. nickname .. ". Try again."))
+end
+
+function Context.onNicknameTextBox(_target, button, row, player)
+    if not button or button.internal ~= "OK" then return end
+    local record = nicknameRecord(row)
+    if not record or not SC.Names or type(SC.Names.setNickname) ~= "function" then return end
+    local input = button.parent and button.parent.entry
+        and button.parent.entry:getText() or nil
+    local nickname = type(SC.Names.normalize) == "function"
+        and SC.Names.normalize(input) or nil
+    if type(nickname) ~= "string" then
+        if player then safeMethod(player, "setHaloNote", text("UI_SC_Nickname_Invalid")) end
+        return
+    end
+    local ok, accepted = pcall(SC.Names.setNickname, record, nickname, "player", nil)
+    if not ok or accepted == false or accepted == nil then
+        if player then safeMethod(player, "setHaloNote", text("UI_SC_Nickname_Invalid")) end
+        return
+    end
+    acknowledgeNickname(record, nickname)
+    if SC.UIBridge and type(SC.UIBridge.invalidateNearbyInventoryLabels) == "function" then
+        SC.UIBridge.invalidateNearbyInventoryLabels()
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function giveNicknameFromContext(_target, row, player)
+    local record = nicknameRecord(row)
+    if not record or not SC.Names or type(SC.Names.normalize) ~= "function" then return end
+    local current = type(record.nickname) == "table" and record.nickname.text or ""
+    local playerNum = tonumber((safeMethod(player, "getPlayerNum"))) or 0
+    local modal = ISTextBox:new(0, 0, 300, 170,
+        text("UI_SC_Nickname_Prompt"), current, nil,
+        Context.onNicknameTextBox, playerNum, row, player)
+    modal:initialise()
+    modal.maxChars = tonumber(SC.Config and SC.Config.get
+        and SC.Config.get("nicknameMaxLength")) or 16
+    modal.noEmpty = true
+    modal:setValidateFunction(nil, Context.nicknameValid)
+    modal:setValidateTooltipText(text("UI_SC_Nickname_Invalid"))
+    modal:addToUIManager()
+end
+
+local function clearNicknameFromContext(_target, row)
+    local record = nicknameRecord(row)
+    if not record or not SC.Names or type(SC.Names.clearNickname) ~= "function" then
+        return
+    end
+    local ok, cleared = pcall(SC.Names.clearNickname, record)
+    if not ok or cleared == false then return end
+    if SC.UIBridge and type(SC.UIBridge.invalidateNearbyInventoryLabels) == "function" then
+        SC.UIBridge.invalidateNearbyInventoryLabels()
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function addNicknameActions(menu, row, player)
+    if SC.Config and type(SC.Config.get) == "function"
+        and SC.Config.get("nicknamesEnabled") == false then return end
+    if not SC.Names or type(SC.Names.setNickname) ~= "function" then return end
+    local record = nicknameRecord(row)
+    if not record then return end
+    menu:addOption(text("UI_SC_Nickname_Give"), nil,
+        giveNicknameFromContext, row, player)
+    if type(record.nickname) == "table" and type(record.nickname.text) == "string"
+        and record.nickname.text ~= "" then
+        menu:addOption(text("UI_SC_Nickname_Clear"), nil,
+            clearNicknameFromContext, row)
+    end
+end
+
+local function issueFromContext(target, companionId, command, payload, player)
+    if command == "dismiss" and SC.UI and type(SC.UI.confirmDismiss) == "function" then
+        SC.UI.confirmDismiss(companionName(companionId), function()
+            executeFromContext(companionId, command, payload, player)
+        end)
+        return
+    end
+    executeFromContext(companionId, command, payload, player)
+end
+
+local function issueSignalFromContext(target, signal, player)
+    if not SC.Commands then return end
+    local ok, accepted, reason
+    if signal == "whistle" and type(SC.Commands.whistle) == "function" then
+        ok, accepted, reason = pcall(SC.Commands.whistle, player)
+    elseif type(SC.Commands.handSign) == "function" then
+        ok, accepted, reason = pcall(SC.Commands.handSign, player, signal)
+    end
+    if player then
+        safeMethod(player, "setHaloNote", ok and accepted ~= false
+            and text("UI_SC_CommandAccepted")
+            or text("UI_SC_CommandRejectedDetail", tostring(reason or signal)))
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function watchFromContext(target, row, player)
+    if type(row) ~= "table" or row.actor == nil or not SC.ViewControl then return end
+    local selected, selectReason = true, nil
+    if SC.UI and type(SC.UI.selectCompanion) == "function" then
+        selected, selectReason = SC.UI.selectCompanion(row.id)
+    end
+    local watched, reason = false, selectReason
+    if selected ~= false and type(SC.ViewControl.watch) == "function" then
+        watched, reason = SC.ViewControl.watch(row.id, row.actor)
+    end
+    if player then
+        safeMethod(player, "setHaloNote", watched == true
+            and text("UI_SC_Watch_Started", row.name)
+            or text("UI_SC_Watch_Failed", tostring(reason or "unavailable")))
+    end
+end
+
+local function stopWatchingFromContext(target, player)
+    if not SC.ViewControl or type(SC.ViewControl.stopWatching) ~= "function" then return end
+    local stopped = SC.ViewControl.stopWatching()
+    if stopped and player then
+        safeMethod(player, "setHaloNote", text("UI_SC_Watch_Stopped"))
+    end
+end
+
+local function addCommand(menu, labelKey, id, command, payload, player)
+    return menu:addOption(text(labelKey), nil, issueFromContext, id, command, payload, player)
+end
+
+local function addChefOrder(menu, row, player)
+    local base = SC.BaseLife
+    local resident = base and type(base.resident) == "function" and base.resident(row.id)
+    if resident and resident.role == "chef" and resident.duty == true
+        and base.active() and base.isInside(player) then
+        addCommand(menu, "UI_SC_Action_CookMeal", row.id, "cook_meal", nil, player)
+    end
+end
+
+local function addCategory(menu, labelKey)
+    local option = menu:addOption(text(labelKey), nil, nil)
+    local category = ISContextMenu:getNew(menu)
+    menu:addSubMenu(option, category)
+    return category
+end
+
+local function addNamedCategory(menu, labelKey, value)
+    local option = menu:addOption(text(labelKey, value), nil, nil)
+    local category = ISContextMenu:getNew(menu)
+    menu:addSubMenu(option, category)
+    return category
+end
+
+local pendingContractWithdrawals = {}
+
+local function contextNowMs()
+    if SC.GameplayUtil and type(SC.GameplayUtil.nowMs) == "function" then
+        return SC.GameplayUtil.nowMs()
+    end
+    if type(getTimestampMs) == "function" then
+        local ok, value = pcall(getTimestampMs)
+        if ok and tonumber(value) then return tonumber(value) end
+    end
+    return 0
+end
+
+local function pendingContractWithdrawal(factionId, contractId)
+    local pending = pendingContractWithdrawals[factionId]
+    if not pending or pending.contractId ~= contractId
+        or contextNowMs() > (tonumber(pending.untilMs) or 0) then
+        pendingContractWithdrawals[factionId] = nil
+        return false
+    end
+    return true
+end
+
+local function factionConversationAction(target, factionId, action, topic, player)
+    if not SC.FactionContracts then return end
+    local ok, accepted, detail
+    if action == "open" then
+        if SC.UI and type(SC.UI.open) == "function" then
+            SC.UI.open("factions")
+            ok, accepted, detail = true, true, "conversation_opened"
+        end
+    elseif action == "talk" then
+        ok, accepted, detail = pcall(
+            SC.FactionContracts.talk, factionId, player, topic, false)
+    elseif action == "access" then
+        ok, accepted, detail = pcall(
+            SC.FactionContracts.requestAccess, factionId, player, false)
+    elseif action == "accept_contract" then
+        pendingContractWithdrawals[factionId] = nil
+        local contractSummary = SC.FactionContracts.summary(factionId)
+        local offer = contractSummary and contractSummary.offer or nil
+        if offer and (offer.kind == "retrieve_item" or offer.kind == "clear_horde")
+            and SC.UI and type(SC.UI.openQuestOffer) == "function" then
+            SC.UI.openQuestOffer(factionId)
+            return
+        end
+        ok, accepted, detail = pcall(
+            SC.FactionContracts.accept, factionId, player, false)
+    elseif action == "fulfill_contract" then
+        local contractSummary = SC.FactionContracts.summary(factionId)
+        local active = contractSummary and contractSummary.active or nil
+        if active and (active.kind == "retrieve_item" or active.kind == "clear_horde")
+            and contractSummary.progress and contractSummary.progress.ready == true
+            and SC.UI and type(SC.UI.openQuestTurnIn) == "function" then
+            SC.UI.openQuestTurnIn(factionId)
+            return
+        end
+        ok, accepted, detail = pcall(
+            SC.FactionContracts.fulfill, factionId, player, false)
+        if ok and accepted == true then pendingContractWithdrawals[factionId] = nil end
+    elseif action == "withdraw_contract" then
+        local summary = SC.Factions and SC.Factions.summary(factionId) or nil
+        local contract = summary and summary.social and summary.social.active or nil
+        local contractId = contract and contract.id or nil
+        if contractId and pendingContractWithdrawal(factionId, contractId) then
+            pendingContractWithdrawals[factionId] = nil
+            ok, accepted, detail = pcall(
+                SC.FactionContracts.withdraw, factionId, player, false)
+        else
+            if contractId then
+                pendingContractWithdrawals[factionId] = {
+                    contractId = contractId, untilMs = contextNowMs() + 8000,
+                }
+                if player then
+                    safeMethod(player, "setHaloNote", text("UI_SC_Faction_WithdrawConfirm"))
+                end
+                if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+                return
+            end
+            ok, accepted, detail = true, false, "no_active_contract"
+        end
+    elseif action == "recruitment_ask" then
+        ok, accepted, detail = pcall(
+            SC.FactionRecruitment.ask, factionId, player, false)
+    elseif action == "recruitment_trial" then
+        ok, accepted, detail = pcall(
+            SC.FactionRecruitment.startTrial, factionId, player, false)
+    elseif action == "recruitment_decide" then
+        ok, accepted, detail = pcall(
+            SC.FactionRecruitment.decide, factionId, player)
+    elseif action == "recruitment_return" then
+        ok, accepted, detail = pcall(
+            SC.FactionRecruitment.returnNow, factionId, player, false)
+    end
+    if player then
+        safeMethod(player, "setHaloNote", ok and accepted == true
+            and text("UI_SC_CommandAcceptedResult", text("UI_SC_Context_Household"),
+                tostring(detail or "Done"))
+            or text("UI_SC_Base_ActionFailed", tostring(detail or accepted)))
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function addUnavailableOption(menu, label)
+    local option = menu:addOption(label, nil, nil)
+    if option then option.notAvailable = true end
+    return option
+end
+
+local function addFactionContractMenu(menu, group, summary, player)
+    local contractMenu = addCategory(menu, "UI_SC_Faction_Contract")
+    local social = summary and summary.social or nil
+    local active = social and social.active or nil
+    local offer = social and social.offer or nil
+    local contract = active or offer
+    if not contract then
+        addUnavailableOption(contractMenu, text("UI_SC_Faction_NoContract"))
+        return
+    end
+    if offer and offer.revealed ~= true then
+        addUnavailableOption(contractMenu, text("UI_SC_Faction_AskNeedFirst"))
+        contractMenu:addOption(text("UI_SC_Faction_AskNeeds"), nil,
+            factionConversationAction, group.id, "talk", "needs", player)
+        return
+    end
+    addUnavailableOption(contractMenu,
+        text("UI_SC_Faction_ContractTitle", tostring(contract.title or contract.kind)))
+    addUnavailableOption(contractMenu,
+        text("UI_SC_Faction_ContractStatus", tostring(contract.status or "offered")))
+    if offer then
+        if (offer.kind == "retrieve_item" or offer.kind == "clear_horde")
+            and offer.preparation ~= "ready" then
+            addUnavailableOption(contractMenu, text("UI_SC_Quest_TargetPreparing"))
+            return
+        end
+        contractMenu:addOption(text("UI_SC_Faction_AcceptContract"), nil,
+            factionConversationAction, group.id, "accept_contract", nil, player)
+        return
+    end
+    contractMenu:addOption(text("UI_SC_Faction_FulfillContract"), nil,
+        factionConversationAction, group.id, "fulfill_contract", nil, player)
+    local withdrawKey = pendingContractWithdrawal(group.id, active.id)
+        and "UI_SC_Faction_WithdrawConfirmAction" or "UI_SC_Faction_WithdrawContract"
+    contractMenu:addOption(text(withdrawKey), nil,
+        factionConversationAction, group.id, "withdraw_contract", nil, player)
+end
+
+local function talkableFactions(player)
+    local result = {}
+    if not SC.Factions or type(SC.Factions.list) ~= "function"
+        or not SC.FactionContracts or type(SC.FactionContracts.canTalk) ~= "function" then
+        return result
+    end
+    for _, group in ipairs(SC.Factions.list(true) or {}) do
+        if type(group.oddball) ~= "table" then
+            local ok, ready = pcall(SC.FactionContracts.canTalk, group, player)
+            if ok and ready == true then result[#result + 1] = group end
+        end
+    end
+    return result
+end
+
+local function talkableOddballs(player)
+    local result = {}
+    if not SC.Factions or type(SC.Factions.list) ~= "function"
+        or not SC.Registry or type(SC.Registry.byId) ~= "function" then
+        return result
+    end
+    for _, group in ipairs(SC.Factions.list(false) or {}) do
+        if type(group.oddball) == "table" and group.lifecycle ~= "destroyed" then
+            local added = false
+            for _, member in ipairs(group.members or {}) do
+                local record = type(member.actorId) == "string"
+                    and SC.Registry.byId(member.actorId) or nil
+                if record and record.actor and SC.GameplayUtil.distance(player, record.actor) <= 6
+                    and (not SC.GameplayUtil.canSee
+                        or SC.GameplayUtil.canSee(player, record.actor) == true) then
+                    result[#result + 1] = group
+                    added = true
+                    break
+                end
+            end
+            if not added and SC.OddballLester
+                and type(SC.OddballLester.canTalkThroughSlot) == "function"
+                and SC.OddballLester.canTalkThroughSlot(group, player) then
+                result[#result + 1] = group
+                added = true
+            end
+            if not added and SC.OddballGordon
+                and type(SC.OddballGordon.canTalkThroughSlot) == "function"
+                and SC.OddballGordon.canTalkThroughSlot(group, player) then
+                result[#result + 1] = group
+                added = true
+            end
+            if not added and SC.OddballWerewolf
+                and type(SC.OddballWerewolf.canTalkThroughDoor) == "function"
+                and SC.OddballWerewolf.canTalkThroughDoor(group, player) then
+                result[#result + 1] = group
+                added = true
+            end
+            if not added and SC.OddballLoretta
+                and type(SC.OddballLoretta.canTalkFromVehicle) == "function"
+                and SC.OddballLoretta.canTalkFromVehicle(group, player) then
+                result[#result + 1] = group
+                added = true
+            end
+            if not added and SC.OddballPurdy
+                and type(SC.OddballPurdy.canTalkThroughWindow) == "function"
+                and SC.OddballPurdy.canTalkThroughWindow(group, player) then
+                result[#result + 1] = group
+            end
+        end
+    end
+    return result
+end
+
+local function oddballStoryAction(_target, groupId, action, player, payload)
+    local ok, accepted, detail = false, false, "story_unavailable"
+    if SC.Oddballs and type(SC.Oddballs.storyAction) == "function" then
+        ok, accepted, detail = pcall(SC.Oddballs.storyAction,
+            groupId, action, player, payload)
+    end
+    if player then
+        safeMethod(player, "setHaloNote", ok and accepted == true
+            and text("UI_SC_Oddball_ActionAccepted", tostring(detail or "Done"))
+            or text("UI_SC_Oddball_ActionFailed", tostring(ok and detail or accepted)))
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function addOddballConversations(context, groups, player)
+    for _, group in ipairs(groups or {}) do
+        local option = context:addOption(tostring(group.name or "Stranger"), nil, nil)
+        local menu = ISContextMenu:getNew(context)
+        context:addSubMenu(option, menu)
+        local stage = group.oddball and group.oddball.stage or "unmet"
+        addUnavailableOption(menu, text("UI_SC_Oddball_Progress", tostring(stage)))
+        local options = SC.Oddballs and type(SC.Oddballs.menuOptions) == "function"
+            and SC.Oddballs.menuOptions(group, player) or {}
+        if #options == 0 then
+            addUnavailableOption(menu, text("UI_SC_Oddball_NoAction"))
+        end
+        for _, row in ipairs(options) do
+            local label = tostring(row.label or row.id or "Speak")
+            local item
+            if row.enabled == false then
+                item = addUnavailableOption(menu, label)
+            elseif type(row.id) == "string" then
+                item = menu:addOption(label, nil, oddballStoryAction,
+                    group.id, row.id, player, row.payload)
+            end
+            local detail = row.detail or row.reason
+            if item and detail and type(ISToolTip) == "table" then
+                local tooltip = ISToolTip:new()
+                tooltip:initialise()
+                tooltip:setVisible(false)
+                tooltip.description = tostring(detail)
+                item.toolTip = tooltip
+            end
+        end
+    end
+end
+
+local function addRecruitedOddballAction(menu, row, player)
+    if not row or row.recruited ~= true or not SC.FactionRecruitment
+        or type(SC.FactionRecruitment.originForActor) ~= "function"
+        or not SC.Oddballs or type(SC.Oddballs.menuOptions) ~= "function" then
+        return
+    end
+    local origin = SC.FactionRecruitment.originForActor(row.id)
+    local group = origin and origin.group
+    if not group or type(group.oddball) ~= "table" then return end
+    for _, action in ipairs(SC.Oddballs.menuOptions(group, player) or {}) do
+        if action.id == "gut_up" or action.id == "have_tea" then
+            local fallback = action.id == "have_tea" and "Have tea" or "Gut up"
+            if action.enabled == false then
+                addUnavailableOption(menu, tostring(action.label or fallback))
+            else
+                menu:addOption(tostring(action.label or fallback), nil,
+                    oddballStoryAction, group.id, action.id, player, action.payload)
+            end
+            return
+        end
+    end
+end
+
+local function addFactionConversations(context, factions, player)
+    for _, group in ipairs(factions or {}) do
+        local option = context:addOption(text("UI_SC_Context_HouseholdNamed", group.name), nil, nil)
+        local menu = ISContextMenu:getNew(context)
+        context:addSubMenu(option, menu)
+        menu:addOption(text("UI_SC_Context_OpenFactionPanel"), nil,
+            factionConversationAction, group.id, "open", nil, player)
+        for _, row in ipairs({
+            { key = "UI_SC_Faction_AskStatus", topic = "status" },
+            { key = "UI_SC_Faction_AskNeeds", topic = "needs" },
+            { key = "UI_SC_Faction_AskMembers", topic = "members" },
+            { key = "UI_SC_Faction_AskTrade", topic = "trade" },
+            { key = "UI_SC_Faction_AskDanger", topic = "danger" },
+            { key = "UI_SC_Faction_AskRumours", topic = "rumours" },
+        }) do
+            menu:addOption(text(row.key), nil, factionConversationAction,
+                group.id, "talk", row.topic, player)
+        end
+        menu:addOption(text("UI_SC_Faction_RequestAccess"), nil,
+            factionConversationAction, group.id, "access", nil, player)
+        local summary = SC.Factions.summary(group.id)
+        addFactionContractMenu(menu, group, summary, player)
+        local recruitment = summary and summary.recruitment or nil
+        if recruitment and recruitment.canAsk then
+            menu:addOption(text("UI_SC_Faction_RecruitmentAsk"), nil,
+                factionConversationAction, group.id, "recruitment_ask", nil, player)
+        elseif recruitment and recruitment.canStartTrial then
+            menu:addOption(text("UI_SC_Faction_RecruitmentStartTrial"), nil,
+                factionConversationAction, group.id, "recruitment_trial", nil, player)
+        elseif recruitment and recruitment.status == "trial" then
+            if recruitment.canDecide then
+                menu:addOption(text("UI_SC_Faction_RecruitmentAskDecision"), nil,
+                    factionConversationAction, group.id, "recruitment_decide", nil, player)
+            end
+            menu:addOption(text("UI_SC_Faction_RecruitmentEndTrial"), nil,
+                factionConversationAction, group.id, "recruitment_return", nil, player)
+        end
+    end
+end
+
+local function squarePayload(square)
+    if not square then
+        return nil
+    end
+    local x = safeMethod(square, "getX")
+    local y = safeMethod(square, "getY")
+    local z = safeMethod(square, "getZ")
+    if x == nil or y == nil or z == nil then
+        return nil
+    end
+    return { x = x, y = y, z = z }
+end
+
+-- World-object lists can begin with the player or another moving object. Base
+-- placement instead uses the immutable screen coordinates captured at click.
+local function clickedWorldSquare(playerIndex, context, player, fallback)
+    if type(screenToIsoX) ~= "function" or type(screenToIsoY) ~= "function"
+        or type(getCell) ~= "function" or type(context) ~= "table"
+        or tonumber(context.x) == nil or tonumber(context.y) == nil then
+        return fallback
+    end
+    local z = tonumber((safeMethod(player, "getZ")))
+    if z == nil then return fallback end
+    local okX, worldX = pcall(screenToIsoX, playerIndex, context.x, context.y, z)
+    local okY, worldY = pcall(screenToIsoY, playerIndex, context.x, context.y, z)
+    if not okX or not okY or tonumber(worldX) == nil or tonumber(worldY) == nil then
+        return fallback
+    end
+    local okCell, cell = pcall(getCell)
+    if not okCell or not cell then return fallback end
+    return safeMethod(cell, "getGridSquare", math.floor(tonumber(worldX)),
+        math.floor(tonumber(worldY)), math.floor(z)) or fallback
+end
+
+local function findTarget(worldObjects, player)
+    local targetSquare = nil
+    local door = nil
+    local barricadeTarget = nil
+    local removeBarricadeTarget = nil
+    local dismantleTarget = nil
+    local containerTarget = nil
+    local combatTarget = nil
+    for _, object in ipairs(worldObjects or {}) do
+        if not targetSquare then
+            targetSquare = safeMethod(object, "getSquare")
+        end
+        if not door and instanceof then
+            if instanceof(object, "IsoDoor") then
+                door = object
+            elseif instanceof(object, "IsoThumpable") and safeMethod(object, "isDoor") then
+                door = object
+            end
+        end
+        if not barricadeTarget and safeMethod(object, "getObjectIndex") ~= nil
+            and hasMethod(object, "getBarricadeForCharacter") then
+            local allowed = safeMethod(object, "isBarricadeAllowed")
+            local canBarricade = safeMethod(object, "getCanBarricade")
+            if allowed == true or canBarricade == true then barricadeTarget = object end
+        end
+        if not removeBarricadeTarget and player
+            and safeMethod(object, "getObjectIndex") ~= nil
+            and hasMethod(object, "getBarricadeForCharacter")
+            and safeMethod(object, "getBarricadeForCharacter", player) ~= nil then
+            removeBarricadeTarget = object
+        end
+        if not dismantleTarget and safeMethod(object, "getObjectIndex") ~= nil
+            and instanceof and instanceof(object, "IsoThumpable")
+            and safeMethod(object, "isDismantable") == true then
+            dismantleTarget = object
+        end
+        if not containerTarget and safeMethod(object, "getContainer") ~= nil
+            and safeMethod(object, "getObjectIndex") ~= nil then
+            containerTarget = object
+        end
+        if not combatTarget then
+            local zombie = SC.GameplayUtil.isZombie(object)
+            local gone = SC.GameplayUtil and type(SC.GameplayUtil.isGoneTarget) == "function"
+                and SC.GameplayUtil.isGoneTarget(object) or false
+            if zombie == true and gone ~= true then combatTarget = object end
+        end
+    end
+    local targetPayload = squarePayload(targetSquare)
+    local doorPayload = nil
+    if door then
+        doorPayload = squarePayload(safeMethod(door, "getSquare"))
+    end
+    if door and doorPayload then
+        doorPayload.object = door
+        doorPayload.objectIndex = safeMethod(door, "getObjectIndex")
+    end
+    local barricadePayload
+    if barricadeTarget then
+        barricadePayload = squarePayload(safeMethod(barricadeTarget, "getSquare"))
+        if barricadePayload then
+            barricadePayload.object = barricadeTarget
+            barricadePayload.objectIndex = safeMethod(barricadeTarget, "getObjectIndex")
+        end
+    end
+    local removeBarricadePayload
+    if removeBarricadeTarget then
+        removeBarricadePayload = squarePayload(safeMethod(removeBarricadeTarget, "getSquare"))
+        if removeBarricadePayload then
+            removeBarricadePayload.object = removeBarricadeTarget
+            removeBarricadePayload.objectIndex = safeMethod(removeBarricadeTarget, "getObjectIndex")
+            local selected = safeMethod(removeBarricadeTarget, "getBarricadeForCharacter", player)
+            local same = safeMethod(removeBarricadeTarget, "getBarricadeOnSameSquare")
+            removeBarricadePayload.barricadeSide = selected ~= nil and selected == same
+                and "same" or "opposite"
+        end
+    end
+    local dismantlePayload
+    if dismantleTarget then
+        dismantlePayload = squarePayload(safeMethod(dismantleTarget, "getSquare"))
+        if dismantlePayload then
+            dismantlePayload.object = dismantleTarget
+            dismantlePayload.objectIndex = safeMethod(dismantleTarget, "getObjectIndex")
+        end
+    end
+    return targetSquare, door, targetPayload, doorPayload, barricadeTarget,
+        barricadePayload, containerTarget, removeBarricadeTarget,
+        removeBarricadePayload, dismantleTarget, dismantlePayload, combatTarget
+end
+
+local function baseAction(target, action, payload, player)
+    if not SC.BaseLife then return end
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        safeMethod(player, "setHaloNote", text("UI_SC_BaseWatch_RadioOnly"))
+        return
+    end
+    local ok, result
+    if action == "create" then ok, result = SC.BaseLife.create(payload.square, "Main Camp")
+    elseif action == "zone_begin" then ok, result = SC.BaseLife.beginZone(payload.kind, payload.square)
+    elseif action == "zone_finish" then ok, result = SC.BaseLife.finishZone(payload.square, payload.name)
+    elseif action == "zone_cancel" then ok, result = SC.BaseLife.cancelZone()
+    elseif action == "zone_remove" then ok, result = SC.BaseLife.removeZone(payload.id)
+    elseif action == "abandon" then
+        ok, result = SC.BaseLife.abandon()
+        if ok and SC.Commands and type(SC.Commands.leaveAbandonedBase) == "function" then
+            SC.Commands.leaveAbandonedBase(player)
+        end
+    elseif action == "storage" then
+        ok, result = SC.BaseLife.registerStorage(payload.object, payload.category)
+    elseif action == "maintenance" then
+        ok, result = SC.BaseLife.registerMaintenanceTarget(payload.object, payload.kind)
+    elseif action == "build" then
+        local recipeId = SC.BaseWork and SC.BaseWork.recipeForKind(payload.kind) or nil
+        if recipeId then
+            ok, result = SC.BaseLife.enqueueJob({
+                type = "build", priority = 3, recipeId = recipeId, face = payload.face or 1,
+                target = payload.square,
+            })
+        else
+            ok, result = false, "build_recipe_missing"
+        end
+    end
+    if player then
+        local failure = SC.UI and type(SC.UI.baseFailureReason) == "function"
+            and SC.UI.baseFailureReason(result) or tostring(result)
+        safeMethod(player, "setHaloNote", ok and text("UI_SC_Base_ActionAccepted")
+            or text("UI_SC_Base_ActionFailed", failure))
+    end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function toggleBaseLayout(_, player)
+    if SC.UI and type(SC.UI.toggleBaseLayout) == "function" then
+        SC.UI.toggleBaseLayout(player)
+    end
+end
+
+-- Halo notes show translated text; internal reason codes never reach the player.
+local function planNote(player, message)
+    if player then safeMethod(player, "setHaloNote", message) end
+end
+
+local function startConstruction(_, kind, player)
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        planNote(player, text("UI_SC_BaseWatch_RadioOnly"))
+        return
+    end
+    local okay, reason = SC.ConstructionPlanner.start(kind, player)
+    if not okay then planNote(player, SC.ConstructionPlanner.reasonText(reason)) end
+end
+
+local function startBarricadePlan(_, object, player)
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        planNote(player, text("UI_SC_BaseWatch_RadioOnly"))
+        return
+    end
+    local okay, reason = SC.ConstructionPlanner.startBarricade(object, player)
+    if not okay then planNote(player, SC.ConstructionPlanner.reasonText(reason)) end
+end
+
+local function buildBlueprint(_, id, player)
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        planNote(player, text("UI_SC_BaseWatch_RadioOnly"))
+        return
+    end
+    local okay, reason = SC.ConstructionPlanner.buildSegment(player, id)
+    planNote(player, okay and reason ~= "already_built"
+        and text("UI_SC_Base_Blueprint_PlayerStarted")
+        or SC.ConstructionPlanner.reasonText(reason))
+end
+
+local function manageBlueprint(_, action, id, player)
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        planNote(player, text("UI_SC_BaseWatch_RadioOnly"))
+        return
+    end
+    local method = action == "retry" and SC.BaseLife.retryJob or SC.BaseLife.cancelJob
+    local okay, reason = method(id)
+    planNote(player, okay and text("UI_SC_Base_ActionAccepted")
+        or SC.ConstructionPlanner.reasonText(reason))
+    if SC.BaseVisuals then SC.BaseVisuals.refresh() end
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+end
+
+local function zonesAtSquare(square)
+    local point = squarePayload(square)
+    if not point or not SC.BaseLife or type(SC.BaseLife.visualRows) ~= "function" then
+        return {}
+    end
+    local ok, rows = pcall(SC.BaseLife.visualRows)
+    rows = ok and type(rows) == "table" and rows.zoneRows or nil
+    local result = {}
+    for _, zone in ipairs(type(rows) == "table" and rows or {}) do
+        local x1, x2 = tonumber(zone.x1), tonumber(zone.x2)
+        local y1, y2 = tonumber(zone.y1), tonumber(zone.y2)
+        local z = tonumber(zone.z)
+        if x1 and x2 and y1 and y2 and z == tonumber(point.z)
+            and point.x >= math.min(x1, x2) and point.x <= math.max(x1, x2)
+            and point.y >= math.min(y1, y2) and point.y <= math.max(y1, y2) then
+            result[#result + 1] = zone
+        end
+    end
+    -- In overlaps, put the smallest/specific zone before the broad camp area.
+    table.sort(result, function(left, right)
+        local leftArea = (math.abs((tonumber(left.x2) or 0) - (tonumber(left.x1) or 0)) + 1)
+            * (math.abs((tonumber(left.y2) or 0) - (tonumber(left.y1) or 0)) + 1)
+        local rightArea = (math.abs((tonumber(right.x2) or 0) - (tonumber(right.x1) or 0)) + 1)
+            * (math.abs((tonumber(right.y2) or 0) - (tonumber(right.y1) or 0)) + 1)
+        if leftArea == rightArea then return tostring(left.id) < tostring(right.id) end
+        return leftArea < rightArea
+    end)
+    return result
+end
+
+local function removeZoneFromContext(_, zone, player)
+    if type(zone) ~= "table" or not zone.id then return end
+    local execute = function()
+        baseAction(nil, "zone_remove", { id = zone.id }, player)
+    end
+    if SC.UI and type(SC.UI.confirmBaseAction) == "function" then
+        SC.UI.confirmBaseAction(text("UI_SC_Base_RemoveZoneConfirm",
+            zone.name or zone.kind or zone.id), execute)
+    end
+end
+
+-- Abandoning is how a camp moves: once it is gone, "Set camp core here"
+-- returns to the menu. Always confirmed first.
+local function abandonBaseFromContext(_, player)
+    local base = SC.BaseLife and SC.BaseLife.active() or nil
+    if not base then return end
+    local execute = function()
+        baseAction(nil, "abandon", {}, player)
+    end
+    if SC.UI and type(SC.UI.confirmBaseAction) == "function" then
+        SC.UI.confirmBaseAction(text("UI_SC_Base_AbandonConfirm",
+            base.name or "Main Camp"), execute)
+    end
+end
+
+local function baseMenuRelevant(square)
+    if not square or not SC.BaseLife or type(SC.BaseLife.active) ~= "function" then
+        return false
+    end
+    if not SC.BaseLife.active() then return true end
+    if type(SC.BaseLife.zoneDraft) == "function" and SC.BaseLife.zoneDraft() then
+        return true
+    end
+    if type(SC.BaseLife.isInside) == "function"
+        and SC.BaseLife.isInside(square) == true then return true end
+    if type(SC.BaseLife.mayExtendAreaToFloor) == "function"
+        and SC.BaseLife.mayExtendAreaToFloor(square) == true then return true end
+    if type(SC.BaseLife.parkingCornerRelevant) == "function"
+        and SC.BaseLife.parkingCornerRelevant(square) == true then return true end
+    -- Lumber areas may be marked in the bounded reach band outside the camp.
+    return type(SC.BaseLife.withinWorkReach) == "function"
+        and SC.BaseLife.withinWorkReach(square) == true
+end
+
+local function addBaseMenu(context, square, containerTarget, barricadeTarget, player)
+    if not square or not SC.BaseLife then return false end
+    if not baseMenuRelevant(square) then return false end
+    local rootOption = context:addOption(text("UI_SC_Context_BaseLife"), nil, nil)
+    local menu = ISContextMenu:getNew(context)
+    context:addSubMenu(rootOption, menu)
+    if not SC.BaseLife.active() then
+        menu:addOption(text("UI_SC_Base_SetCamp"), nil, baseAction, "create",
+            { square = square }, player)
+        return true
+    end
+    local layoutShown = SC.BaseVisuals and type(SC.BaseVisuals.status) == "function"
+        and SC.BaseVisuals.status().enabled == true
+    menu:addOption(text(layoutShown and "UI_SC_Base_Visual_Hide" or "UI_SC_Base_Visual_Show"),
+        nil, toggleBaseLayout, player)
+    if SC.BaseWatch and SC.BaseWatch.isRemote
+        and SC.BaseWatch.isRemote(type(getSpecificPlayer) == "function"
+            and getSpecificPlayer(0) or player) then
+        addUnavailableOption(menu, text("UI_SC_BaseWatch_RadioOnly"))
+        return true
+    end
+    menu:addOption(text("UI_SC_Base_Abandon"), nil, abandonBaseFromContext, player)
+    if layoutShown then
+        -- Ask BaseLife for every refusal rule, not only the last boundary: a
+        -- zone pinned by an order or holding other zones would otherwise
+        -- offer an option that fails after its confirmation.
+        for _, zone in ipairs(zonesAtSquare(square)) do
+            local name = zone.name or zone.kind or zone.id
+            local removable, refusal = SC.BaseLife.canRemoveZone(zone.id)
+            if removable == true then
+                menu:addOption(text("UI_SC_Base_RemoveZone", name),
+                    nil, removeZoneFromContext, zone, player)
+            elseif refusal == "last_base_area" then
+                addUnavailableOption(menu, text("UI_SC_Base_LastAreaMenu"))
+            else
+                addUnavailableOption(menu, text(refusal == "base_area_in_use"
+                        and "UI_SC_Base_AreaInUseMenu"
+                    or (refusal == "work_order_uses_zone"
+                        or refusal == "production_order_uses_zone")
+                        and "UI_SC_Base_ZoneBusyMenu"
+                    or "UI_SC_Base_ZoneLockedMenu", name))
+            end
+        end
+    end
+    local draft = SC.BaseLife.zoneDraft()
+    local inside = type(SC.BaseLife.isInside) == "function"
+        and SC.BaseLife.isInside(square) == true
+    if draft then
+        menu:addOption(text("UI_SC_Base_FinishZone"), nil, baseAction, "zone_finish",
+            { square = square, name = draft.kind }, player)
+        menu:addOption(text("UI_SC_Base_CancelZone"), nil, baseAction, "zone_cancel", {}, player)
+    else
+        local zoneOption = menu:addOption(text("UI_SC_Base_StartZone"), nil, nil)
+        local zoneMenu = ISContextMenu:getNew(menu)
+        menu:addSubMenu(zoneOption, zoneMenu)
+        -- Outside the camp only bounded reach zones may start, inside
+        -- the bounded reach band around the camp.
+        local upstairsArea = type(SC.BaseLife.mayExtendAreaToFloor) == "function"
+            and SC.BaseLife.mayExtendAreaToFloor(square) == true
+        local parkingCorner = type(SC.BaseLife.parkingCornerRelevant) == "function"
+            and SC.BaseLife.parkingCornerRelevant(square) == true
+        local kinds = inside and { "area", "work", "lumber", "farm", "fishing", "burial", "pyre", "rest",
+            "social", "guard", "rally", "quarantine" }
+            or upstairsArea and { "area" }
+            or { "lumber", "farm", "fishing", "burial", "pyre" }
+        if parkingCorner then kinds[#kinds + 1] = "parking" end
+        for _, kind in ipairs(kinds) do
+            zoneMenu:addOption(text("UI_SC_Base_Zone_" .. kind), nil, baseAction, "zone_begin",
+                { square = square, kind = kind }, player)
+        end
+    end
+    if inside and containerTarget then
+        local storageOption = menu:addOption(text("UI_SC_Base_MarkStorage"), nil, nil)
+        local storageMenu = ISContextMenu:getNew(menu)
+        menu:addSubMenu(storageOption, storageMenu)
+        for _, category in ipairs({ "food", "water", "medical", "tools", "construction",
+            "crafting", "literature", "weapons", "ammunition", "clothing", "general", "output",
+            "memorial", "farming" }) do
+            storageMenu:addOption(text("UI_SC_Base_Storage_" .. category), nil, baseAction,
+                "storage", { object = containerTarget, category = category }, player)
+        end
+    end
+    if inside and barricadeTarget then
+        menu:addOption(text("UI_SC_Base_MaintainBarricade"), nil, baseAction, "maintenance",
+            { object = barricadeTarget, kind = "barricade" }, player)
+        menu:addOption(text("UI_SC_Base_PlanBarricade"), nil,
+            startBarricadePlan, barricadeTarget, player)
+    end
+    if inside then
+        local buildOption = menu:addOption(text("UI_SC_Base_QueueBuild"), nil, nil)
+        local buildMenu = ISContextMenu:getNew(menu)
+        menu:addSubMenu(buildOption, buildMenu)
+        for _, kind in ipairs({ "wall_frame", "wall", "floor", "door_frame", "door" }) do
+            buildMenu:addOption(text("UI_SC_Base_Build_" .. kind), nil,
+                startConstruction, kind, player)
+        end
+        local plans = SC.BaseLife.constructionAt(square)
+        for _, job in ipairs(plans) do
+            local label = text("UI_SC_Base_Blueprint_Row",
+                text("UI_SC_Base_Build_" .. tostring(job.buildKind or job.type)),
+                tostring(job.state), tostring(job.id))
+            local planOption = menu:addOption(label, nil, nil)
+            local planMenu = ISContextMenu:getNew(menu)
+            menu:addSubMenu(planOption, planMenu)
+            if job.type == "build" and job.state ~= "manual" then
+                planMenu:addOption(text("UI_SC_Base_Blueprint_Build"), nil,
+                    buildBlueprint, job.id, player)
+            end
+            if job.state == "blocked" then
+                planMenu:addOption(text("UI_SC_Base_Blueprint_Retry"), nil,
+                    manageBlueprint, "retry", job.id, player)
+            end
+            if job.state ~= "manual" then
+                planMenu:addOption(text("UI_SC_Base_Blueprint_Cancel"), nil,
+                    manageBlueprint, "cancel", job.id, player)
+            end
+        end
+    end
+    return true
+end
+
+local function nearbyRows(player)
+    local rows = {}
+    local talkRows = {}
+    if not SC.Registry or type(SC.Registry.living) ~= "function" then
+        return rows, talkRows
+    end
+    local ok, living = pcall(SC.Registry.living)
+    if not ok or type(living) ~= "table" then
+        return rows, talkRows
+    end
+    for _, entry in pairs(living) do
+        local row = SC.UI and SC.UI.describeEntry and SC.UI.describeEntry(entry, player) or nil
+        local recruited = row and row.recruited == true
+        local validRecord = row and row.id and row.id ~= ""
+        if row and row.id and row.id ~= "" and SC.Registry
+            and type(SC.Registry.byId) == "function" then
+            local recordOk, record = pcall(SC.Registry.byId, row.id)
+            validRecord = recordOk and type(record) == "table"
+                and record.actor == entry
+            recruited = recordOk and type(record) == "table"
+                and record.actor == entry and record.recruited == true
+        end
+        if validRecord then
+            row.recruited = recruited
+            local distance = tonumber(row.distance)
+            if not distance or distance <= Context.maximumShortcutDistance then
+                if recruited then rows[#rows + 1] = row end
+                if recruited or (row.factionMember ~= true and row.factionId == nil) then
+                    talkRows[#talkRows + 1] = row
+                end
+            end
+        end
+    end
+    table.sort(rows, function(left, right)
+        return string.lower(tostring(left.name)) < string.lower(tostring(right.name))
+    end)
+    table.sort(talkRows, function(left, right)
+        return string.lower(tostring(left.name)) < string.lower(tostring(right.name))
+    end)
+    return rows, talkRows
+end
+
+local function openTalkFromContext(_, row)
+    if SC.UI and type(SC.UI.open) == "function" then
+        SC.UI.open("talk", row.id)
+    end
+end
+
+local function openOrdersFromContext(_, row)
+    if SC.UI and type(SC.UI.open) == "function" then
+        SC.UI.open("orders", row.id)
+    end
+end
+
+local function addInteractionShortcut(menu, row, action, player)
+    local descriptor = SC.Interaction.descriptor(action)
+    if not descriptor then return end
+    local label = text(descriptor.key)
+    local available, reason, argument = SC.Interaction.availability(row, action, player)
+    local option = available and menu:addOption(label, nil, issueFromContext,
+        row.id, action, nil, player) or addUnavailableOption(menu, label)
+    if option and not available and type(ISToolTip) == "table" then
+        local tooltip = ISToolTip:new()
+        tooltip:initialise()
+        tooltip:setVisible(false)
+        tooltip.description = argument and text(reason, argument) or text(reason)
+        option.toolTip = tooltip
+    end
+end
+
+local function addObjectiveAssignments(menu, row, player)
+    if row.recruited ~= true or not SC.Objectives
+        or type(SC.Objectives.assignableKinds) ~= "function" then return end
+    local state = SC.Commands and type(SC.Commands.peek) == "function"
+        and SC.Commands.peek(row.actor) or nil
+    local kinds = SC.Objectives.assignableKinds(row.actor, state)
+    if type(kinds) ~= "table" or #kinds == 0 then return end
+    local category = addCategory(menu, "UI_SC_Context_AssignObjective")
+    for _, kind in ipairs(kinds) do
+        category:addOption(SC.Objectives.label(kind), nil, issueFromContext,
+            row.id, "assign_objective", { kind = kind }, player)
+    end
+end
+
+local function addOrdersShortcut(menu, row, player)
+    menu:addOption(text("UI_SC_Talk_OpenOrders"), nil,
+        openOrdersFromContext, row)
+    if type(row.vehicleStatus) == "table"
+        and row.vehicleStatus.status == "in_vehicle"
+        and row.vehicleStatus.canExitNow == true then
+        addCommand(menu, "UI_SC_Action_ExitVehicleNow", row.id,
+            "exit_vehicle", nil, player)
+    end
+end
+
+local function addWorldOrders(menu, row, targetSquare, targetPayload, door, doorPayload,
+        barricadeTarget, barricadePayload, removeBarricadeTarget,
+        removeBarricadePayload, dismantleTarget, dismantlePayload, combatTarget, player)
+    if targetPayload then
+        addCommand(menu, "UI_SC_Action_MoveHere", row.id, "move_to", targetPayload, player)
+        addCommand(menu, "UI_SC_Action_GuardHere", row.id, "guard",
+            { target = targetPayload }, player)
+    end
+    if targetPayload and targetSquare and safeMethod(targetSquare, "getRoom") ~= nil then
+        addCommand(menu, "UI_SC_Action_CheckRoom", row.id, "check_room", targetPayload, player)
+    end
+    if door and doorPayload then
+        local isOpen = safeMethod(door, "IsOpen")
+        if isOpen then
+            addCommand(menu, "UI_SC_Action_CloseDoor", row.id, "close_door", doorPayload, player)
+        else
+            addCommand(menu, "UI_SC_Action_OpenDoor", row.id, "open_door", doorPayload, player)
+        end
+    end
+    if barricadeTarget and barricadePayload then
+        addCommand(menu, "UI_SC_Action_Barricade", row.id, "barricade", barricadePayload, player)
+    end
+    if removeBarricadeTarget and removeBarricadePayload then
+        addCommand(menu, "UI_SC_Action_RemoveBarricade", row.id, "remove_barricade", removeBarricadePayload, player)
+    elseif dismantleTarget and dismantlePayload then
+        addCommand(menu, "UI_SC_Action_Dismantle", row.id, "dismantle", dismantlePayload, player)
+    end
+    if combatTarget then
+        addCommand(menu, "UI_SC_Action_DesignateTarget", row.id, "designate_target",
+            { target = combatTarget }, player)
+        addCommand(menu, "UI_SC_Action_AvoidTarget", row.id, "avoid_target",
+            { target = combatTarget }, player)
+    end
+end
+
+local function clickedCompanionRow(rows, worldObjects, clickSquare)
+    local matches = {}
+    for _, row in ipairs(rows or {}) do
+        for _, object in ipairs(worldObjects or {}) do
+            if row.actor == object then matches[#matches + 1] = row; break end
+        end
+    end
+    if #matches == 1 then return matches[1], matches end
+    if #matches > 1 then return nil, matches end
+    if clickSquare then
+        for _, row in ipairs(rows or {}) do
+            if safeMethod(row.actor, "getSquare") == clickSquare then
+                matches[#matches + 1] = row
+            end
+        end
+    end
+    return #matches == 1 and matches[1] or nil, matches
+end
+
+local function addWatchControl(menu, row, player)
+    local status = SC.ViewControl and type(SC.ViewControl.status) == "function"
+        and SC.ViewControl.status() or {}
+    if status.watching == true
+        and (status.watchId == row.id or status.watchActor == row.actor) then
+        menu:addOption(text("UI_SC_Action_StopWatching"), nil,
+            stopWatchingFromContext, player)
+    else
+        menu:addOption(text("UI_SC_Action_Watch", row.name), nil,
+            watchFromContext, row, player)
+    end
+end
+
+local function addViews(menu, row, player)
+    addCommand(menu, "UI_SC_Action_OpenInventory", row.id, "open_inventory", nil, player)
+    addCommand(menu, "UI_SC_Action_OpenHealth", row.id, "open_health", nil, player)
+end
+
+-- Offer Bandage when the player can treat this companion now. When it has a
+-- wound to dress but the player carries no bandage or stands too far away, show
+-- the option disabled with the reason instead of hiding it.
+local function addCare(menu, row, player)
+    if not SC.Medical or type(SC.Medical.playerBandagePreflight) ~= "function" then return end
+    if not SC.Registry or type(SC.Registry.byId) ~= "function" then return end
+    local ok, record = pcall(SC.Registry.byId, row.id)
+    if not ok or type(record) ~= "table" or not record.actor then return end
+    local ready, reason = SC.Medical.playerBandagePreflight(record.actor, player)
+    if ready == true then
+        addCommand(menu, "UI_SC_Action_Bandage", row.id, "bandage", nil, player)
+        return
+    end
+    local reasonText
+    if reason == "no_bandage" then
+        reasonText = text("UI_SC_Disabled_NoBandage")
+    elseif reason == "out_of_range" then
+        local limit = SC.Config and type(SC.Config.get) == "function"
+            and tonumber((SC.Config.get("medicalPlayerBandageRange"))) or 2
+        reasonText = text("UI_SC_Disabled_TooFar", limit)
+    else
+        return
+    end
+    local option = addUnavailableOption(menu, text("UI_SC_Action_Bandage"))
+    if option and type(ISToolTip) == "table" then
+        local tooltip = ISToolTip:new()
+        tooltip:initialise()
+        tooltip:setVisible(false)
+        tooltip.description = reasonText
+        option.toolTip = tooltip
+    end
+end
+
+local function selectedNearbyRow(rows)
+    local selectedId = SC.UI and SC.UI.instance and SC.UI.instance.selectedId or nil
+    if not selectedId then return nil end
+    for _, row in ipairs(rows or {}) do
+        if row.id == selectedId then return row end
+    end
+    return nil
+end
+
+-- Mirror vanilla's vehicle picker so a click on a car's body resolves that
+-- car, even where its origin square is elsewhere in the footprint.
+function Context.vehicleAtClick(square)
+    local vehicle = square and safeMethod(square, "getVehicleContainer") or nil
+    if vehicle then return vehicle end
+    if IsoObjectPicker and IsoObjectPicker.Instance
+        and type(getMouseXScaled) == "function"
+        and type(getMouseYScaled) == "function" then
+        local ok, picked = pcall(function()
+            return IsoObjectPicker.Instance:PickVehicle(
+                getMouseXScaled(), getMouseYScaled())
+        end)
+        if ok then return picked end
+    end
+    return nil
+end
+
+local function hotwireFromContext(_target, row, vehicle, player)
+    if not row or not vehicle or not SC.Commands then return end
+    local ok, accepted, reason = pcall(SC.Commands.issue, row.id,
+        "hotwire_vehicle", { vehicle = vehicle }, player)
+    if player then
+        safeMethod(player, "setHaloNote", ok and accepted == true
+            and text("UI_SC_Vehicle_HotwireOrdered", row.name)
+            or text("UI_SC_Vehicle_HotwireRejected", tostring(reason or accepted)))
+    end
+end
+
+local function addHotwireMenu(context, rows, vehicle, player)
+    if not vehicle or not SC.VehicleHotwire
+        or type(SC.VehicleHotwire.canHotwire) ~= "function" then return end
+    local eligible = {}
+    for _, row in ipairs(rows or {}) do
+        local record = SC.Registry and SC.Registry.byId and SC.Registry.byId(row.id)
+        if row.recruited == true and record and record.actor
+            and SC.VehicleHotwire.canHotwire(record.actor) then
+            eligible[#eligible + 1] = row
+        end
+    end
+    if #eligible == 0 then return end
+    local hotOk, hot = pcall(function() return vehicle:isHotwired() end)
+    if not hotOk or hot then return end
+    local root = addCategory(context, "UI_SC_Vehicle_CommandHotwire")
+    for _, row in ipairs(eligible) do
+        root:addOption(row.name, nil, hotwireFromContext, row, vehicle, player)
+    end
+end
+
+local function unloadVehicleFromContext(_target, vehicleId, player)
+    local okay, accepted, reason = pcall(SC.VehicleUnload.queue, vehicleId)
+    if player then
+        safeMethod(player, "setHaloNote", okay and accepted == true
+            and text("UI_SC_Base_UnloadOrdered")
+            or text("UI_SC_Base_ActionFailed", tostring(reason or accepted)))
+    end
+end
+
+local function addNamedShortcut(context, row, labelKey, command, payload, player)
+    local label = text("UI_SC_Context_NamedAction", row.name, text(labelKey))
+    return context:addOption(label, nil, issueFromContext,
+        row.id, command, payload, player)
+end
+
+local function addPriorityShortcut(context, row, targetSquare, door, doorPayload,
+        barricadeTarget, barricadePayload, removeBarricadeTarget,
+        removeBarricadePayload, dismantleTarget, dismantlePayload, player)
+    if removeBarricadeTarget and removeBarricadePayload then
+        return addNamedShortcut(context, row, "UI_SC_Action_RemoveBarricade",
+            "remove_barricade", removeBarricadePayload, player)
+    end
+    if door and doorPayload then
+        local isOpen = safeMethod(door, "IsOpen")
+        return addNamedShortcut(context, row,
+            isOpen and "UI_SC_Action_CloseDoor" or "UI_SC_Action_OpenDoor",
+            isOpen and "close_door" or "open_door", doorPayload, player)
+    end
+    if barricadeTarget and barricadePayload then
+        return addNamedShortcut(context, row, "UI_SC_Action_Barricade",
+            "barricade", barricadePayload, player)
+    end
+    if dismantleTarget and dismantlePayload then
+        return addNamedShortcut(context, row, "UI_SC_Action_Dismantle",
+            "dismantle", dismantlePayload, player)
+    end
+    if targetSquare and safeMethod(targetSquare, "getRoom") ~= nil then
+        return addNamedShortcut(context, row, "UI_SC_Action_CheckRoom",
+            "check_room", squarePayload(targetSquare), player)
+    end
+    return nil
+end
+
+local function addCompanionCare(menu, row, player)
+    addCare(menu, row, player)
+    addViews(menu, row, player)
+end
+
+local function addSquadMenu(menu, player)
+    for _, descriptor in ipairs({
+        { key = "UI_SC_Action_WhistleRegroup", signal = "whistle" },
+        { key = "UI_SC_Action_HandSignHold", signal = "hold" },
+        { key = "UI_SC_Action_HandSignFallBack", signal = "fall_back" },
+        { key = "UI_SC_Action_HandSignCeaseFire", signal = "cease_fire" },
+        { key = "UI_SC_Action_HandSignFire", signal = "fire" },
+    }) do
+        menu:addOption(text(descriptor.key), nil, issueSignalFromContext,
+            descriptor.signal, player)
+    end
+end
+
+local function namedGraveMarker(worldObjects)
+    for _, object in ipairs(worldObjects or {}) do
+        local data = safeMethod(object, "getModData")
+        if type(data) == "table" and data.LF_FallenMarker == true then
+            local name = data.LF_FallenDisplayName or data.LF_FallenName
+            if type(name) == "string" and name ~= "" then return name end
+        end
+    end
+    return nil
+end
+
+function Context.fillWorldObjectContextMenu(playerIndex, context, worldObjects, test)
+    if test and ISWorldObjectContextMenu and ISWorldObjectContextMenu.Test then
+        return true
+    end
+    if not context then
+        return
+    end
+    local player = getSpecificPlayer and getSpecificPlayer(playerIndex) or (getPlayer and getPlayer() or nil)
+    if not player then
+        return
+    end
+    local memorialName = namedGraveMarker(worldObjects)
+    local square, door, targetPayload, doorPayload, barricadeTarget, barricadePayload,
+        containerTarget, removeBarricadeTarget, removeBarricadePayload,
+        dismantleTarget, dismantlePayload, combatTarget = findTarget(worldObjects, player)
+    local clickSquare = clickedWorldSquare(playerIndex, context, player, square)
+    if clickSquare then
+        square = clickSquare
+        targetPayload = squarePayload(clickSquare) or targetPayload
+        if combatTarget == nil and SC.GameplayUtil
+            and type(SC.GameplayUtil.squareMovingObjects) == "function" then
+            SC.GameplayUtil.squareMovingObjects(clickSquare, function(value)
+                if SC.GameplayUtil.isZombie(value)
+                    and not SC.GameplayUtil.isGoneTarget(value) then
+                    combatTarget = value
+                    return false
+                end
+            end, 16)
+        end
+    end
+    local rows, talkRows = nearbyRows(player)
+    local clickedVehicle = Context.vehicleAtClick(clickSquare)
+    local clickedCompanion, clickedMatches = clickedCompanionRow(talkRows, worldObjects, clickSquare)
+    local factions = talkableFactions(player)
+    local oddballs = talkableOddballs(player)
+    local sealedDoorGroup = SC.Oddballs
+        and type(SC.Oddballs.sealedDoorGroup) == "function"
+        and SC.Oddballs.sealedDoorGroup(door, player) or nil
+    local baseRelevant = baseMenuRelevant(clickSquare)
+    local watchStatus = SC.ViewControl and type(SC.ViewControl.status) == "function"
+        and SC.ViewControl.status() or {}
+    if #rows == 0 and #factions == 0 and #oddballs == 0 and not baseRelevant
+        and watchStatus.watching ~= true and not clickedCompanion
+        and not (clickedMatches and #clickedMatches > 1)
+        and not memorialName and not sealedDoorGroup and not clickedVehicle then return end
+    if test and ISWorldObjectContextMenu and ISWorldObjectContextMenu.setTest then
+        return ISWorldObjectContextMenu.setTest()
+    end
+    if memorialName then
+        local option = context:addOption(text("UI_SC_Grave_Memorial", memorialName), nil, nil)
+        if option then option.notAvailable = true end
+    end
+    addHotwireMenu(context, rows, clickedVehicle, player)
+    if clickedVehicle and SC.VehicleUnload
+        and type(SC.VehicleUnload.eligible) == "function"
+        and SC.VehicleUnload.eligible(clickedVehicle) == true then
+        local vehicleId = safeMethod(clickedVehicle, "getSqlId")
+        if vehicleId then
+            context:addOption(text("UI_SC_Base_UnloadToBase"), nil,
+                unloadVehicleFromContext, vehicleId, player)
+        end
+    end
+    if sealedDoorGroup then
+        context:addOption("Touch the sealed door", nil, oddballStoryAction,
+            sealedDoorGroup.id, "touch_door", player)
+    end
+    if test ~= true and clickSquare and SC.BaseLife
+        and type(SC.BaseLife.zoneDraft) == "function"
+        and SC.BaseLife.zoneDraft()
+        and type(SC.BaseLife.lockZoneEndpoint) == "function" then
+        SC.BaseLife.lockZoneEndpoint(clickSquare)
+    end
+    local selected = selectedNearbyRow(rows)
+    if watchStatus.watching == true then
+        context:addOption(text("UI_SC_Action_StopWatchingNamed",
+            companionName(watchStatus.watchId or "")), nil,
+            stopWatchingFromContext, player)
+    elseif clickedCompanion and clickedCompanion.recruited == true then
+        context:addOption(text("UI_SC_Action_Watch", clickedCompanion.name), nil,
+            watchFromContext, clickedCompanion, player)
+    end
+    if clickedCompanion then
+        Context.ensureCompanionMedicalOption(context, worldObjects,
+            player, clickedCompanion)
+        context:addOption(text("UI_SC_Talk_To", clickedCompanion.name),
+            nil, openTalkFromContext, clickedCompanion)
+        if clickedCompanion.recruited == true then
+            addNicknameActions(context, clickedCompanion, player)
+            addChefOrder(context, clickedCompanion, player)
+            addRecruitedOddballAction(context, clickedCompanion, player)
+            for _, action in ipairs(SC.Interaction.quickOrders) do
+                addInteractionShortcut(context, clickedCompanion, action, player)
+            end
+            context:addOption(text("UI_SC_Talk_OpenOrders"), nil,
+                openOrdersFromContext, clickedCompanion)
+        end
+    elseif clickedMatches and #clickedMatches > 1 then
+        local choose = addCategory(context, "UI_SC_Talk_ChoosePerson")
+        for _, row in ipairs(clickedMatches) do
+            choose:addOption(row.name, nil, openTalkFromContext, row)
+        end
+    end
+    if selected and targetPayload then
+        addNamedShortcut(context, selected, "UI_SC_Action_MoveHere",
+            "move_to", targetPayload, player)
+        addPriorityShortcut(context, selected, square, door, doorPayload,
+            barricadeTarget, barricadePayload, removeBarricadeTarget,
+            removeBarricadePayload, dismantleTarget, dismantlePayload, player)
+    end
+
+    if #rows == 0 and #factions == 0 and #oddballs == 0
+        and not baseRelevant then return end
+
+    local rootOption = context:addOption(text("UI_SC_Context_LivingFellows"), nil, nil)
+    local rootMenu = ISContextMenu:getNew(context)
+    context:addSubMenu(rootOption, rootMenu)
+
+    if selected and selected.recruited == true then
+        local selectedMenu = addNamedCategory(rootMenu,
+            "UI_SC_Context_SelectedCompanion", selected.name)
+        addWatchControl(selectedMenu, selected, player)
+        addOrdersShortcut(selectedMenu, selected, player)
+        addChefOrder(selectedMenu, selected, player)
+        selectedMenu:addOption(text("UI_SC_Talk_Open"), nil,
+            openTalkFromContext, selected)
+        addObjectiveAssignments(selectedMenu, selected, player)
+        local targetMenu = addCategory(selectedMenu, "UI_SC_Context_TargetActions")
+        addWorldOrders(targetMenu, selected, square, targetPayload, door, doorPayload,
+            barricadeTarget, barricadePayload, removeBarricadeTarget,
+            removeBarricadePayload, dismantleTarget, dismantlePayload, combatTarget, player)
+        addCompanionCare(addCategory(selectedMenu, "UI_SC_Context_Care"), selected, player)
+        addNicknameActions(selectedMenu, selected, player)
+        addRecruitedOddballAction(selectedMenu, selected, player)
+        addCommand(selectedMenu, "UI_SC_Action_Dismiss", selected.id,
+            "dismiss", nil, player)
+    end
+
+    local otherRows = {}
+    for _, row in ipairs(rows) do
+        if row.recruited == true and (not selected or row.id ~= selected.id) then
+            otherRows[#otherRows + 1] = row
+        end
+    end
+    if #otherRows > 0 then
+        local otherMenu = addCategory(rootMenu, "UI_SC_Context_OtherCompanions")
+        for _, row in ipairs(otherRows) do
+            local companionOption = otherMenu:addOption(row.name, nil, nil)
+            local companionMenu = ISContextMenu:getNew(otherMenu)
+            otherMenu:addSubMenu(companionOption, companionMenu)
+            addWatchControl(companionMenu, row, player)
+            addOrdersShortcut(companionMenu, row, player)
+            addChefOrder(companionMenu, row, player)
+            companionMenu:addOption(text("UI_SC_Talk_Open"), nil,
+                openTalkFromContext, row)
+            addObjectiveAssignments(companionMenu, row, player)
+            addCompanionCare(addCategory(companionMenu, "UI_SC_Context_Care"), row, player)
+            addNicknameActions(companionMenu, row, player)
+            addRecruitedOddballAction(companionMenu, row, player)
+            addCommand(companionMenu, "UI_SC_Action_Dismiss", row.id,
+                "dismiss", nil, player)
+        end
+    end
+
+    if #rows > 0 then
+        if SolOrders and SolOrders.addMenu then SolOrders.addMenu(addCategory(rootMenu, "UI_SC_Context_SolOrders"), player, clickSquare, clickedVehicle) else addSquadMenu(addCategory(rootMenu, "UI_SC_Context_Squad"), player) end
+    end
+    if baseRelevant then
+        addBaseMenu(rootMenu, clickSquare, containerTarget, barricadeTarget, player)
+    end
+    if #factions > 0 then
+        addFactionConversations(addCategory(rootMenu, "UI_SC_Context_Households"),
+            factions, player)
+    end
+    if #oddballs > 0 then
+        addOddballConversations(addCategory(rootMenu, "UI_SC_Context_StrangeFolk"),
+            oddballs, player)
+    end
+end
+
+local function returnExpeditionFromRadio(_target, player)
+    local expedition = SC.ExpeditionPrototype
+    if not expedition or not player then return end
+    local ok, accepted, reason = pcall(expedition.sendRadioOrder,
+        player, "return_now", "now")
+    local feedback = ok and accepted == true
+        and text("UI_SC_Expedition_ReturnSent")
+        or ok and reason == "radio_no_ack"
+            and text("UI_SC_Expedition_NoReceipt")
+        or text("UI_SC_Expedition_Failed", tostring(ok and reason or accepted))
+    safeMethod(player, "setHaloNote", feedback)
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+    return ok and accepted == true, ok and reason or tostring(accepted)
+end
+
+local function answerExpeditionFromRadio(_target, player, answer)
+    local expedition = SC.ExpeditionPrototype
+    if not expedition or not player then return end
+    local ok, accepted, reason = pcall(expedition.sendRadioOrder,
+        player, "expedition_decision", answer)
+    local feedback = ok and accepted == true
+        and text("UI_SC_Expedition_OrderSent")
+        or ok and reason == "radio_no_ack"
+            and text("UI_SC_Expedition_NoReceipt")
+        or ok and (reason == "NO_SAFE_ROAD_DETOUR"
+            or reason == "NO_ENTRY_CANDIDATE"
+            or reason == "no_safe_return")
+            and text("UI_SC_Expedition_NoSafeReturn")
+        or text("UI_SC_Expedition_Failed", tostring(ok and reason or accepted))
+    safeMethod(player, "setHaloNote", feedback)
+    if SC.UI and type(SC.UI.refresh) == "function" then SC.UI.refresh() end
+    return ok and accepted == true, ok and reason or tostring(accepted)
+end
+
+local function answerDistressFromRadio(_target, player, groupId)
+    local radio = SC.OddballDistressRadio
+    if not radio or type(radio.answer) ~= "function" then return end
+    local okay, accepted, reason = pcall(radio.answer, groupId, player)
+    local feedback = okay and accepted == true
+        and tostring(reason or "Rescue location marked on your map.")
+        or "Radio reply failed: " .. tostring(okay and reason or accepted)
+    safeMethod(player, "setHaloNote", feedback)
+    return okay and accepted == true, reason
+end
+
+function Context.fillRadioContextMenu(playerIndex, context, items)
+    local expedition = SC.ExpeditionPrototype
+    local mission = expedition and type(expedition.current) == "function"
+        and expedition.current() or nil
+    local player = type(getSpecificPlayer) == "function"
+        and getSpecificPlayer(playerIndex) or nil
+    if not player or type(items) ~= "table" then return end
+    local rootInventory = safeMethod(player, "getInventory")
+    local function equippedRadio(item)
+        return item and rootInventory ~= nil and SC.GameplayUtil
+            and SC.GameplayUtil.instanceOf(item, "Radio")
+            and safeMethod(item, "getContainer") == rootInventory
+            and (item == safeMethod(player, "getPrimaryHandItem")
+                or item == safeMethod(player, "getSecondaryHandItem")
+                or item == safeMethod(player, "getClothingItem_Back"))
+    end
+    local function addRadioOptions()
+        if playerIndex == 0 and mission and mission.scout then
+            if mission.scout.pause and mission.scout.pause.reported then
+                context:addOptionOnTop(text("UI_SC_Expedition_AnswerHold"),
+                    nil, answerExpeditionFromRadio, player, "hold_position")
+                context:addOptionOnTop(text("UI_SC_Expedition_AnswerPush"),
+                    nil, answerExpeditionFromRadio, player, "push_on")
+                context:addOptionOnTop(text("UI_SC_Expedition_AnswerReturn"),
+                    nil, answerExpeditionFromRadio, player, "return")
+            elseif mission.scout.phase ~= "inbound" then
+                context:addOptionOnTop(text("UI_SC_Expedition_ReturnNow"), nil,
+                    returnExpeditionFromRadio, player)
+            end
+        end
+        local distress = SC.OddballDistressRadio
+        if distress and type(distress.replyOptions) == "function" then
+            for _, option in ipairs(distress.replyOptions(player)) do
+                context:addOptionOnTop(option.label, nil,
+                    answerDistressFromRadio, player, option.groupId)
+            end
+        end
+    end
+    for _, entry in ipairs(items) do
+        if equippedRadio(entry) then
+            addRadioOptions()
+            return
+        end
+        if type(entry) == "table" and type(entry.items) == "table" then
+            for _, item in ipairs(entry.items) do
+                if equippedRadio(item) then
+                    addRadioOptions()
+                    return
+                end
+            end
+        end
+    end
+end
+
+function Context.install()
+    if Context._installed then
+        return
+    end
+    if ISWorldObjectContextMenu
+        and type(ISWorldObjectContextMenu.onMedicalCheck) == "function"
+        and ISWorldObjectContextMenu.onMedicalCheck ~= Context.onMedicalCheck then
+        Context._originalMedicalCheck = ISWorldObjectContextMenu.onMedicalCheck
+        ISWorldObjectContextMenu.onMedicalCheck = Context.onMedicalCheck
+    end
+    if ISInventoryPaneContextMenu
+        and type(ISInventoryPaneContextMenu.readItem) == "function"
+        and ISInventoryPaneContextMenu.readItem
+            ~= Context.readItemWithOddballMail then
+        Context._originalReadItem = ISInventoryPaneContextMenu.readItem
+        ISInventoryPaneContextMenu.readItem = Context.readItemWithOddballMail
+    end
+    if Events and Events.OnFillWorldObjectContextMenu then
+        Events.OnFillWorldObjectContextMenu.Add(Context.fillWorldObjectContextMenu)
+        Context._installed = true
+    end
+    if Events and Events.OnFillInventoryObjectContextMenu then
+        Events.OnFillInventoryObjectContextMenu.Add(Context.fillRadioContextMenu)
+    end
+end
+
+function Context.remove()
+    if not Context._installed
+        and not (ISInventoryPaneContextMenu
+            and ISInventoryPaneContextMenu.readItem
+                == Context.readItemWithOddballMail) then
+        return
+    end
+    if Context._installed and Events and Events.OnFillWorldObjectContextMenu then
+        Events.OnFillWorldObjectContextMenu.Remove(Context.fillWorldObjectContextMenu)
+    end
+    if Context._installed and Events and Events.OnFillInventoryObjectContextMenu then
+        Events.OnFillInventoryObjectContextMenu.Remove(Context.fillRadioContextMenu)
+    end
+    if ISWorldObjectContextMenu
+        and ISWorldObjectContextMenu.onMedicalCheck == Context.onMedicalCheck then
+        ISWorldObjectContextMenu.onMedicalCheck = Context._originalMedicalCheck
+    end
+    if ISInventoryPaneContextMenu
+        and ISInventoryPaneContextMenu.readItem
+            == Context.readItemWithOddballMail then
+        ISInventoryPaneContextMenu.readItem = Context._originalReadItem
+    end
+    Context._installed = false
+end
+
+Context.install()
+
+return Context

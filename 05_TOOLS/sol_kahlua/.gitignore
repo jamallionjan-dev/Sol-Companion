@@ -1,0 +1,8 @@
+build/
+scan.tsv
+api.tsv
+scan_report.txt
+diff.txt
+probe_kahlua.txt
+probe_lupa.txt
+exposed.txt

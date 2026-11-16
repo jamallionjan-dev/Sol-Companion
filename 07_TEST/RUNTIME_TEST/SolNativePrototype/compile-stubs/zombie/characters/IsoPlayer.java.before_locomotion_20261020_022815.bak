@@ -1,0 +1,10 @@
+package zombie.characters;
+import zombie.iso.IsoCell;
+public class IsoPlayer {
+    public IsoPlayer(IsoCell cell, SurvivorDesc descriptor, int x, int y, int z, boolean remote) {}
+    public static IsoPlayer getInstance() { return null; }
+    public static void setInstance(IsoPlayer player) {}
+    public boolean isLocalPlayer() { return true; }
+    public void updateLOS() {}
+    public void update() {}
+}

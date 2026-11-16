@@ -1,0 +1,2921 @@
+# SOL MASTER PLAN
+
+Last synchronized: 2026-10-29
+Project Zomboid: Build 42.21.0
+Revision: 4a0e9546ec
+
+## STATUS LEGEND
+- [COMPLETED] = implemented and proven at the stated proof level.
+- [IN PROGRESS] = active work; not yet production-ready.
+- [PENDING] = planned but not yet implemented.
+- [BLOCKED] = unresolved blocker or engine behavior under investigation.
+
+## PROJECT GOVERNANCE
+- [COMPLETED] Runtime proof is required before declaring engine behavior successful.
+- [COMPLETED] Static validation is not runtime proof.
+- [COMPLETED] Production Sol remains untouched until runtime-test implementation is stable.
+- [COMPLETED] One controlled change and one controlled test at a time during engine debugging.
+- [COMPLETED] Backup before edits.
+- [ACTIVE RULE] Immediately after a modification passes its applicable validation, synchronize it to the latest launch candidate, regenerate `MANIFEST_SHA256.txt`, and verify WORK/release payload parity. Never let the launch candidate lag behind a successfully validated change. Keep runtime validation status explicit: syncing a change does not mean gameplay verification passed, and do not call a candidate release-ready while required runtime checks remain pending.
+- [COMPLETED] No global engine hacks for Sol-specific problems.
+- [COMPLETED] No manual X/Y teleport as a substitute for native pathfinding.
+- [COMPLETED] Full IsoPlayer.update() is forbidden for the non-local companion.
+- [COMPLETED] Sol must never be placed in local IsoPlayer.players[] slots.
+- [COMPLETED] Before every runtime launch, verify that zero Project Zomboid instances are running.
+- [COMPLETED] Never launch a second runtime instance while one Project Zomboid process is already active.
+- [COMPLETED] After every important development step, this master plan must be updated.
+- [COMPLETED] Every plan item must record status, problem, solution, and proof level where applicable.
+
+## IDENTITY AND BODY ARCHITECTURE - [IN PROGRESS]
+Goal:
+- Sol is a persistent AI companion, not a generic zombie or ordinary NPC.
+- The external AI model is the reasoning brain; Sol is the in-game body, senses, memory, and action layer.
+- Sol may later leave the player, perform missions, collect resources, and return.
+
+Current implementation:
+- [COMPLETED] Abandoned IsoZombie as the core body architecture.
+- [COMPLETED] Current body is SolIsoPlayerShell extends IsoPlayer.
+- [COMPLETED] Sol is intentionally non-local.
+- [COMPLETED] isLocalPlayer() returns false.
+- [COMPLETED] serverPlayerIndex is -1.
+- [COMPLETED] Sol is kept outside IsoPlayer.players[] local slots.
+- [COMPLETED] Local IsoPlayer singleton ownership is preserved/restored around Sol updates.
+
+Problem history:
+- IsoZombie could enter and exit vehicles but became invisible while seated.
+- Runtime showed alpha and targetAlpha collapsing to zero.
+- Old zombie body lacked reliable ModelManager/model-instance state.
+- Full IsoPlayer.update() is unsafe because it owns local input, camera, player globals, and OnPlayerUpdate behavior.
+
+Solution:
+- Use a dedicated non-local IsoPlayer shell.
+- Execute selected generic/player subsystems manually instead of full IsoPlayer.update().
+- Use Sol-specific exceptions only.
+
+Proof:
+- [COMPLETED] Runtime proof for non-local shell identity and local-player isolation.
+
+## JAVA LUA BRIDGE - [COMPLETED]
+Implemented:
+- Java launcher -> bootstrap -> Kahlua exposure -> Lua -> SolBridge.
+- SolBridge.ping() returns SOL_NATIVE_PONG.
+
+Problem:
+- Needed a reliable Java-to-Lua and Lua-to-Java path without taking over normal player ownership.
+
+Solution:
+- Dedicated Sol launcher/bootstrap/exposure/bridge classes.
+
+Proof:
+- [COMPLETED] Runtime end-to-end bridge proof.
+
+## WORLD AND SCHEDULER MEMBERSHIP - [COMPLETED]
+Implemented:
+- Sol is registered in getSquare().getMovingObjects().
+- Sol is registered in cell.getObjectList().
+
+Problem:
+- A body existing in Java was not enough; it also needed world membership and scheduler membership.
+
+Solution:
+- Register Sol in both square moving objects and the cell scheduler list.
+
+Proof:
+- [COMPLETED] Runtime worldMember=true.
+- [COMPLETED] Runtime scheduled=true.
+- [COMPLETED] Runtime updateCount continuously increases.
+
+## MODEL AND RENDER READINESS - [IN PROGRESS]
+Implemented:
+- activeModel=true.
+- addedToModelManager=true.
+- alpha=1.
+- targetAlpha=1.
+
+Problem:
+- Old zombie implementation lost visibility/model state.
+
+Solution:
+- Non-local IsoPlayer shell plus explicit model-manager registration and correct alpha state.
+
+Proof:
+- [COMPLETED] At native-shell READY, runtime reported addedToModelManager=true, activeModel=true, model instance present, alpha0=1.0, targetAlpha0=1.0.
+- [BLOCKED] Later runtime status on the same shell reported alpha0=0.0 and targetAlpha0=0.0 while activeModel/model registration remained valid.
+- Therefore current-build visibility persistence is NOT yet proven.
+
+Current render investigation:
+
+Render investigation refinement:
+- IsoPlayer.render() does contain a checkCanSeeClient(IsoPlayer) gate that can set targetAlpha=0.
+- However that branch executes only when GameClient.client=true.
+- Current runtime has not produced evidence that it is running as a multiplayer GameClient, so this candidate is downgraded and is not accepted as the current root cause.
+- IsoGameCharacter.updateSeenVisibility(int) is now the leading candidate because reverse engineering directly showed it can call setTargetAlpha(playerIndex, 0.0f).
+- Next proof target: identify the exact condition inside updateSeenVisibility(int) that produces targetAlpha=0 for the Sol shell.
+Render root-cause candidate - [IN PROGRESS]:
+- Reverse engineering confirmed IsoPlayer.render() calls IsoPlayer.getInstance().checkCanSeeClient(this).
+- If that check returns false, IsoPlayer.render() executes setTargetAlpha(0.0f); if true it executes setTargetAlpha(1.0f).
+- Sol is intentionally a non-local IsoPlayer shell and is not a normal network remote client, so this player-specific visibility gate is now the leading candidate for the post-spawn alpha 1.0 -> 0.0 transition.
+- This is not yet accepted as root cause until checkCanSeeClient() and its conditions are inspected.
+- Determine what engine update changes alpha/targetAlpha from 1.0 to 0.0 after spawn.
+- Keep this investigation separate from locomotion, which is already runtime-proven.
+
+Remaining:
+- [PENDING] Seated vehicle render proof still required later.
+
+## LOCAL PLAYER ISOLATION - [COMPLETED]
+Problem:
+- Full player update can borrow camera, input, local-player singleton, and local player slots.
+
+Solution:
+- Do not call full IsoPlayer.update().
+- Invoke the generic IsoGameCharacter update body instead.
+- Restore the true local IsoPlayer singleton after Sol update.
+
+Proof:
+- [COMPLETED] Runtime Sol remains non-local.
+- [COMPLETED] Runtime Sol remains outside local slots.
+- [COMPLETED] Runtime local player globals remain intact.
+
+## NATIVE PATHFINDING AND LOCOMOTION - [IN PROGRESS]
+
+### Path request and scheduler - [COMPLETED]
+- Path target is accepted.
+- Scheduler updates the shell.
+- PathFindState.execute() can be invoked reflectively.
+
+### Path ownership bug - [COMPLETED]
+Problem:
+- Sol previously cleared solPathActive whenever setMoving(false) was called.
+- Generic character update naturally calls setMoving(false) during normal movement cycles.
+- This incorrectly cancelled path ownership.
+
+Solution:
+- setMoving(boolean) now only delegates to super.setMoving(moving).
+- Explicit stopSolPathOwnership() is the intentional ownership stop path.
+
+Proof:
+- [COMPLETED] Runtime short native path succeeded after this fix.
+
+### First native movement proof - [COMPLETED]
+Runtime result:
+- Start: 10837.5,10144.5
+- Target: 10835.5,10144.5
+- Final: 10835.5,10144.5
+- MOVED_DISTANCE=2
+- progress=found
+- started=true
+- pathExecAttempts and pathExecSuccesses increased.
+
+Meaning:
+- Sol moved using native path behavior, not manual X/Y teleport.
+
+### Terminal path reconciliation - [COMPLETED]
+Problem:
+- After reaching the target, playerMoving remained true and path ownership stayed active.
+
+Solution:
+- Added reconcileSolPathState().
+- It clears solPathActive when bPathfind is no longer requested or behavior is cancelled/terminal.
+- It calls super.setMoving(false) after terminal reconciliation.
+
+Proof:
+- [COMPLETED] Runtime playerMoving=false after arrival.
+- [COMPLETED] Runtime bPathfind=false after arrival.
+- [COMPLETED] PATH_EXEC_DELTA_AFTER_ARRIVAL=0.
+
+### PathFindState double-step guard - [COMPLETED]
+Problem:
+- A future engine state may enter PathFindState itself, which could cause double execution.
+
+Solution:
+- Check current state before manual PathFindState.execute().
+- Added pathExecSkippedCurrentState telemetry.
+
+Proof:
+- [COMPLETED] Runtime guard caused no regression.
+- [COMPLETED] pathExecSkippedCurrentState=0 in the tested route, proving manual execution was still required there.
+
+### Long-route locomotion translation - [COMPLETED]
+Observed runtime failure:
+- 8-tile route becomes found.
+- pathAttached=true.
+- moving=true.
+- playerMoving=true.
+- bPathfind=true.
+- shouldBeMoving=true.
+- usingPath=true.
+- started=true.
+- Actual position does not change.
+- Final MOVED_DISTANCE=0.
+- REACHED_TARGET=False.
+
+Conclusion:
+- Path creation is not the blocker.
+- Scheduler is not the blocker.
+- World membership is not the blocker.
+- Path ownership is not the blocker.
+- PathFindState invocation is not the blocker.
+- Terminal cleanup is not the blocker.
+- Current blocker is long-route body translation for a non-local IsoPlayer shell.
+
+### Living Fellows reverse engineering - [COMPLETED]
+Extracted real update order:
+- reconcileBridgePathState()
+- synchronizePlayerLocomotion()
+- updateGenericCharacter()
+- advanceBridgePath()
+- consumeBridgeDeferredMovement()
+- reconcileBridgePathState()
+
+Important finding:
+- synchronizePlayerLocomotion() runs BEFORE updateGenericCharacter().
+- It sets player locomotion state and calls updateMovementRates().
+- Living Fellows documents that WalkSpeed, RunSpeed, and IdleSpeed can remain zero if this player locomotion refresh is omitted.
+- PathFindBehavior2 normal path movement relies on animation/root-motion state.
+
+
+### 8-tile locomotion-sync runtime result - [COMPLETED]
+Observed on 2026-10-20:
+- Start position: 10837.5,10144.5,0.0.
+- Requested target: 10829.5,10144.5,0.0.
+- Mid position: 10829.5,10144.5,0.0.
+- Final position: 10829.5,10144.5,0.0.
+- Coordinate delta: exactly 8.0 tiles.
+- pathExecAttempts=119 and pathExecSuccesses=119.
+- Final playerMoving=false and bPathfind=false.
+- Execution attempts remained 119 at the final sample.
+
+Blocking error:
+- Runtime emitted NoSuchMethodError for SolIsoPlayerShell.setVariable(String, boolean).
+- Expected return type in the generated call site was java.lang.Object.
+- Because this ABI/signature mismatch occurred during the movement request, this test is NOT accepted yet as clean long-route locomotion proof.
+
+Root cause confirmed:
+- Compile stub IsoPlayer declares setVariable(String, boolean) returning java.lang.Object.
+- Real Project Zomboid IsoGameCharacter declares setVariable(String, boolean) returning zombie.core.skinnedmodel.advancedanimation.IAnimationVariableSlot.
+- JVM method descriptors include the return type, so Object vs IAnimationVariableSlot produces the observed NoSuchMethodError.
+
+Next investigation:
+- Add a compile-only IAnimationVariableSlot stub in the correct package.
+- Change the compile-only IsoPlayer.setVariable(String, boolean) return type to IAnimationVariableSlot.
+- Do not change locomotion logic.
+- Rebuild a clean runtime JAR without compile stubs.
+- Rerun one controlled 8-tile test.
+
+### ABI-fixed locomotion build - [COMPLETED]
+Implemented:
+- Added compile-only zombie.core.skinnedmodel.advancedanimation.IAnimationVariableSlot stub.
+- Changed compile-only IsoPlayer.setVariable(String, boolean) return type from Object to IAnimationVariableSlot.
+- No locomotion source logic was changed.
+
+Build proof:
+- javac succeeded using compile-only stubs.
+- Runtime JAR built successfully.
+- Runtime JAR contains sol/ classes only.
+- NO_ZOMBIE_STUBS_IN_JAR confirmed.
+- Build: build_locomotionsync_abifix_20261020_094304.
+- SHA256: 941AB680D50462B15791CA94A08E19FEF4CFC9192F5E1589C441AA67B236CDDB.
+
+Runtime status:
+- [COMPLETED] This build passed the controlled 8-tile runtime locomotion test.
+- ABI-fixed runtime is active as PID 19836.
+- Runtime argfile now points to the ABI-fixed build.
+- Single-instance launch guard was satisfied before starting PID 19836.
+
+
+Clean ABI-fixed runtime proof:
+- Runtime PID: 19836.
+- Build: build_locomotionsync_abifix_20261020_094304.
+- SHA256: 941AB680D50462B15791CA94A08E19FEF4CFC9192F5E1589C441AA67B236CDDB.
+- Start position: 10837.5,10144.5,0.0.
+- Target position: 10829.5,10144.5,0.0.
+- Mid position: 10829.5,10144.5,0.0.
+- Final position: 10829.5,10144.5,0.0.
+- Native coordinate delta: exactly 8.0 tiles.
+- pathExecAttempts=115.
+- pathExecSuccesses=115.
+- Final playerMoving=false.
+- Final bPathfind=false.
+- Final progress=found.
+- Path execution attempts remained 115 after arrival.
+- No MOVE_FAILED.
+- No NoSuchMethodError.
+- No COMMAND ERROR.
+- [COMPLETED] Long-route native locomotion is now runtime-proven on the ABI-fixed build.
+
+### Current locomotion sync experiment - [COMPLETED]
+Implemented:
+- Added synchronizeSolLocomotion() before updateGenericCharacter().
+- synchronizeSolLocomotion() calls super.setMoving(solPathActive).
+- updateMovementRates() is invoked reflectively.
+
+Static validation:
+- SYNC_METHOD=1.
+- SYNC_CALL=1.
+- Call order verified as synchronizeSolLocomotion() -> updateGenericCharacter() -> advanceSolPath() -> reconcileSolPathState().
+- Compile succeeded using compile-only stubs.
+- JAR built successfully.
+- JAR contains only sol/ classes; no zombie/ stubs packaged.
+
+Current build:
+- build_locomotionsync_20261020_092325
+- SHA256: 28834F6CC8E20CEA9FE5B3872D7211FE95F6DCF9542E3A97678FD6111EF03D39
+
+Runtime setup:
+- sol-shell-runtime.args points to the locomotion-sync build.
+- Runtime launched as exactly one Project Zomboid instance.
+- Runtime PID at latest check: 15080.
+- SolNativeBridge READY.
+- SolTest runtime command channel READY.
+
+Current next runtime step:
+- Spawn the native Sol shell through the runtime command channel.
+- Verify body is not nil.
+- Then run one 8-tile movement test.
+- Success must be measured by actual coordinate delta, not movement flags.
+
+Success criteria for long route:
+- Mid-test actual position changes.
+- pathAttached=true.
+- bPathfind=true while moving.
+- playerMoving=true while moving.
+- Final position reaches or is near target.
+- Final playerMoving=false.
+- Final bPathfind=false.
+- Path execution attempts stop after arrival.
+- No new Sol runtime errors.
+
+## DEFERRED MOVEMENT - [PENDING / DO NOT APPLY BLINDLY]
+Finding:
+- Living Fellows uses doDeferredMovement() only when a verified native traversal state owns the body.
+- Ordinary path/manual locomotion already translates through PathFindBehavior2 or MoveForward.
+- Applying deferred movement again to ordinary pathing may cause double translation.
+
+Rule:
+- Do not add doDeferredMovement() to normal path movement unless runtime evidence proves it is required.
+
+## VEHICLE PHASE - [PENDING]
+Known history:
+- Vehicle enter/exit was not the original bug.
+- Sol successfully entered the passenger seat in the old implementation.
+- The old bug was invisibility while seated.
+
+Old runtime evidence:
+- seated=true.
+- doRender=true.
+- alpha0=0.
+- targetAlpha0=0.
+- alphaZero=true.
+- hasActiveModel=false.
+- addedToModelManager=false.
+
+Planned investigation after locomotion is stable:
+- BaseVehicle.showPassenger.
+- Living Fellows vehicle handlers.
+- KnoxSurvivors passenger sequence.
+- Vanilla ISEnterVehicle.
+- Vanilla ISExitVehicle.
+- ModelManager and alpha while seated.
+
+Vehicle success criteria:
+- Sol enters passenger seat.
+- Human body remains visible while seated.
+- Player visually confirms seated rendering.
+- Sol exits normally.
+
+## AI BRIDGE TOOL PROTOCOL - [IN PROGRESS]
+Goal:
+- Structured game state and tool calls between Project Zomboid and the external AI reasoning model.
+
+Status:
+- Low-level Java/Lua bridge exists and is runtime proven.
+- Structured protocol sol-ai-1 is specified in DOCS/SOL_AI_BRIDGE_PROTOCOL.md and implemented game-side (SCAIMailbox, SCAIRuntime, SCAIToolGateway, SCAITargetResolver, SCAIPerceptionAdapter).
+- 2026-10-22: AI runtime start + hello frame observed in a live game session (2026-10-22_11-53-35); it was never acked because no brain process existed.
+- 2026-10-22: brain side 05_TOOLS/sol_mind v0.1 + offline proof against the real Lua: PASS. Integrated runtime proof: PENDING.
+
+## PERCEPTION SNAPSHOT DELTA SYSTEM - [PENDING]
+Goal:
+- Continuous structured awareness of zombies, people, animals, objects, containers, doors, windows, loot, vehicles, terrain, rooms, exits, threats, sounds, weather, temperature, time, health, and current tasks.
+- Send compact snapshots/deltas rather than the entire world every frame.
+
+## NAVIGATION AND MOBILITY INTELLIGENCE - [PENDING]
+Goal:
+- Sol must understand the Project Zomboid world as traversable topology, not only raw coordinates.
+- Understand roads, practical drivable space, terrain, rooms, building connectivity, entrances/exits, doors, windows, fences, barriers, stairs, and traversal-relevant world features.
+- Plan routes from the current position to destinations and continuously re-evaluate them as conditions change.
+- This is a mandatory core subsystem integrated with Perception, map/world knowledge, threat assessment, Planner, Actions, and vehicle control.
+
+On-foot navigation:
+- Plan outdoor, building-to-building, and interior routes using native Build 42 traversal/pathfinding wherever possible.
+- Detect static and dynamic obstacles and blocked routes.
+- Treat zombies and other threats as live route risks/costs.
+- Based on live state, dynamically choose to attack, evade, wait, retreat, re-route, vault/climb/cross a valid obstacle, or use valid doors/windows/entrances/exits.
+- Re-plan when a route becomes blocked, unsafe, invalid, or significantly worse than another route.
+- Consider health, injuries, fatigue, equipment, encumbrance, skills, nearby threats, escape space, and actual game mechanics.
+
+Vehicle navigation:
+- Understand roads and practical drivable space instead of blindly steering toward coordinates.
+- Plan and follow safe vehicle routes.
+- Detect vehicles, wrecks, trees, barriers, zombies, blocked roads, road geometry, and collision risks.
+- Slow, stop, maneuver, avoid, or re-route according to current road and threat conditions.
+- Re-plan when the intended road becomes blocked or unsafe.
+- Vehicle navigation is separate from passenger enter/seat/render/exit correctness; both are required for full vehicle autonomy.
+
+Architecture:
+- Perception supplies current structured world state.
+- Map/world knowledge supplies local and persistent topology.
+- Navigation produces candidate routes.
+- Threat assessment scores risk and traversal cost.
+- Planner selects route and action sequences.
+- Action tools execute native movement, traversal, combat/evasion decisions, and vehicle controls.
+- Runtime feedback validates progress and triggers re-planning.
+
+Research-first requirement:
+- Before implementation, inspect current Build 42 native pathfinding, world/map APIs, traversal states, vehicle movement/control behavior, vanilla/decompiled behavior, and proven community companion/navigation approaches.
+- Prefer native Build 42 systems plus small adapters over a parallel custom movement engine.
+- Never use manual X/Y teleport or blind coordinate steering as a substitute for native pathfinding/movement.
+
+Runtime proof requirements:
+- [PENDING] Outdoor route around a real obstacle.
+- [PENDING] Building-to-building route through valid entrances/exits.
+- [PENDING] Interior route through rooms/doors/traversal points.
+- [PENDING] Dynamic re-route after path blockage.
+- [PENDING] Zombie-aware attack/avoid/wait/retreat/re-route decision from live state.
+- [PENDING] Fence/window/barrier traversal using valid native actions where supported.
+- [PENDING] Vehicle road following with obstacle avoidance.
+- [PENDING] Vehicle stop/re-route when a road is blocked.
+- [PENDING] No navigation behavior is COMPLETE from static inspection alone; every behavior requires runtime proof.
+
+## PERSISTENT MEMORY - [PENDING]
+Goal:
+- Memory survives restart.
+- Store home/base, containers, vehicles, plans, unfinished tasks, blockers, shortages, known locations, world facts, instructions, preferences, and useful summaries.
+- Memory must be structured and versioned.
+
+## INVENTORY RESOURCES HOME - [PENDING]
+Goal:
+- Understand Sol inventory, player inventory where allowed, vehicle storage, home containers, and nearby relevant containers.
+- Track capacity before collection missions.
+- Track food, water, medicine, ammunition, building materials, farming supplies, fuel, power resources, and clothing.
+- Estimate food days and shortages.
+- Support explicit home/base designation.
+Status 2026-10-24: v0.4.0 implements inventory/vehicle/home awareness, food days (measured), water/utility shut-off and per-world memory; recipe-based shortages come with the recipe/mod catalog (N5).
+
+## COMMUNICATION - [PENDING]
+Goal:
+- Arabic and English in-game text conversation.
+- Follow the language used by the player.
+- Push-to-talk / voice-message button.
+- STT into the AI bridge.
+- Optional Arabic/English TTS replies.
+Status 2026-10-23 (Sol UI / mind connection):
+- Mind connection (SolSettings v0.2.x, settings button of the Sol panel): runtime PASS. Groq key applied by paste, stored DPAPI-encrypted (protected=True); model openai/gpt-oss-120b saved.
+- Arabic reply proven 2026-10-23 19:1x: 'أنا سول، رفيقتك الناجية في عالم الزومبي.' (0.43 s). gpt-oss is a reasoning model: with max_tokens 120 the thinking used the whole budget (finish=length, empty reply); fixed with reasoning_effort=low + 1024. allam-2-7b tested: faster but broke persona and had typos; not chosen.
+- Voice decision (user): female Arabic voice; provider choice delegated. Chosen: STT Groq whisper-large-v3-turbo (same Groq key); TTS candidate Groq canopylabs/orpheus-arabic-saudi (female voices to verify), fallback Microsoft neural Arabic female (unofficial Edge endpoint, or official Azure Speech key). The reply is always kept as text in the chat.
+- Blocker for in-game chat text: Project Zomboid fonts contain no Arabic glyphs (185 .fnt scanned, 0 Arabic). Required: SolText renderer (Arabic glyph atlas + contextual shaping + RTL + wrapping) in Lua.
+- 2026-10-23 v0.3.1 (SolText + chat): SolText renderer (246 glyph textures from Noto Sans Arabic / Noto Sans; contextual shaping incl. lam-alef, RTL with embedded Latin/number runs, word wrap; Kahlua char strings and UTF-8 both decoded). Sol chat window (SolChat.lua) opened by the panel chat button; messages travel through SolChat_Request.txt / SolChat_State.txt as ASCII with \uXXXX escapes (encoding-proof); Sol Mind chat_service.py answers with the configured provider (Sol persona, player's language, last 16 messages as context, history kept in %LOCALAPPDATA%/SolMind/chat_history.json). Offline/thinking/error states shown in Arabic. Offline tests: SolText 7/7, chat service 10/10, end-to-end Lua<->Python 14/14. Runtime: PENDING.
+
+## PLANNING AND ACTION TOOLS - [IN PROGRESS]
+Goal:
+- Persistent multi-step goals.
+- Plans survive restart.
+- Respect actual game mechanics, skills, tools, and resources.
+- No impossible magic actions.
+Status 2026-10-25 (RUNTIME PASS for sol_cook egg at 04:17; registry 0.1.1, planner 0.1.5, WORK=LIVE):
+- Runtime proof: full cook chain observed by user + console done:cook:all_steps_done + cooked egg in her bag. Five evidence-based fixes on the way (stove API, adjacent walk square, yield LF work, NPC item-move fallback, NPC stove-toggle fallback); these are shared primitives every next compound action reuses. See engineering log 2026-10-25 04:17.
+- Design: 3 layers. L1 generic runner over the game's own timed actions (273 ISBaseTimedAction classes in installed 42.21) + checkable verbs with dry-run gates. L2 recipes read from game scripts at runtime (969 craftRecipe, 437 evolvedRecipe), never a hand table. L3 planner: compound request -> plan of atomic steps built only from what Sol sees/carries; refused with a precise reason otherwise (no-cheat gate).
+- Files: SolActionRegistry.lua 0.1.0 (U.timed, 12 verbs, wraps SolActions 0.4.0 at OnGameStart, no edit to SolActions.lua) and SolPlanner.lua 0.1.0 (step runner with timeouts and danger cancel; sol_cook / sol_cook_and_serve / sol_plan_status / sol_plan_cancel). Reference case: cook egg = fetch -> stove -> on -> watch isCooked, out before isBurnt -> off -> serve.
+- Phase B pending: craftRecipe/evolvedRecipe execution (ISHandcraftAction / ISAddItemInRecipe, e.g. PrepareOmelette) after reading the game's own call sites; per-save spatial memory (where she last saw an item); Arabic verb names generated from the catalog instead of regex in Sol Mind.
+- Hashes and evidence: SOL_ENGINEERING_LOG.md entry 2026-10-25 'Action catalog Layer 1+3'.
+
+## MOD AWARENESS - [PENDING]
+Goal:
+- Read installed/enabled mod list.
+- Detect changes.
+- Cache useful mechanics.
+- Prefer per-mod adapters instead of hardcoding mod-specific behavior into Sol core.
+
+## SURVIVAL DOMESTIC HEALTH COMBAT - [PENDING]
+Goal:
+- Farming, animals, cooking, cleaning, organizing, construction, repair, medicine, weather awareness, and combat behavior according to real game capabilities.
+
+## AWAY AND FETCH MISSIONS - [PENDING]
+Goal:
+- Sol can leave the player, travel to candidate locations, collect requested resources, track capacity/risk/progress/blockers, and return.
+- Mission state should survive interruptions when feasible.
+
+## SOL UI - [PENDING]
+Goal:
+- Dedicated Sol menu for chat, push-to-talk, task state, plans, resources, inventory/capacity, base status, warnings, memory/locations, installed mods, bridge/model status, supported tools, and voice/language settings.
+Status 2026-10-23:
+- Design v5.2 approved (Sol_UI_v5_2.html + design image). SolPanel v0.1.2 runtime PASS for rendering (Arabic labels pre-rendered as textures, Noto Sans Arabic). LF binding bug fixed in v0.1.1: LF namespace is the global SurvivorCompanion (files use local SC = SurvivorCompanion).
+- SolSettings v0.2.x: section 'Sol mind connection system' (sources API key / local / bridge / manual / none; providers Anthropic, OpenAI, Gemini, OpenRouter, Groq, xAI, DeepSeek, Mistral, OpenCode Zen, Ollama; get-key page buttons opened by Sol Mind; paste reads the clipboard inside Sol Mind and refuses non-key text without any network call). Runtime PASS with Groq.
+- Decision (user, 2026-10-23): replace ALL Living Fellows UI with the Sol UI. Keep all LF logic, code and credits; no legacy LF panel, launcher or menu stays visible.
+- LF UI inventory: 17 tabs, 1314 UI text keys, 135 context-menu keys. Largest: Base 341 (+BaseWatch 23), Faction 112, Expedition 93, Journal/Diary 50, Talk 26 (+SCDialogue.lua 242 KB). Debug 124 keys stays developer-only.
+- Migration order: SolText renderer -> Sol UI kit -> chat via bridge -> voice -> Status/Health -> Orders -> Loadout/Gear -> Journal -> Groups/Squad -> Expeditions -> Factions -> Base -> Sol context menu (vanilla menus cannot draw Arabic) -> hide each legacy screen once its replacement is proven.
+- 2026-10-23 v0.3.0 (SolSkin): Living Fellows window is never shown (no startup window, no collapsed launcher); when the Sol panel opens Status / Loadout / Orders, the same LF window opens beside it in the Sol theme (Sol frame and title, Sol tabs, roster and widget colours re-applied after every rebuild; LF header buttons hidden). All LF tabs and features stay available. Right-click menu label 'Living Fellows' renamed 'Sol'. Chat button disabled until the Sol chat window (bridge) ships; it no longer opens the LF talk tab.
+- 2026-10-23 v0.3.2 (Arabic screens): 1330 Living Fellows UI texts translated to Arabic (SolLF_AR.lua; Debug tab stays English; Sol addressed in the feminine; 'Living Fellows' / 'LF' shown as 'Sol'). LF's UI.text returns Arabic only while the Sol-skinned window builds its content (rebuild/applyLayout/roster), so right-click menus and other UI stay untouched. ISLabel / ISButton / ISTickBox / ISComboBox / ISComboBoxPopup draw text through SolText only when it contains Arabic (tested against the game's own 42.21 drawing code); tooltips with Arabic are dropped. AR/EN switch in the Sol panel rebuilds the window. Runtime: PENDING.
+- 2026-10-23 v0.3.3 (fixes): (a) Arabic shown as 'D-'D) in game: Kahlua keeps one Java char per string position but string.byte() returns only the low 8 bits. SolText now decodes through a char->code point table built from a literal string in SolTextData (test emulating the game behaviour: 7/7; SolText writes a self-check line to console.txt). (b) LF window still behaved like LF (docked/jumped to a screen side when the inventory opened; LF layout). SolSkin 0.3.3: no docking (applyScreenBounds only clamps), drag by header, Sol layout: tabs in one vertical column on the right, content on the left, companion list only with 2+ companions, window 660x560. Runtime: PENDING.
+- 2026-10-24 v0.5.0 (Sol pages): User rejected the recoloured LF window (square, LF behaviour, garbled Arabic). The LF window is now never shown: every LF entry point (panel buttons, right-click orders, hotkey toggle, showStatus, startup) opens SolPages, a rounded Sol window (back, tab column on the right, scrollable content). LF builders still run on a hidden root; their widgets are read as data (section/label/button/combo/tick) and drawn with SolText; Sol controls call the same LF callbacks with the PZ 42.21 argument order (onclick(target, button, args), onChange(target, combo, args), changeOptionMethod(target, index, selected, args)). The 'Tasks' button became 'More'. SolText 0.1.2: game log proved len('سول')=3 and byte() low 8 bits (51,72,68) and that v0.1.1's extra detection test was false in Kahlua -> mode detection is now len('ب')==1. Offline: pages 19/19. Runtime: PENDING.
+- 2026-10-24 v0.5.2 (main menu fix): After v0.5.1 the game's main menu (language EN) was drawn as broken Arabic. Proven cause: Project Zomboid keeps only the low 8 bits of non-ASCII characters in Lua source files (Arabic literal 'سول' loads as '3HD'); v0.5.1's char table therefore mapped ASCII letters to Arabic, and the 0.1.x global ISLabel/ISButton/ISTickBox/ISComboBox patches redrew vanilla UI. Fix: all Sol Lua files are pure ASCII (asciify_lua.py), Arabic text is written as \\uXXXX escapes decoded by SolText 0.2.0; SolArabicUI 0.2.0 no longer patches any game widget. Test reproduces the cause and the menu regression: 12/12. Runtime: PENDING.
+- 2026-10-24 v0.5.3: in-game crash 'invalid capture index' (SolPages drawSkills hover, string.gsub with a skill name as replacement; a '%' in the name broke it). Replaced by plain concatenation; regression test with the exact crashing name. User screenshots of v0.5.1: all Sol pages render (More, Expeditions, Loadout, Groups, Orders, Status) with LF content; digits/Latin were mapped to Arabic letters by the v0.5.1 char table, fixed in v0.5.2.
+- 2026-10-24 v0.5.4: user: digits must always be 0-9 (no Arabic-Indic/Persian digits). SolText 0.2.1 draws U+0660-0669 and U+06F0-06F9 as 0-9; Sol Mind replies are normalized to 0-9 and the persona asks for 0-9. Tests: digits and LTR number order inside Arabic.
+- 2026-10-24 v0.6.0: after the user's 19-problem test. Text: glyphs rebuilt in IBM Plex Sans Arabic SemiBold at 30 px, pages ~17/20 px, chat 18 px. Pages: Living Fellows measured escaped Arabic with the game font (6 chars per letter) and cut / wrapped every word; while LF builds a hidden page getTextManager() now answers with SolText's real width. Sol tab set: Status, Skills, Orders, Loadout, Family (Groups / Expeditions / More hidden until redesigned). Loadout = native card (weapon, ammo, carry bar, health, supplies, quick actions via LF's own SC.Commands/SC.Interaction path). Family = relationship ladder cautious..family + romance + married (locked, v0.7.0) and trust/bond/mood/morale/time together/need/memory from the LF row. Chat: typed text drawn inside the input box with a caret.
+
+## IMPLEMENTATION ORDER
+1. [SUPERSEDED 2026-10-20] The custom non-local IsoPlayer body was replaced by the Living Fellows core (see ARCHITECTURE PIVOT). Remaining body items on the LF body: visual model confirmation and vehicle rendering.
+2. [IN PROGRESS] Structured AI bridge/tool protocol (runtime PASS 2026-10-23: 2103 frames acked, follow via mailbox executed and user-observed; stay/say/seen runtime still pending).
+3. [PENDING] Perception snapshot/delta system (full snapshots exist via SCAIPerceptionAdapter; deltas pending).
+4. [PENDING] Navigation and Mobility Intelligence: map/world topology, on-foot routing, threat/obstacle-aware re-planning, traversal decisions, and vehicle navigation.
+5. [PENDING] Persistent memory.
+6. [PENDING] Inventory/resources/home model.
+7. [IN PROGRESS] Arabic/English text chat (mind connection PASS; next: SolText renderer, then chat window via the bridge).
+8. [NEXT AFTER 7] Push-to-talk STT and Arabic/English TTS (female Arabic voice; Groq whisper STT).
+9. [IN PROGRESS] Action tools and persistent planner integrated with navigation (registry + planner Layer 1+3 static PASS 2026-10-25; runtime pending).
+10. [PENDING] Mod scanner/catalog/adapters.
+11. [PENDING] Survival/domestic/combat systems.
+12. [PENDING] Autonomy and away missions.
+
+## CURRENT CHECKPOINT
+
+- Comprehensive repair v0.9.4 (2026-10-24): Static/Offline PASS; Runtime PENDING. TickBox + Arabic Talk + Sol Link repaired from exact source contracts. Full human translation of every authored bark remains localization coverage work, not falsely marked complete.
+Updated 2026-10-23:
+- Transport runtime PASS: 14:53-15:28, 2103 frames / 2103 acks, 0 resends. The earlier 'stuck at sequence 1' diagnosis was wrong (game was paused); one stale_session ack at resume, then clean.
+- follow via the mailbox runtime PASS (mind-1, mind-2 accepted in 3-4 s; user saw Sol come after being told to wait). stay, say and seen runtime tests still pending.
+- Sol UI installed: SolPanel v0.1.2 + SolSettings v0.2.2 (live mod and 01_WORK, hash-verified; backups in 03_BACKUPS). Groq + openai/gpt-oss-120b connected; Arabic reply proven.
+- Sol Mind runs hidden: sol_mind_service.pyw (HKCU Run 'SolMindService', pythonw) starts sol_mind.py --headless when Project Zomboid starts and stops it when the game closes. Logs: 05_TOOLS/sol_mind/sol_mind.log and sol_mind_service.log. The console REPL is kept for manual runs only.
+- Next: SolText Arabic renderer -> chat window via the bridge -> voice (STT/TTS) -> full LF UI replacement.
+Updated 2026-10-22:
+- Active architecture: Living Fellows 0.26.40 core (mod id Sol). The earlier custom-body checkpoint (build_locomotionsync_abifix_20261020_094304) is historical.
+- Runtime PASS so far: single Sol spawn, follow and zombie avoidance (user observation), native movement including fence vault, Grace Ashcroft voice bound, VSGirl dedupe boot and world load.
+- 2026-10-22 10:32: SCAIToolGateway restored after the go_to_cursor patch broke Lua. Lua 5.1 syntax gate (05_TOOLS/sol_lua_check.py): 398 files, 0 errors. The live game then booted and the AI runtime sent hello (11:53 session).
+- Mailbox Follow failure root cause: no brain process acked game frames. Fix: 05_TOOLS/sol_mind v0.1 (offline PASS).
+- Finding: SCChefWork depends on SCBaseLife; audit Living Fellows systems (cooking, farming, logistics, inventory) against WORLDCRAFT INTELLIGENCE before any module removal.
+- Next: one integrated in-game test (live sol_mind + follow), then per-save persistent memory and situation summary.
+- Do not launch a second Project Zomboid instance while another instance is active.
+- Update this master plan immediately after every important runtime result.
+Previous checkpoint (2026-10-20, custom body, historical):
+- Long-route native locomotion runtime-proven on build_locomotionsync_abifix_20261020_094304 (SHA256 941AB680D50462B15791CA94A08E19FEF4CFC9192F5E1589C441AA67B236CDDB); controlled 8-tile move reached the exact target; actor-local render opacity regression passed.
+
+### Actor-local opacity target regression - [COMPLETED]
+- Initial trial: `build_opacityfix_20261020_104416`, SHA256 `F743F54B7B099711CCC16ED04D5524C1B0553E9F5E4EB5E6C325699D78231D10`, PID 35128. It kept alpha=1.0 but LOS reset targetAlpha=0.0.
+- Bytecode inspection confirmed `IsoPlayer.updateLOS()` calls virtual `setTargetAlpha(int, float)` with 0 for the unseen local-player channel after the shell's generic update.
+- Minimal runtime-test-only fix: `SolIsoPlayerShell` overrides `setTargetAlpha(int, float)` and forces target 1.0 for that shell. LOS flags and global/player state are not modified.
+- Passing build: `build_opacitytargetfix_20261020_1055`.
+- SHA256: `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`.
+- Runtime PID: 34984; `PZ_COUNT=1`.
+- Spawn: class=`sol.bridge.SolIsoPlayerShell`, local=false, remote=false, inLocalSlots=false, isGlobalInstance=false, serverPlayerIndex=-1, addedToModelManager=true, activeModel=true, alpha0=1.0, targetAlpha0=1.0.
+- Visibility after LOS processing at spawn: gameClient=false, gameServer=false, isCanSee=false, isCouldSee=false, getCanSee=false, isVisibleToPlayer=false, alpha=1.0, targetAlpha=1.0.
+- Native movement: position changed from 10837.5,10144.5,0.0 to exactly 10829.5,10144.5,0.0 (8 tiles); no teleport or manual coordinate mutation.
+- After movement and later visibility sample: isCanSee=false, isCouldSee=true, getCanSee=false, isVisibleToPlayer=false; alpha=1.0 and targetAlpha=1.0.
+- Terminal state: moving=false, playerMoving=false, bPathfind=false, shouldBeMoving=false, usingPath=false, pathAttached=false. pathExecAttempts/pathExecSuccesses stayed 116/116 across later status samples.
+- No `NoSuchMethodError`, `LinkageError`, `COMMAND ERROR`, `MOVE_FAILED`, or SolBridge/SolIsoPlayerShell exception appeared in the inspected runtime log.
+- Result: opacity target and locomotion regression are runtime-proven for the tested stationary and 8-tile states. Longer visual/model stability, rotation, chunk-boundary, and vehicle behavior remain pending; this does not authorize production promotion.
+- [IN PROGRESS | Offline] Sol Brain v0.8.0: extensible Intent -> Goal Planner with emergency_rescue, solo rescue driving, combat control through MindCore, and home extraction. Install gates PASS; Runtime validation pending.
+
+## PRODUCTION GATE
+- [BLOCKED] Do not move current locomotion work into production Sol yet.
+- Production promotion requires stable long-route locomotion.
+- Production promotion also requires stable vehicle behavior.
+- Seated rendering requires user visual confirmation.
+
+### Proven non-local IsoPlayer opacity pattern - [COMPLETED]
+- External comparison: Living Fellows Build 42.21 uses `SCNativeCompanion extends IsoPlayer`, keeps the actor outside `IsoPlayer.players[]`, marks it NPC, and reserves non-local player index 3.
+- Its current native actor source restores `setAlphaAndTarget(1.0f)` after the generic character update.
+- Its release history explicitly describes the matching failure: companions became invisible while still present / visible on minimap because vanilla visibility fade never raised alpha again; forcing full render opacity each update fixed it.
+- This directly matches Sol runtime proof: READY begins at alpha/targetAlpha 1.0, local `IsoPlayer.updateLOS()` then evaluates Sol unseen and drives targetAlpha to 0.0.
+- Decision: test the same actor-local correction in Sol immediately AFTER `updateGenericCharacter()`, before path advancement. Do not modify grid-square LOS flags, local-player visibility arrays, global rendering, or `IsoPlayer.players[]`.
+- Scope: SolIsoPlayerShell only. Runtime test profile only until proven.
+- Required regression proof: shell remains non-local/outside local slots; alpha and targetAlpha remain 1.0; native 8-tile locomotion still reaches target; no NoSuchMethodError / COMMAND ERROR.
+- [SUPERSEDED BY RESEARCH] Previous constraint against per-frame `setAlphaAndTarget(1.0f)` is no longer valid. Runtime proof showed vanilla LOS drives Sol targetAlpha to 0, and Living Fellows documents the same non-local IsoPlayer failure and fixes it actor-locally by restoring full opacity after generic update.
+
+## Render Stability Validation — 2026-10-20
+### Visual validation — [COMPLETED]
+- Runtime under test: PID 34984, one Project Zomboid process observed; process start time 2026-10-20 11:00:54. Build `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`.
+- Captured the selected Project Zomboid window at 2560x1440 using Windows Computer Use. The in-world Sol body is visible on the grass near the fence, opaque, with a recognizable upright character silhouette. No missing body region or obvious mesh deformation is visible at this zoom. This is a visual sample at one camera distance; it does not establish animation transitions or close-up clothing detail.
+- Runtime command `render_stability_visual_20261020_1127|NATIVE_SHELL_STATUS|` returned at 11:27:34, frame 252027: `state=ready`, class `sol.bridge.SolIsoPlayerShell`, `playerIndex=1`, `serverPlayerIndex=-1`, `remote=false`, `local=false`, `inLocalSlots=false`, `isGlobalInstance=false`, square present, `addedToModelManager=true`, `activeModel=true`, model instance non-null, `alpha0=1.0`, `targetAlpha0=1.0`.
+- Commands/diagnostics: runtime file `08_RUNTIME_TEST/profile/Zomboid/Lua/SolRuntimeCommand.txt`; `NATIVE_SHELL_STATUS`; Windows process/window inspection. The first screenshot was occluded by Codex; the selected Project Zomboid window was brought forward and recaptured. No gameplay input was sent for this visual check.
+- Errors: none observed in this command. Regression after a code change: not applicable; no code change.
+- Unproven: sustained idle stability, animation cycling, rotation, and chunk/cell crossing. Visual status alone does not prove scheduler/update count.
+- Next step: collect native visibility/render flags, then start the timed stationary observation on the same PID/build.
+### Visual visibility flags — [COMPLETED]
+- Runtime command `render_stability_visflags_20261020_1128|NATIVE_SHELL_VIS_STATUS|` returned at 11:27:59, frame 256147: state=ready, gameClient=false, gameServer=false, localIndex=0, shellIndex=1; player position=10893.509,10136.495 and Sol position=10829.5,10144.5, distance=64.5074 tiles; local/shell squares are non-null; isCanSee=false, isCouldSee=false, getCanSee=false, isVisibleToPlayer=false; alpha=1.0, targetAlpha=1.0.
+- The captured scene shows the same upright red/orange body on the grass; the runtime visibility values explain the false LOS reports and did not coincide with a missing model. No errors were present around the command; regression after a code change: not applicable.
+- Next step: record baseline update/scheduler/model/world/square/path telemetry and hold position for 60–120 seconds.
+### Idle stability — [IN PROGRESS]
+- Baseline at 11:28:36, frame 262087, same runtime PID 34984/build/SHA as above. Command `render_idle_baseline_20261020_1128|NATIVE_SHELL_MOVE_STATUS|` reported state=ready, pos=10829.5,10144.5,0.0, moving=false, playerMoving=false, bPathfind=false, shouldBeMoving=false, usingPath=false, started=true, pathAttached=false, target=10829.5,10144.5,0.0, pathLength=0.0, updateCount=261800, pathExecAttempts=116, pathExecSuccesses=116, pathExecSkippedCurrentState=0.
+- Idle interval begins at this baseline; no movement command or position edit has been issued. Next diagnostic sample planned after 30 seconds, then a final sample after at least 60 seconds.
+
+## Mandatory pre-build research gate — [IN PROGRESS]
+- User directive recorded 2026-10-20: before every build, perform a detailed study of the Project Zomboid developer/community ecosystem and GitHub, using relevant sources available for the exact game/runtime version, to select the best-supported plan and avoid speculative/random builds.
+- Required before each build: identify the target Build 42.21/runtime/API surface; review primary developer documentation or announcements where available, maintained community/modder documentation and technical discussions, and relevant GitHub source/issues/releases; compare evidence against Sol's local bytecode/source/runtime observations; record URLs, dates/versions, directly relevant findings, contradictions, unresolved points, and the smallest evidence-backed implementation/build plan here before compiling.
+- Keep this gate separate from runtime-only validation. No build is planned for the current Render Stability Validation; therefore this instruction does not trigger a build or alter the running test artifact.
+- Next step for this gate: apply it in full before the next requested or otherwise necessary build and append that build-specific research record before compilation.
+- Mid-interval sample at 11:29:33, frame 271467, about 57 seconds after baseline: same pos/target 10829.5,10144.5,0.0; state=ready; moving/playerMoving/bPathfind/shouldBeMoving/usingPath=false; pathAttached=false; updateCount=271180 (+9,380); pathExecAttempts/pathExecSuccesses remain 116/116; skipped=0. No error or path restart seen. The required 60-second minimum has not yet elapsed at this sample; continue stationary observation to at least 60 seconds.
+- Final movement sample at 11:30:02, frame 276227, 86 seconds after baseline: same position/target, all movement/path ownership flags remain false/terminal, updateCount=275940 (+14,140), path execution remains 116/116 with 0 skipped. This satisfies the 60-second idle duration; final alpha/model verification is pending.
+- End-of-idle model sample at 11:30:23, frame 279687: bridge state=ready, failure empty, same non-local/off-slot shell and global instance unchanged; square non-null; `addedToModelManager=true`, `activeModel=true`, model instance non-null; alpha0=1.0 and targetAlpha0=1.0. This closes the requested ≥60-second stationary check for update progression, model registration, and alpha. Exact live IsoCell object-list and square moving-list membership were proven at spawn but are not exposed by current status command for a fresh end-of-interval membership query; continued updateCount progression is scheduler-activity evidence, while end-of-interval membership remains indirect.
+### Idle stability — [COMPLETED]
+- Observation window: 86 seconds, 11:28:36–11:30:02 on 2026-10-20, PID 34984, build `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`.
+- Update samples: 261800 at baseline/frame 262087; 271180 at frame 271467 (+9,380 after ~57s); 275940 at frame 276227 (+14,140 after 86s). Position and path target stayed 10829.5,10144.5,0.0; moving/playerMoving/bPathfind/shouldBeMoving/usingPath stayed false; pathAttached=false; path exec attempts/successes remained 116/116 and skipped=0.
+- Final native status at 11:30:23, frame 279687: state ready, failure empty, square non-null, same non-local/off-slot identity and singleton unchanged, `addedToModelManager=true`, `activeModel=true`, model instance non-null, alpha0=1.0, targetAlpha0=1.0. Final visibility sample at 11:30:41, frame 282627: local LOS flags and `isVisibleToPlayer` remain false; alpha=1.0 and targetAlpha=1.0.
+- Runtime proof covers steady update progression, stable stopped locomotion, model-manager state and opacity. Initial spawn directly proved worldMember=true and scheduled=true; there is no current command to re-query IsoCell/square collection membership after the interval, so that end-state membership is indirect, not a new direct assertion.
+- Errors: no COMMAND ERROR, bridge describe error, or shell failure in the sampled interval. Changes: none; regression after a fix: not applicable.
+- Next step: inspect the running game's available facing/rotation APIs and current Sol direction before deciding whether a rotation command can use an existing native method. Do not patch or build unless static/runtime inspection identifies a supported method and a minimal runtime-only route.
+### Rotation API investigation — [IN PROGRESS]
+- Runtime before rotation, 11:30:41/frame 282627: Sol remains at 10829.5,10144.5,0.0, state=ready, alpha/targetAlpha=1.0, movement flags false; no position change has been used.
+- Static inspection of the exact installed `projectzomboid.jar` with JDK 17 `javap` found public `IsoGameCharacter.setForwardDirection(float,float)`, `setForwardDirection(Vector2)`, `setDirectionAngle(float)`, and matching direction getters. `IsoDirections` exposes cardinal/diagonal enum values and rotation helpers. Official API documentation also documents the forward-direction setters: https://projectzomboid.com/modding/zombie/characters/IsoGameCharacter.html
+- Community/GitHub reference for the debug Lua console: https://github.com/mrStorrs/pz-cjs-non-debug-lua-console/blob/main/README.md (Build 42.19; guidance only, not installed or copied). A current Build 42.21 community guide reports the grave/backtick key for the vanilla debug Lua console: https://pzfans.com/taking_control_of_project_zomboid_b42_console_commands__debug_power/ . Local window currently visibly shows cheat/debug UI, but the exact runtime key binding and current Sol direction have not yet been queried.
+- Static proof: exact local installed game JAR API signatures as above. Runtime proof for facing API: not yet obtained; no rotation action issued. Existing harness has no `NATIVE_SHELL_ROTATE` command, confirmed by Lua command routing inspection.
+- Errors: none. Changes: none; no build/rebuild and no production files touched. Regression: not applicable.
+- Next step: use the existing debug console only to read Sol's direction/forward vector, then call the native setter once (without changing position) only if the runtime query confirms the target is addressable; immediately verify position, direction, animation/model, and opacity.
+- Rotation access check at 2026-10-20 ~11:31: exact runtime window remained Project Zomboid PID 34984. The local Build 42.21 key file `C:\Users\JAMAL\Zomboid\Lua\keysB42.ini` maps `ToggleLuaConsole=key:41`; the documented grave/backtick key was sent once to the game window, but the Lua console did not open. No Lua was entered and no state was changed. This key binding/runtime-console path is therefore unavailable in this session as observed; do not repeat blind key attempts.
+### Rotation test — [BLOCKED]
+- Static native API exists: exact installed Build 42.21 JAR exposes `setForwardDirection(float,float)` / `setDirectionAngle(float)`; current Sol coordinate and stopped state are known, but current forward vector/angle has no existing harness getter. Harness command routing has no native rotation command.
+- Runtime proof for a changed facing: none. The console toggle attempt failed to expose an input surface. No rotation, position change, patch, or build has been made.
+- Errors: no runtime exception observed; UI key action produced no console or logged result. Regression after a fix: not applicable.
+- Root cause of block: the active runtime lacks a callable facing diagnostic/action path in the existing harness, and the documented console toggle did not open. Making a command available requires either restoring a working console in this current session or modifying the test harness and reloading it; no reload/build/relaunch was attempted while PID 34984 remained active.
+- Next step: after current PID is no longer running and a fresh process-count check confirms zero, perform the mandatory source research gate for any required test-harness build/reload, add only a test-profile facing read/set command that calls the documented native direction API, launch a single runtime, and verify facing changed while x/y/z stayed constant. Do not run Move→Stop→Rotate or chunk-boundary tests until rotation passes.
+- Move→Stop→Rotate — [BLOCKED, NOT STARTED] because rotation did not pass. Chunk/cell-boundary — [BLOCKED, NOT STARTED] because all preceding tests have not passed. Vehicle phase remains unstarted.
+- Post-idle visual recapture at ~11:31: the Project Zomboid window still shows the upright red/orange Sol body on the grass with no obvious transparency or silhouette change. This is a second visual sample after the stationary interval; close-up clothing and animation cycling remain unverified.
+- Process/artifact recheck after the console-key attempt: Windows process query returned exactly one Java game process, PID 34984; command line points to `08_RUNTIME_TEST/SolNativePrototype/build_opacitytargetfix_20261020_1055/SolNativeBridge.jar` with `-debug`; its current SHA-256 remains `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`. No second runtime was launched. One intermediate hash command used an incorrect build-root path and returned file-not-found; inspecting the live argument file corrected the path, with no runtime or source impact.
+### Visual validation identity reassessment — [IN PROGRESS]
+- [SUPERSEDED] The earlier inference that the red/orange object in the wide screenshot definitively identifies Sol was too strong. Its silhouette may be a static roadside object; the screenshot does not link that object to the shell's known world coordinates or provide an actor marker. Therefore the image proves a visible red object in the scene, but does not yet prove Sol's body/clothing is the object. Keep the earlier capture and runtime data as historical evidence, but treat actual visual identity as unresolved.
+- A camera-scroll attempt centered on that object produced no clear zoom change; no character movement or position edit was issued. This did not improve visual identification.
+- Runtime still directly proves Sol's active, non-null ModelManager instance and alpha/targetAlpha=1.0; this does not alone prove rendered pixels or animation quality.
+- Errors: none. Code/build/runtime changes: none. Regression after a fix: not applicable.
+- Next step: obtain a direct actor-to-screen/render link (for example, a runtime screen-position/animation diagnostic or a successful camera close-up) before marking the visual requirement complete. Until then visual validation remains in progress.
+
+### Requested native approach to the main character — [IN PROGRESS]
+- 2026-10-20 11:38:11 runtime baseline, PID 34984, one Java Project Zomboid process, build `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`.
+- `NATIVE_SHELL_VIS_STATUS`: main character localPos=10893.563,10136.472; Sol shellPos=10829.5,10144.5; distance=64.5646 tiles; squares non-null; alpha=1.0/targetAlpha=1.0. Movement baseline at 11:38:29/frame 359647: Sol stopped, path detached, no active movement, updateCount=359360, prior path attempts/successes=116/116.
+- User request: have Sol walk near the main character with no teleport. Planned native path target is adjacent square `10892.5,10136.5,0.0`, based on the fresh local-player position. Command will use `NATIVE_SHELL_MOVE`; no x/y setter or teleport.
+- Next step: monitor path state and distance until arrival/timeout, then stop and verify final position, state, opacity and model.
+- At 11:38:46/frame 362387, runtime accepted native path request id=3 to `10892.5,10136.5,0.0` (`SolBridge.requestTestShellMove` → `pathToLocationF`). No failure/error line appeared with acceptance. This is pathfinding locomotion; arrival remains pending.
+- 2026-10-20 11:38:58/frame 364327 native move status: request id=3 is accepted and active (`shouldBeMoving=true`, `usingPath=true`, `pathAttached=true`, `progress=found`, `cancelled=false`, pathLength=67.72793); updateCount=364040 and pathExecAttempts/pathExecSuccesses=1493/1493. At this sample, position was still 10829.5,10144.5,0.0 and locomotion booleans (`moving`, `playerMoving`, `bPathfind`) were false, so no physical progress was yet proven. No teleport or manual coordinate change. Next: poll the same active request; do not issue another move while attached.
+- 2026-10-20 11:39:38/frame 370887 repeat poll: the same native request remains `pathAttached=true`, `usingPath=true`, `shouldBeMoving=true`, `progress=found`, pathLength=67.72793, but Sol remains at 10829.5,10144.5,0.0; `moving/playerMoving/bPathfind=false`. updateCount advanced to 370600, while pathExecAttempts/successes stayed 1493/1493 from the previous sample. Thus the request is attached but locomotion has stalled/not started; approach is not yet achieved. No errors, teleport, manual X/Y, second runtime, or production change. Next: inspect the existing test harness movement state/implementation and runtime logs before any retry.
+- 2026-10-20 ~11:40 static harness inspection: the active test command calls the existing `SolBridge.requestTestShellMove` → native `pathToLocationF`; shell status is produced by `describeTestShellMovement`. Source confirms no coordinate setter is involved. The shell's `solPathActive` owns movement/update dispatch; `advanceSolPath()` executes PathFindState only while that owner flag is true. Runtime shows path attached but counters frozen and `isPlayerMoving=false`, consistent with native ownership having stopped while stale path/behavior fields remain. This is a diagnostic inference from the checked-in test harness, not a proven engine root cause. No source edit/build. Safest next action: cancel the stale request with the existing native stop command, inspect cleared state, then try a short native locomotion segment toward the player and verify actual position change.
+- 2026-10-20 11:40:37/frame 378327: existing native `NATIVE_SHELL_STOP` accepted and cleared the stalled path (`pathAttached=false`, `usingPath=false`, `cancelled=true`); Sol stayed at 10829.5,10144.5,0.0; alpha/model not altered by this cancellation. No error. Next: use a short ~8-tile native path segment toward the player (a locomotion distance already proven in the current test build), then require a changed position before chaining any movement.
+- 2026-10-20 11:41:03/frame 382487: short segment 1 to 10837.5,10143.5,0.0 was accepted, `pathAttached=true`, `usingPath=true`, `pathLength=19.485281`, and path execution counters advanced from 1493 to 2791. However, after ~16s Sol remained at 10829.5,10144.5,0.0 with `moving/playerMoving/bPathfind=false`; no actual locomotion is proven on this east/northeast route. The known clean 8-tile proof was in the opposite direction (10837.5→10829.5 on y=10144.5), so it does not validate this route. No error, teleport, or manual coordinate change. Next: cancel this non-progressing route and test a shorter 4-tile native segment straight toward the main character.
+- 2026-10-20 11:41:38/frame 388207: bridge accepted the shorter native segment to 10833.5,10144.5,0.0 and returned a fresh status. `pathAttached=true`, `usingPath=true`, `shouldBeMoving=true`, `pathLength=4.0`; pathExecAttempts/successes advanced 2791→4165. Position remains 10829.5,10144.5,0.0 after ~16s; moving/playerMoving/bPathfind still false. This confirms command transport and status reporting respond, but not physical motion. No `MOVE_FAILED`; no teleport/manual X/Y. Next: allow one more bounded interval and sample; if still stationary, stop and report that the requested approach is blocked by the current native locomotion state.
+
+### Requested native walk toward the main character — [FAILED: locomotion not achieved; bridge command path responsive]
+- 2026-10-20 11:42 Europe/Berlin. Test-only runtime PID 34984, `PZ_COUNT=1`, build `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`. Production was not touched; no build/relaunch occurred.
+- Tested native `NATIVE_SHELL_MOVE` first to adjacent target 10892.5,10136.5,0.0 (path length 67.72793), then two short native segments (10837.5,10143.5,0.0; path length 19.485281, then 10833.5,10144.5,0.0; path length 4.0). No teleport and no manual X/Y mutation.
+- Actual result: bridge accepted/logged requests IDs 3, 4, 5 and returned successful status responses. Path status showed `state=ready`, `pathAttached=true`, `usingPath=true`, `progress=found`; path execution counters advanced (1493→2791→4165). However Sol's world position remained 10829.5,10144.5,0.0 throughout; `moving/playerMoving/bPathfind=false`. A later sample showed path execution counters stopped at 4165 despite the attached path. Requests were cancelled through native `NATIVE_SHELL_STOP`; terminal state `pathAttached=false`, `usingPath=false`, `cancelled=true`.
+- Final runtime proof 11:42:21/frame 395407: Sol square remains non-null; main player localPos=10893.119,10136.44; Sol shellPos=10829.5,10144.5; distance=64.1276 tiles. `alpha=1.0`, `targetAlpha=1.0`; local LOS flags remain false. PID query returned exactly one matching Java PZ runtime, PID 34984.
+- Runtime evidence: `08_RUNTIME_TEST/profile/Zomboid/Logs/2026-10-20_11-00_DebugLog.txt`, command IDs `approach_sol_segment1_20261020_1141`, `approach_sol_segment2_20261020_1141`, `approach_sol_segment2_status_final_20261020_1141`, `approach_sol_stop_final_20261020_1142`, `approach_sol_final_move_20261020_1142`, and `approach_sol_final_vis_20261020_1142`. Static inspection: `SolBridge.requestTestShellMove` dispatches `body.pathToLocationF`; `SolIsoPlayerShell.advanceSolPath` runs PathFindState while `solPathActive`. This confirms bridge wiring but does not prove why the engine did not move the actor.
+- Errors: no move request error, `MOVE_FAILED`, or bridge command failure during these attempts. Root cause: unresolved. Existing status shows pathfinding accepted/executed intermittently, but no world-coordinate delta. No change was made to code/config and no build was made; regression-after-fix: not applicable.
+- Next step: before any code/build change, complete the requested community/GitHub/official API research for the exact Build 42.21 path locomotion behavior; document sources and findings here. Then inspect runtime path/state/animation-speed inputs and identify a minimal test-profile diagnostic/fix, without production changes. Do not retry with teleport/manual coordinates.
+
+### Locomotion re-arm diagnosis — Runtime-first, no patch — [IN PROGRESS]
+- 2026-10-20 11:47:03/frame 441807 baseline before issuing any new movement. Test PID 34984 (exactly one matching java.exe), current test build `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`.
+- `NATIVE_SHELL_MOVE_STATUS`: state=ready; pos=10829.5,10144.5,0.0; prior target=10833.5,10144.5,0.0; moving=false; playerMoving=false (override reflects shell path ownership); bPathfind=false; shouldBeMoving=true; usingPath=false; started=true; pathAttached=false; progress=found; cancelled=true; pathLength=4.0; updateCount=441520; pathExecAttempts/successes/skipped=4165/4165/0. This is direct runtime evidence of a residual behavior `shouldBeMoving=true` while ownership, bPathfind, and path are inactive after cancellation. It supports (but does not prove) the stale PathFindBehavior2 hypothesis.
+- Process/build proof: PID 34984 only; JAR SHA matches declared hash. No launch/build/source/config change. Next: capture native shell model/alpha status and visibility, then identify an already-safe nearby empty square before testing a new native request. State-machine current state name and direct solPathActive/path-owner field are not exposed by existing status command; `playerMoving=false` is the current indirect owner signal. Do not infer those unavailable values.
+- 2026-10-20 11:47:14/frame 443747 `NATIVE_SHELL_STATUS`: shell remains ready; `SolIsoPlayerShell`, non-local, remote=false, outside local slots, not global singleton; square non-null; `addedToModelManager=true`, `activeModel=true`, model non-null; alpha0=1.0, targetAlpha0=1.0; failure empty. This confirms model/opacity are not visibly failing at the pre-move baseline. Next: capture current distance/visibility, then select only a square with prior runtime evidence of walkability.
+- 2026-10-20 11:47:33/frame 446847 `NATIVE_SHELL_VIS_STATUS`: localPos=10893.119,10136.44; Sol=10829.5,10144.5; distance=64.1276; both squares non-null; alpha=1.0/targetAlpha=1.0; all sampled LOS visibility flags false. This is the current pre-move state. Next: confirm an empty nearby target from runtime/map evidence before sending a test move.
+- Target selection for isolated runtime probe: 10831.5,10144.5,0.0 (2 tiles from current Sol position, same z/row; not the player square). It lies on the straight corridor between the historically runtime-proven native 8-tile endpoints 10837.5,10144.5,0 and 10829.5,10144.5,0. This is the best available walkability evidence without a new diagnostic build; current bridge does not expose occupancy/blocking fields, so present-day empty-square status is not directly confirmed. No code/build change.
+- 2026-10-20 11:48:26/frame 455467 first post-command sample (command was written ~0.5s after request, but runtime processed/logged the sample about 4.5s after request; record actual wall-time, not nominal label): request id=6 target=10831.5,10144.5,0.0; state=ready; position still 10829.5,10144.5,0.0; moving=true, playerMoving=true, bPathfind=true, shouldBeMoving=true, usingPath=true, pathAttached=true, progress=found, cancelled=false, pathLength=2.0; updateCount=455180; attempts/successes/skipped=4905/4905/0. Compared to baseline, native move request re-armed locomotion flags and attached the route. Translation had not yet occurred at this sample. This weakens a blanket "re-arm failed" diagnosis; capture the next sample to see whether translation follows. Model/opacity unchanged at baseline but not co-sampled yet.
+- 2026-10-20 11:48:47/frame 459047 second post-request sample: position still 10829.5,10144.5,0.0 after roughly 26.2s of runtime log time from request acceptance. moving/playerMoving/bPathfind returned false; shouldBeMoving=true, usingPath=true, pathAttached=true, cancelled=false, pathLength=2.0. updateCount=458760; attempts/successes=5542/5542, skipped=0. Thus the sequence reached path found -> attached -> locomotion flags true at first sample, then flags dropped while route remained attached and no coordinate translation occurred. shouldBeMoving stayed stale true. Runtime log timing differs from short host sleeps, so sample timing is taken from PZ log timestamps/frames. No move/command error. This narrows the failure to after path attachment, at/after native locomotion activation/update/reconciliation; not simply pathfinding or initial owner re-arm. Next: co-sample shell model/opacity and visibility, then inspect whether an existing runtime route exposes current state-machine/path-owner diagnostics before deciding on any diagnostic-only build.
+- 2026-10-20 11:49:21/frame 464547 late post-move sample: request id=6 is still attached and path found at pathLength=2.0, but position remains 10829.5,10144.5,0.0. moving/playerMoving/bPathfind=false; shouldBeMoving=true; attempts/successes remain 5542/5542, skipped=0 (frozen since 11:48:47). Independent shell-status sample at 11:49:14 confirms ModelManager active/model non-null and alpha/targetAlpha=1.0; visibility sample at 11:49:20 confirms square references non-null, same distance, alpha 1.0, target 1.0. Therefore opacity/model-manager loss is not observed during this failed movement. Cancel the stale native route now, then inspect runtime-relevant native update ordering and state-machine diagnostics.
+- 2026-10-20 11:49:33/frame 466547 native cancel result: STOP detached the stale 2-tile route and set cancelled=true; position stayed unchanged, movement/owner flags false, but shouldBeMoving remained true. This repeatedly observed stale behavior state is now a stronger candidate than target occupancy (the same symptom appeared on the current build's prior player-directed route and on this 2-tile same-corridor target). No production or source changes. Next: static/bytecode diagnosis of the exact state-machine and path behavior methods; no build until a causal explanation and research gate are documented.
+- 2026-10-20 11:50 static inspection attempt: javap invocation initially failed because PowerShell parsed the quoted executable path as a command token; no game/source/runtime state changed. Retry using PowerShell call operator with the discovered JDK 17 javap path.
+- 2026-10-20 11:50 local Build 42.21 bytecode inspection (`projectzomboid.jar`, JDK 17 javap): the existing diagnostic omits current StateMachine state name, direct `solPathActive`, animation variables/speeds, and PathFindBehavior2's per-call BehaviorResult. Static source confirms the shell calls `updateGenericCharacter()` then manually invokes `PathFindState.execute()` only when its current state is not PathFindState, then reconciles owner using bPathfind/cancelled. Native `PathFindState.execute()` calls `PathFindBehavior2.update()`; on `BehaviorResult.Failed` it sets path index=-1, bPathfind=false, bMoving=false; on Succeeded it also clears bPathfind. This matches the observed transition from bPathfind=true/moving=true to false while a path object and shouldBeMoving=true remain, but the exact returned BehaviorResult/branch is not exposed at runtime. `PathFindBehavior2.update(float)` has multiple Failed branches, including finder progress failure and later behavior-specific checks; the present evidence cannot identify which. Root cause is narrowed to behavior execution/terminal handling after attach, not yet proven to one branch. No code/build change.
+- Current native console/runtime route has no command to read StateMachine current name or behavior result. A diagnostic-only addition to existing test status is the minimal next proof if needed; do not alter movement logic before a concrete runtime cause. Before any build, perform and record the previously requested official/community/GitHub research gate and confirm PZ_COUNT=0 before relaunching.
+- Research completed after Runtime diagnosis (2026-10-20; no build performed):
+  - Official Build 42.21 API Javadoc for PathFindBehavior2 documents update(): BehaviorResult, shouldBeMoving, hasStartedMoving, isMovingUsingPathFind, isTurningToObstacle, pathNextIsSet/X/Y, path fields, and walkingOnTheSpot; these fields are the best next read-only diagnostic targets: https://projectzomboid.com/modding/zombie/pathfind/PathFindBehavior2.html
+  - Official PathFindState API page confirms the state class/entry points, though the behavioral branch proof came from the exact installed local jar bytecode: https://projectzomboid.com/modding/zombie/ai/states/PathFindState.html
+  - Community issue reports Build 42 IsoGameCharacter.doDeferredMovement > WalkTowardState but path2 != null after an interrupted action. It is a different multiplayer/action scenario and does not establish Sol's root cause; it only supports capturing state-machine name and path2 together: https://theindiestone.com/forums/topic/89149-build-42-mp-character-specific-interaction-lag-caused-by-stuck-walktowardstate-after-bugged-eatfood-action/
+  - GitHub comparison reviewed: KnoxSurvivors is an experimental player-based NPC project targeting 42.20–42.21; its README explicitly says 42.21 compatibility remains unverified and its code is not open for reuse. No code was copied or treated as verified guidance: https://github.com/exe-create/KnoxSurvivors
+- Research conclusion: do not alter locomotion yet. The minimal decisive next diagnostic needs (a) StateMachine current and previous state names, (b) direct shell path-owner flag, (c) PathFindBehavior2 goal, startedMoving, stopping, turningToObstacle, pathNext, walking-on-the-spot state if read-only and safe, plus animation movement variables/rates, and (d) per-update BehaviorResult captured without invoking behavior update twice or changing its logic. The current bridge cannot expose these values, so exact failure branch remains unresolved. Do not build until required source review is written into this plan and PZ_COUNT is zero before relaunch.
+
+### Locomotion diagnosis source review and instrumentation decision — 2026-10-20 [IN PROGRESS]
+- Research completed before any diagnostic build. Active runtime remains PID 34984 (`PZ_COUNT=1`); test artifact `build_opacitytargetfix_20261020_1055`, SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`. Installed game JAR SHA-256 is `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33` (Build 42.21.0). No runtime, source, build, or production changes were made during research.
+- [VANILLA PROOF] JDK 17 `javap -c -p` against the exact installed JAR shows `PathFindState.execute(IsoGameCharacter)` calls `getPathFindBehavior2().update()` exactly once and branches on its `BehaviorResult`. `Failed` sets path index to -1, `bPathfind=false`, `bMoving=false`; `Succeeded` either clears path state or takes a distinct no-chunk branch (`bPathfind=false`, `bMoving=true`). Thus Sol's observed `bPathfind=false`/movement false with a retained path object is consistent with the `Failed` branch but is not yet proof of the returned result or failure cause. Official API documents `update(): BehaviorResult`, `shouldBeMoving`, `hasStartedMoving`, `isMovingUsingPathFind`, `isTurningToObstacle`, target/path-length, and next-path fields: https://projectzomboid.com/modding/zombie/pathfind/PathFindBehavior2.html . `PathFindState.execute()` is documented here: https://projectzomboid.com/modding/zombie/ai/states/PathFindState.html .
+- [VANILLA PROOF] Sol's current `advanceSolPath()` invokes `PathFindState.execute()` only if the actor's current state is not that state; its current movement trace counts this as one execution. This existing invocation is the instrumentation boundary. Do not call `PathFindBehavior2.update()` separately; that would double-advance the route and invalidate the trace. Capture only read-only pre/post state around the existing `PathFindState.execute()` call. Since `execute()` returns void and consumes the enum internally, exact `BehaviorResult` is not available from that wrapper without invasive bytecode instrumentation or replacing vanilla state behavior; do not emulate vanilla in a diagnostic build.
+- [LIVING FELLOWS EVIDENCE] Local clean checkout `00_RESEARCH_COMMUNITY/living-fellows`, commit `7ade8805422121c77d1cea9c6d96f8315ca74be3` (upstream `https://github.com/thorelvin/living-fellows`), contains a Build 42.21 native actor extending IsoPlayer. It uses normal `pathToLocationF`, synchronizes player locomotion rates, advances the stock `PathFindState` once only when it is not already the current state, and reconciles path ownership from native state (SCNativeCompanion.java; source also available at https://github.com/thorelvin/living-fellows/blob/main/bridge/src/main/java/survivorcompanion/bridge/SCNativeCompanion.java ). Its Lua path telemetry separately reads `shouldBeMoving`, `hasStartedMoving`, `isMovingUsingPathFind`, `isTurningToObstacle`, and path target; it accepts the character's pathToLocationF entry point rather than calling behavior.update directly (SCNativeActions.lua). The Living Fellows implementation is evidence of a viable pattern, not proof of Sol's defect; Sol already shares key lifecycle elements and previously moved 8 tiles.
+- [COMMUNITY EVIDENCE] The public PZNS companion implementation updates follow routes on a tick cadence and comments that recalculation must account for animation timing; it uses facing and native path helper calls, but its NPC/provider architecture differs from Sol: https://github.com/Project-Zomboid-Community-Modding/PZNS/blob/main/PZNS_Framework/media/lua/client/07_npc_ai/PZNS_JobsCompanion.lua . The Indie Stone report about `WalkTowardState` with non-null `path2` after an interrupted action is a separate multiplayer/action case; it justifies observing state and path together, not assigning Sol's root cause: https://theindiestone.com/forums/topic/89149-build-42-mp-character-specific-interaction-lag-caused-by-stuck-walktowardstate-after-bugged-eatfood-action/ . GitHub/community material remains corroboration only; exact local bytecode and Sol runtime observations take priority.
+- [SOL RUNTIME PROOF] On the current 2-tile same-corridor probe, route acceptance/attachment and initial movement flags were observed, then `bPathfind`/`moving`/`playerMoving` became false while `shouldBeMoving=true`, path remained reported attached, coordinates did not change, and execution counters stopped advancing. A later native cancel detached it. ModelManager/model and alpha/targetAlpha remained healthy during this failed route. The old 8-tile success was on `build_locomotionsync_abifix_20261020_094304` (115/116 successful state executions, exact 8-tile delta); the failed run was on a later opacity build and traveled east toward +X whereas the earlier proof traveled west toward -X. This is not a controlled directional/build-matched comparison, so it cannot distinguish target/collision/direction, state, animation-rate, or behavior terminal causes.
+- [HYPOTHESIS] The first observed divergence is after request acceptance and route attachment. A behavior terminal result (potentially Failed) is currently the leading explanation because vanilla clears `bPathfind` and `bMoving` on Failed, but neither enum nor exact `update()` failure branch has been observed. `shouldBeMoving=true` is a behavior signal, not proof that coordinates will translate. Stale behavior/path ownership remains a hypothesis, not a conclusion.
+- Instrumentation selected from this research: extend the test-only status snapshot and capture a bounded before/after snapshot around the existing `PathFindState.execute()` invocation. Include current/previous state, shell path owner, `bPathfind`/`bMoving`, behavior started/moving/turning/path-next/target/cancel/path-length indicators, update/execution counters, movement animation rates, and position. Only include members confirmed safe in the installed API; use reflection only for read access where no public getter exists. Do not introduce a second behavior update or log every frame. `BehaviorResult` remains unavailable at this boundary; capture the first externally visible state transition and mark the enum unresolved rather than instrumenting engine bytecode or copying `PathFindState` logic.
+- Before launching any diagnostic artifact, re-count PZ processes and require zero; PID 34984 is currently active, so no additional runtime may launch now. No gameplay movement test has been repeated during this research pass. After a diagnostics build is required, run the requested T0–T5 trace with a short straight empty target and compare against the prior 8-tile proof; if trace does not identify a first divergence/root cause, leave cause unresolved and do not patch. Production remains untouched.
+- 2026-10-20 12:00 Europe/Berlin — test-source instrumentation added after recording the research report above. `SolIsoPlayerShell.advanceSolPath()` now records a bounded before/after snapshot around its existing single `PathFindState.execute()` call: attempts 1–10, every 30th attempt, and the first observable `bPathfind` true→false or coordinate change. Snapshot includes position, owner/movement flags, current/previous FSM names, path attachment, PFB start/move/turn/target/path-next/cancel/path-length telemetry, and WalkSpeed/RunSpeed/IdleSpeed variables. `SolBridge.describeTestShellMovement()` exposes the retained pair. No direct `PathFindBehavior2.update()` call was added; no locomotion behavior changed. Source backups created with suffix `before_pathdiagnostics_20261020.bak`. Current game PID 34984 still uses old build; diagnostic source is not yet built or loaded. Next: compile a separate test artifact and verify its contents/hash, then wait for PZ_COUNT=0 before any launch. The exact BehaviorResult remains unavailable by design.
+- 2026-10-20 12:00 Europe/Berlin — first compile attempt using only local compile stubs failed with 13 missing-symbol errors (`getX/getY/getZ/isMoving/getVariableBoolean`) because `compile-stubs/zombie/characters/IsoGameCharacter.java` intentionally has only minimal declarations. No JAR was created, no runtime changed. Corrective action: compile the same test-only sources against the installed Build 42.21 game JAR rather than expanding stubs; then record compiler result and artifact hash. Regression: not applicable; no game test yet.
+- 2026-10-20 12:00 Europe/Berlin — direct compile against installed `projectzomboid.jar` also failed: its class-file version is 69 (Java 25), while the available compiler is javac 17/class version 61. No runtime artifact was created or loaded. Next correction: add only the missing read-only inherited method signatures to the compile-only stub, compile the test bridge against stubs as designed, and package only `sol/` classes. Runtime target remains the exact same 42.21 installation; runtime proof is required before accepting the diagnostic build.
+- 2026-10-20 12:00 Europe/Berlin — compile-only `IsoGameCharacter` stub extended with six signatures needed by the diagnostic telemetry (`getX/getY/getZ/isMoving/getVariableBoolean/GetVariable`) after backing it up. Bodies return inert values; the stub is source-only and will not be packaged. This changes no game code or runtime behavior. Next: compile against the full compile-stub tree and ensure resulting JAR contains only `sol/` classes.
+- 2026-10-20 12:00 Europe/Berlin — diagnostic build completed with javac 17 against the compile-only stubs. Separate artifact: `08_RUNTIME_TEST/SolNativePrototype/build_pathdiagnostics_20261020_1200/SolNativeBridge.jar`; SHA-256 `70B1EC10D5AB55633A040F6FA72F37E31EF7533CC44512150BA38EB83750D0E5`. `jar --list` verified it contains only `META-INF` and `sol/bridge` classes; no game/API stub classes are packaged. `javap` on the artifact confirms the shell retains the reflective `PathFindState` execution path and diagnostic snapshot helpers; no direct PFB update invocation was introduced. Exact Build 42.21 API checks confirm public inherited methods `getX/Y/Z`, `isMoving`, `GetVariable`, and the movement API methods used by reflection. PID query still returns only 34984, whose `@args` file points to the old opacity build. Diagnostics have not been loaded in-game; runtime ABI and T0–T5 proof remain pending. No movement test/regression run on the new artifact; production untouched. Next exact step: after the user closes/saves the current game, confirm `PZ_COUNT=0`, then use a separate diagnostics args file to launch this artifact once and capture T0–T5.
+- 2026-10-20 12:04 Europe/Berlin — PID 12340 launched after `PZ_COUNT=0`; game log confirms `[SolNativeBridge] READY` at frame 0 and one runtime process. A read-only T0 status command was initially written to the wrong mailbox (`profile\Zomboid\SolRuntimeCommand.txt` instead of `profile\Zomboid\Lua\SolRuntimeCommand.txt`); log only consumed the prior command and no Sol movement/state mutation occurred. Correct the accidental parent mailbox back to its backed-up contents, send T0 to the actual Lua mailbox, and verify its matching command ID in the fresh log before relying on any result. Diagnostic bridge is live only if the current log reports the status command ID and new trace fields.
+- 2026-10-20 12:04:47, frame 4710 — correct mailbox consumed `diag_T0_20261020_1204|NATIVE_SHELL_MOVE_STATUS|`; runtime returned `state=idle body=nil`, no move/path status. This is a pre-spawn environment check, not the requested Sol T0 baseline. No movement was issued. Next: spawn exactly one test shell through existing native spawn command, then capture T0 status and verify new trace accessors.
+
+## 2026-10-20 12:05 Europe/Berlin — diagnostic shell spawn
+- Status: `[COMPLETED]` for shell creation; movement diagnosis remains `[IN PROGRESS]`.
+- Command: `diag_shell_spawn_20261020_1205|NATIVE_SHELL_SPAWN|` through the correct test mailbox `08_RUNTIME_TEST/profile/Zomboid/Lua/SolRuntimeCommand.txt`.
+- Runtime proof: DebugLog frame 7870 accepted the request; at 12:05:07.251 `[SolNativeShell] READY` reported `worldMember=true`, `scheduled=true`, `state=ready`, class `sol.bridge.SolIsoPlayerShell`, `playerIndex=1`, `serverPlayerIndex=-1`, `remote=false`, `local=false`, `inLocalSlots=false`, `isGlobalInstance=false`, non-null square, `addedToModelManager=true`, `activeModel=true`, non-null model instance, `alpha0=1.0`, `targetAlpha0=1.0`.
+- Process/artifact identity: only Project Zomboid Java PID 12340; diagnostic build `build_pathdiagnostics_20261020_1200`; bridge SHA-256 `70B1EC10D5AB55633A040F6A72F37E31EF7533CC44512150BA38EB83750D0E5`. Production untouched.
+- No movement or coordinate change was issued as part of spawn. The earlier `body=nil` status was pre-spawn and is not actor T0.
+- Errors: none during spawn. Regression after fix: not applicable; no behavior fix was made.
+- Next: capture `NATIVE_SHELL_MOVE_STATUS` and `NATIVE_SHELL_VIS_STATUS` at T0 from this spawned actor, check coordinates/target safety and trace counters, then choose at most one short native route only if a clear target is supported by runtime evidence.
+
+## 2026-10-20 12:06 Europe/Berlin — actor T0 baseline
+- Status: `[COMPLETED]` for T0 capture; safe route selection remains `[IN PROGRESS]`.
+- Command: `diag_T0_shell_20261020_1206|NATIVE_SHELL_MOVE_STATUS|`; consumed at 12:05:59.721, frame 16290.
+- Runtime proof: shell `state=ready`, position `10837.5,10144.5,0.0`; `moving=false`, `playerMoving=false`, `bPathfind=false`, `shouldBeMoving=true`, `usingPath=false`, `started=false`, `pathAttached=false`, `progress=notrunning`, `cancelled=true`, target `0,0,0`, pathLength `14844.6045`, `updateCount=8420`, `pathExecAttempts/pathExecSuccesses/skipped=0/0/0`, trace before/after `not_sampled`. Thus this newly spawned shell starts with a stale-looking PFB telemetry snapshot (cancelled, origin target, huge path length) while no path is attached and no PFS execute has yet run; this is baseline observation, not root-cause proof.
+- The bridge's auxiliary status file remains `body=false` with ownerPos `10835.468,10144.551,0.000`; its keys are from the older generic watcher and do not override the Java shell's direct status. PID 12340 remains the sole PZ process. Diagnostic build/hash unchanged: `build_pathdiagnostics_20261020_1200`, SHA-256 `70B1EC10D5AB55633A040F6FA72F37E31EF7533CC44512150BA38EB83750D0E5`.
+- No movement request or coordinate write occurred for T0. Errors: none. Production untouched. Regression after fix: not applicable.
+- Next: capture visibility/model state and inspect whether runtime offers a directly verifiable empty neighboring square before a short native movement request. No patch until divergence is observed.
+
+## 2026-10-20 12:06 Europe/Berlin — visibility T0 and route candidate
+- Status: `[COMPLETED]` for read-only visibility snapshot; route probe `[IN PROGRESS]`.
+- Command `diag_T0_vis_20261020_1206|NATIVE_SHELL_VIS_STATUS|` consumed at 12:06:11.289/frame 18170. Runtime: `state=ready`, gameClient=false, gameServer=false, localIndex=0, shellIndex=1; localPos `10835.468,10144.551`, shellPos `10837.5,10144.5`, distance `2.03286`; both squares non-null; `isCanSee/isCouldSee/getCanSee/isVisibleToPlayer=false`; alpha/targetAlpha `1.0/1.0`. Visibility flags false remain consistent with previous reports and do not establish absence of rendering.
+- Candidate short native destination: `10833.5,10144.5,0.0`, four tiles west along the same z/y corridor. This segment lies within the exact westward 8-tile corridor previously traversed successfully (`10837.5,10144.5` to `10829.5,10144.5`), and it moves away from the current local player's square. This is historical route evidence, not a fresh square-object scan; live occupancy remains a limitation. No teleports/manual position edits.
+- Runtime identity remains PID 12340, one process, build `build_pathdiagnostics_20261020_1200`, bridge SHA-256 `70B1EC10D5AB55633A040F6A72F37E31EF7533CC44512150BA38EB83750D0E5`. No errors or source changes. Production untouched.
+- Next: issue this single native route, sample immediately and after short intervals, and correlate the first path execution snapshots with actual coordinate change or flag transition. If the corridor behaves differently, stop native path and report evidence; no patch without cause.
+
+## 2026-10-20 12:06 Europe/Berlin — T1 movement command blocked by Lua bridge loss
+- Status: `[FAILED]` for this command attempt; locomotion diagnosis `[BLOCKED]` pending bridge recovery.
+- Sequence: read-only T0 visibility completed at 12:06:11; before the native route was dispatched, the game reinitialized the world in the same Java process (log frame reset to 0 at 12:06:48, same PID 12340 and same command line/artifact). The T1 command `diag_move_T1_20261020_1206|NATIVE_SHELL_MOVE|10833.5,10144.5,0` was consumed at 12:06:51/frame 18, but Lua immediately raised `SolBridge global missing` from `SolRuntimeTest.lua:243`. No request ID, path, or route was created; this is not a locomotion failure.
+- Runtime state after reinitialization: one PZ process, PID 12340; command channel READY; generic status `body=false`; the previous Java shell and bridge Lua global are not available in this Lua environment. The same process is still active. Diagnostic build/hash remain `build_pathdiagnostics_20261020_1200` / `70B1EC10D5AB55633A040F6A72F37E31EF7533CC44512150BA38EB83750D0E5`.
+- `[STATIC CAUSE — harness lifecycle]` `SolBootstrap.start()` is guarded by static `started`; its worker loop condition is `!ready`; once the first exposure succeeds, `ready=true` permanently ends retries. A later Lua environment reset removes `SolBridge` from that environment, but this bootstrap does not expose it again. `SolExposure.exposeNow()` already checks the active Lua environment and can expose the class when absent, but current Lua command routing has no recovery command. The runtime exception and source control flow jointly explain why this attempt could not reach movement.
+- Target route was not evaluated and its occupancy was not verified at runtime; do not treat the historical corridor rationale as a fresh live square scan. No position movement, teleport, or manual coordinate edit occurred. Production untouched; no patch/build made. No regression test applicable.
+- Recovery constraint: current process count is 1. Do not launch a second process. The shell T0 snapshots are retained as evidence; movement result remains unresolved. Exact next step: after the current runtime is closed and a fresh process check shows `PZ_COUNT=0`, either relaunch the same diagnostic artifact and issue native route immediately after bridge/shell readiness, or make a narrowly scoped test-only bridge re-exposure fix after recording the source research gate. Do not advance to rotation or later phases until native movement produces a valid trace.
+
+## 2026-10-20 12:14 Europe/Berlin — lifecycle research and T1 classification correction
+- Status: `[COMPLETED]` for source/artifact lifecycle research; bridge-only fix `[IN PROGRESS]`.
+- Historical classification correction: earlier entry labeled the T1 command attempt `[FAILED]`; that label describes the harness command error only. Locomotion T1 result is now `[INCONCLUSIVE]` because `SolBridge global missing after Lua environment reinitialization`; `requestTestShellMove` was never invoked and no movement request was created. Preserve the original record; this entry supersedes its locomotion interpretation.
+- Runtime baseline remains PID 12340, one Project Zomboid process (`PZ_COUNT=1`), diagnostic build `build_pathdiagnostics_20261020_1200`, JAR SHA-256 `70B1EC10D5AB55633A040F6A72F37E31EF7533CC44512150BA38EB83750D0E5`. No second runtime or production change.
+- Exact installed Build 42.21 artifact: `projectzomboid.jar` SHA-256 `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33`. Read-only bytecode from `zombie.Lua.LuaManager.init()` shows it wipes the old `env`, assigns `platform.newEnvironment()` to the static `LuaManager.env`, then constructs/replaces `LuaManager.Exposer` bound to that new environment. `GameWindow.init()` calls `LuaManager.init()`. Method bodies were inspected with JDK17 `javap` on extracted copies whose class-file major header alone was lowered for disassembly; original installed JAR was not modified. Research output is under `08_RUNTIME_TEST/SolNativePrototype/research_luamanager_20261020/`.
+- Current bridge code retains permanent static `ready/started`; worker exits its retry loop when `ready` first becomes true. It holds no Lua env reference. `SolExposure.exposeNow()` currently reads current `LuaManager.env` only on exposure attempts. Exposer bytecode confirms `exposeLikeJava` checks whether a class already has exposed metadata; the current exposure method is already guarded by `rawget(env,"SolBridge")`, but there is no subsequent call after success. `SolBridge` binding registers no Lua events/schedulers; the bootstrap uses one daemon worker and an atomic queued guard.
+- Community corroboration: the Project Zomboid modding guide describes the embedded Kahlua Java runtime and save-scoped Lua load/unload behavior; community-maintained vanilla Lua source uses explicit reload hooks for scripts. These are corroboration only; the installed 42.21 bytecode is the version-specific lifecycle evidence. Sources: https://github.com/drandarov-io/project-zomboid-mod-toolkit/blob/master/MODDING.md and https://github.com/Project-Zomboid-Community-Modding/ProjectZomboid-Vanilla-Lua . Official API documents public `LuaManager.env` and `LuaManager.init()`: https://projectzomboid.com/modding/zombie/Lua/LuaManager.html .
+- Proposed minimal fix: keep exactly one daemon monitor, queue a main-thread check every 500 ms (not per frame), compare `LuaManager.env` by reference using a weak reference to avoid retaining an entire retired Lua environment, and check only the current env's `SolBridge` global. Re-expose only on a new env or missing binding; restore a missing same-env global from a weakly held cached class table if still present. Track/log old/new identity hashes, global presence, exposure count, and restoration count. Do not touch shell, locomotion, movement values, player index, NPC, LOS, or opacity.
+- Build gate: build to a new isolated test directory first and verify only bridge class files are packaged (no compile stubs), then SHA-256. Only after successful build may PID 12340 be stopped; then require `PZ_COUNT=0` before one diagnostic relaunch. Runtime lifecycle proof and duplicate side-effect checks are pending.
+- Next: implement only `SolBootstrap.java` and `SolExposure.java`, compile/readback/hash; then stop current runtime after successful build and validate environment re-exposure in one process before resuming T1.
+
+## 2026-10-20 12:16 Europe/Berlin — bridge lifecycle-only implementation
+- Status: `[IN PROGRESS]`; source change complete, clean compile/artifact validation pending.
+- Modified only test bridge lifecycle files: `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolBootstrap.java` and `SolExposure.java`. No change to `SolBridge`, `SolIsoPlayerShell`, locomotion, `PathFindBehavior2`, movement rates, playerIndex, `setNpc`, LOS, opacity, or production.
+- Bootstrap now owns one daemon monitor guarded by the existing static `started` flag and one `AtomicBoolean` queued guard. It posts at most one MainThread check every 500 ms (no frame/event registration) and continues after first readiness so later Lua environments are detected. Queue failures clear the guard; thread interruption exits.
+- `SolExposure.exposeNow()` is synchronized and main-thread-only. It reads the current LuaManager env and the `SolBridge` global; records environment transitions by reference through `WeakReference` (does not retain retired envs); records identity hashes/counts; returns immediately if the binding already exists. A missing same-env global is restored from the cached exposed class table, and a new environment gets a single normal class exposure. The Exposer is not replaced and no hooks, schedulers, or shell instances are created by this binding logic.
+- Verification to perform: compile into a newly named empty build directory, inspect JAR entries to ensure no `compile-stubs` classes are packaged, inspect bytecode for the 500 ms monitor and idempotency guards, compute SHA-256. Only after build success may PID 12340 be stopped; then require zero Project Zomboid processes before the single test launch.
+- Runtime lifecycle behavior, re-exposure counts, command channel recovery, duplicate shell/scheduler/hook absence, and movement T1 remain pending. No regression claim yet.
+
+## 2026-10-20 12:18 Europe/Berlin — lifecycle build artifact validated
+- Status: `[COMPLETED]` for clean compilation and artifact inspection; runtime lifecycle validation `[IN PROGRESS]`.
+- Build: Java 17 `javac`, using the prior compile-only API stub class directory as classpath; no stubs were supplied as runtime output. Fresh output `08_RUNTIME_TEST/SolNativePrototype/build_bridgelifecycle_20261020_1218/`; JAR `SolNativeBridge.jar`; SHA-256 `8E9FA2DA1D27290DB73245C9A011CA8D328F47F98925D966F08CFB8F40A26F7B`.
+- JAR readback contains only `META-INF` and `sol/bridge/{SolBootstrap,SolBridge,SolExposure,SolIsoPlayerShell,SolLauncher}.class`; no `zombie/` API stubs or test stub classes are packaged. `javap` confirms 500 ms monitor interval, one `AtomicBoolean` queued guard, a single `started` guard, environment/global check before exposure, cached-global restore branch, and synchronized expose/status methods. No extra scheduler/event hook was introduced.
+- Active runtime at artifact validation: PID 12340, `PZ_COUNT=1`, still on the previous `build_pathdiagnostics_20261020_1200` artifact. It has not yet been stopped. Production remains untouched.
+- Errors: none in compilation/package inspection. Regression: pending runtime test. Exact next step: back up the test args file and point the next single-runtime launch at this new JAR; then stop only PID 12340, confirm `PZ_COUNT=0`, and launch one test runtime.
+
+## 2026-10-20 12:19 Europe/Berlin — previous diagnostic runtime closed after build
+- Status: `[COMPLETED]` for lifecycle gate preparation.
+- After the new JAR passed compile and entry/hash inspection, the test args file was backed up as `sol-shell-pathdiag.args.before_bridgelifecycle_20261020_1218.bak` and updated to reference only `build_bridgelifecycle_20261020_1218/SolNativeBridge.jar`. Args-file SHA-256: `397F36F55BDA16947E1D282735CE7154` (prefix captured; recompute full value if needed).
+- Pre-stop check: exactly one Project Zomboid Java process, PID 12340, command line used the prior test args file. `CloseMainWindow()` returned true; process exited without force termination. Post-stop check: `PZ_COUNT=0`.
+- No production process or production artifact was touched. Runtime state/save was closed normally. Next: recheck zero count and launch exactly one test process using the bridge lifecycle artifact.
+
+## 2026-10-20 12:17 Europe/Berlin — first environment exposure proof
+- Status: `[COMPLETED]` for first-env exposure; Lua reset/re-exposure pending.
+- Runtime PID 15348, `PZ_COUNT=1`, using test bridge JAR `build_bridgelifecycle_20261020_1218/SolNativeBridge.jar` (SHA-256 `8E9FA2DA1D27290DB73245C9A011CA8D328F47F98925D966F08CFB8F40A26F7B`).
+- Log at 12:16:52.241 records `[SolNativeBridge] ENVIRONMENT oldId=0 newId=1748864000 bridgePresent=false`; 5 ms later `EXPOSED envId=1748864000 previousEnvId=0 exposureCount=1 restoreCount=0 bridgePresent=true`; 2 ms later `READY envId=1748864000 exposures=1 restores=0 bridgePresent=true`.
+- Runtime command channel registered at 12:16:51.874/12:17:05.144; it is active in the first world Lua environment. No shell has been created and no locomotion command issued. No duplicate bootstrap, hooks, scheduler, or shell observed; this binding-only test has not registered any of those.
+- Next: issue a read-only native bridge ping before world transition, then observe whether the same JVM gets a new Lua environment and whether exposureCount increments exactly once while command channel recovers.
+
+## 2026-10-20 12:18 Europe/Berlin — pre-reset bridge ping
+- Status: `[COMPLETED]` for active binding check; lifecycle reset pending.
+- Command `lifecycle_ping_before_reset_20261020_1217|NATIVE_BRIDGE_PING|` consumed at 12:17:56.653/frame 6964. Runtime returned `ping=SOL_NATIVE_PONG status=envId=1748864000 exposures=1 restores=0 bridgePresent=true`; auxiliary status `tag=OK:NATIVE_BRIDGE_PING`, local player ownerPos `10835.500,10144.500,0.000`. PID 15348 remains the sole PZ runtime; lifecycle JAR SHA unchanged.
+- No movement request. Next: create exactly one shell fixture before the observed world transition so post-reset diagnostics can verify the existing Java-side shell is retained and reject duplicate spawn.
+
+## 2026-10-20 12:18 Europe/Berlin — single shell fixture before reset
+- Status: `[COMPLETED]` for initial fixture; post-reset retention and duplicate check pending.
+- Command `lifecycle_shell_spawn_once_20261020_1218|NATIVE_SHELL_SPAWN|` consumed at 12:18:21.604/frame 10924; request ID 1. At 12:18:21.666 the bridge logged one `[SolNativeShell] READY` with `worldMember=true`, `scheduled=true`, state ready, one `SolIsoPlayerShell`, off-local-slot (`inLocalSlots=false`), singleton unchanged (`isGlobalInstance=false`), current square non-null, ModelManager added/active, model instance non-null, alpha0/targetAlpha0 `1.0/1.0`.
+- This is the only shell created in PID 15348. No route or coordinate change. First Lua env remains `envId=1748864000`, exposureCount=1, restoreCount=0. Next: capture Java-side shell status, observe world/Lua transition, then ping/status without another spawn command.
+
+## 2026-10-20 12:18 Europe/Berlin — pre-transition shell status
+- Status: `[COMPLETED]` for pre-reset shell status; environment transition not observed yet.
+- Command `lifecycle_pre_reset_shell_status_20261020_1218|NATIVE_SHELL_STATUS|` consumed at 12:18:35.527/frame 13124. Java bridge returned `state=ready`, empty failure, `SolIsoPlayerShell`, playerIndex 1, serverPlayerIndex -1, remote/local false, `inLocalSlots=false`, `isGlobalInstance=false`, non-null current square, ModelManager added/active, model non-null, alpha0/targetAlpha0 `1.0/1.0`. This identifies the one existing shell before any environment reset.
+- Since initial exposure, runtime logs still show only env `1748864000`, `exposureCount=1`, `restoreCount=0`; no `ENVIRONMENT` transition or `GLOBAL_MISSING` was observed by the 12:18:55 sample. PID 15348 remains the only runtime; shell has not moved. Next: determine whether the current vanilla/test scenario will naturally reload the Lua environment; do not invoke a destructive LuaManager reset merely to manufacture a pass.
+
+## 2026-10-20 12:21:42 +02:00 — bridge lifecycle reset not reproduced in active world
+- Status: [BLOCKED] — lifecycle re-exposure cannot be declared passed; locomotion remains intentionally untested after this build.
+- Verified active test process: PID 15348, PZ_COUNT=1; test build build_bridgelifecycle_20261020_1218; bridge JAR SHA-256 8E9FA2DA1D27290DB73245C9A011CA8D328F47F98925D966F08CFB8F40A26F7B. Production was not touched.
+- Runtime evidence through the latest sample: only initial ENVIRONMENT oldId=0 newId=1748864000, EXPOSED envId=1748864000 exposureCount=1 restoreCount=0 bridgePresent=true, and READY at 12:16:52.241–12:16:52.248. Pre-transition ping at 12:17:56.653 returned SOL_NATIVE_PONG, envId=1748864000 exposures=1 restores=0 bridgePresent=true. One shell was created and described ready at 12:18:21–12:18:35; model and square were present, alpha and targetAlpha were 1.0, no route was issued.
+- At the subsequent log inspection, no new environment identity, missing-global event, re-exposure, or command-channel recovery after an environment reset was present. The world remained active in the same JVM. The visible Survival Guide overlay prevented reliably navigating the game back to the menu using UI input; no internal LuaManager reset was invoked. This is an uncompleted lifecycle stimulus, not evidence the patch failed.
+- The previous locomotion T1 stays [INCONCLUSIVE]: SolBridge global missing prevented requestTestShellMove from running, so no locomotion request or movement was created. Do not classify that as locomotion [FAILED].
+- No source/build changes were made in this continuation. No movement request, manual coordinate change, teleport, second runtime, duplicate shell, or production change occurred. The only shell remains the pre-transition fixture in PID 15348.
+- Errors: none attributable to the bridge in the current log. The main blocker is that a real same-JVM Lua environment reinitialization was not triggered; consequently re-exposure and post-reset command-channel behavior remain unproven.
+- Regression check: not applicable; no patch was made. Runtime remains at one process.
+- Next step: use the game’s normal UI to return to the main menu and reload the test world in the same PID 15348, then verify new env identity, exposureCount=2, bridgePresent=true, one functioning ping/status, and no duplicate shell/scheduler/hooks. If the process exits, re-check PZ_COUNT and keep it at zero before any fresh launch. Only after lifecycle evidence passes, resume locomotion T1 with a nearby empty tile.
+## 2026-10-20 — Reference Lab initialized and source pinned
+- Status: [REFERENCE RESEARCH IN PROGRESS].
+- Created separate SOL_REFERENCE_LAB directories: LivingFellows, Research, Reports, Evidence. Cloned canonical thorelvin/living-fellows; original repo checkout remains clean at branch living_fellows/0.26.51, commit f0eaa49802b5b1c767adf175a57a7ad41fa676c4 (2026-10-20T08:13:17+02:00), VERSION.txt 0.26.51, no tag at HEAD. README and CONTRIBUTING identify Build 42.21.0, single-player only. LICENSE is MIT.
+- Completed initial static overview at SOL_REFERENCE_LAB/Reports/00_LIVING_FELLOWS_OVERVIEW.md. No Sol source, 08_RUNTIME_TEST, production mod, or game state was changed. No Living Fellows runtime/build/test was started.
+- REA 6.5.0 binary_session was queried. It reported no active target; Ghidra is not configured, Hopper is unsupported on Windows, and managed analysis covers PE/CLI rather than Java. No suitable REA Java/Lua source graph is exposed. Capability record: SOL_REFERENCE_LAB/Evidence/REA_CAPABILITIES_20261020.md. This provider limitation is not source evidence; continue source and test tracing and keep runtime claims unresolved.
+- Static architecture pointers: ARCHITECTURE.md:5-15 (runtime/scheduler), :11-38 (action/actor ownership), :271-289 (native provider hard gate); README.md:383-419 (declared test/build approach); tests/core/faction_lifecycle_harness.lua:72-122 (lifecycle idempotence assertions).
+- Next: complete report 01 (native actor lifecycle) from exact Java source and focused test harnesses, then append its result here and in the Engineering Log. No recommendation is implemented automatically.
+
+## 2026-10-20 — Reference Stage A: Native Actor Lifecycle
+- Status: [REFERENCE RESEARCH COMPLETED].
+- Source-traced pinned SCNativeCompanion extends IsoPlayer, constructor non-local setup (setNpc(true), reserved index 3, server index -1), brief contextual local callback scopes, asynchronous spawn handoff, world/square vs cell scheduler vs ModelManager membership, custom per-frame update isolation, same-actor recovery, and transactional removal/retry.
+- Key source pointers: bridge/src/main/java/survivorcompanion/bridge/SCNativeCompanion.java:52,261-282,395+,615-640,2328-2459; SCBridge.java:1760-1790,1823-1907,1986-2168,2192-2342,2515-2540,2624-2648; SCActor.lua:357-384,1192-1238,1612+; tests/core/test_core_static.py:521-541; SCNativeCleanupTransactionTest.java:232-420.
+- Evidence is static source and inspected test assertions only; tests and runtime probes were not run. No Sol code, build, runtime, 08_RUNTIME_TEST, or production files were changed.
+- Key finding: the native actor requires distinct, verified ownership for square/world, cell update list, renderer, and bridge registry. addToWorld alone is not enough to keep a stationary manually created actor simulated.
+- Next: Stage B, trace Java exposure/bootstrap and Lua reset/main-menu lifecycle, including duplicate-hook prevention and exact test coverage. Keep the Sol bridge files read-only.
+
+## 2026-10-20 — Reference Stage B: Bridge Exposure and Reset Lifecycle
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE ONLY].
+- Report: `SOL_REFERENCE_LAB/Reports/02_BRIDGE_LIFECYCLE.md`.
+- Living Fellows uses a generation-owned Java bootstrap, main-thread LuaManager exposure, initialization sentinels, a stable 250 ms environment/exposer identity gate, and a separate transactional Lua lifecycle-hook owner. Its healthy bootstrap re-polls the active environment every second after first exposure; bootstrap exceptions cancel the run and require another caller to restart it.
+- Findings remain unverified at runtime: no second LuaManager initialization/reset was triggered; no game or tests were run. Strong candidate references persist until a subsequent poll observes replacement. Java does not expose per-environment/exposure counters.
+- Source/test drift: current SCBridge/SCNamespace identify protocol `42.21-isocompanion-24`, while standalone `SCBridgeLoadTest` asserts 42.20.4 metadata and IsoSurvivor return type. The inspected Test-Source selection omits that class; this is stale test source, not an executed failure or runtime defect.
+- Read-only Sol comparison: Sol prototype already has a 500 ms poll, weak environment reference, transition logs and successful exposure count; no Sol files were changed. Use the report's same-process reset evidence checklist before considering any patch.
+- Boundaries: no Sol edits/builds, no test/runtime actions, no `08_RUNTIME_TEST` or production changes. REA limitations remain as previously recorded; this report is a static source trace.
+- Next: Stage C scheduler/tick ownership analysis, with test assertions and runtime proof clearly separated.
+
+## 2026-10-20 — Reference Stage C: Scheduler and Tick Ownership
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE ONLY].
+- Report: `SOL_REFERENCE_LAB/Reports/03_SCHEDULER_OWNERSHIP.md`.
+- Separated native `IsoCell.getObjectList()` actor updates, the Lua central `Events.OnTick` hook, and the Lua AI/task scheduler. Native spawn/recovery requires actor scheduler membership; Lua repairs missing membership on roster changes and a 250 ms integrity pulse.
+- Inspected static assertions cover scheduler repair, idempotence, tick-hook lifecycle, and removal, but no runtime test or Project Zomboid engine probe ran. They do not prove live idle, cell-transition, or animation behavior.
+- Sol impact: future runtime evidence must correlate native update-counter deltas with cell object-list/square membership, ModelManager, and Lua tick state. No Sol implementation or test action occurred.
+- Next: Stage D perception/visibility plus render ownership and opacity interactions.
+
+## 2026-10-20 — Reference Stage D: Perception and Render Visibility
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE ONLY].
+- Report: `SOL_REFERENCE_LAB/Reports/04_PERCEPTION_RENDER_VISIBILITY.md`.
+- The reference validates world/square setup, native scheduling, ModelManager registration, and active model as distinct conditions. It forces alpha/target alpha to 1 after generic update; its ordinary detached companion does not run `updateLOS()` as a render fix (only a specialized coop leader does).
+- Clothing restoration is protected from a first-frame factory outfit by undressing before world registration and a bounded construction hide. Static assertions cover renderer ownership/cleanup, not complete visual appearance or animation quality.
+- No screenshot or runtime proof was gathered; no Sol code, build, runtime, `08_RUNTIME_TEST`, or production file was changed.
+- Next: Stage E transactional lifecycle/recovery/cleanup.
+
+## 2026-10-20 — Reference Stage E: Lifecycle, Recovery, and Cleanup
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE ONLY].
+- Report: `SOL_REFERENCE_LAB/Reports/05_LIFECYCLE_RECOVERY_CLEANUP.md`.
+- Living Fellows uses main-thread asynchronous spawn ownership, Lua request/cleanup ledgers, same-actor recovery with rollback of exact coordinates and square references, and cleanup that commits only after world/model/scheduler/speech/square memberships are absent.
+- Inspected transaction fixtures inject partial failures and assert retained ownership/retry. No fixture was run; headless renderer limitations mean these do not prove visible pixels.
+- Sol relevance: diagnose path/re-arm state before another route and observe ownership membership before recovery; do not treat route discovery or registry membership as locomotion proof.
+- No Sol implementation, build, runtime, production, or 08_RUNTIME_TEST modifications. Next: Stage F native pathfinding and locomotion.
+
+## 2026-10-20 — Reference Stage D: Perception System (numbering correction)
+- Status: [REFERENCE RESEARCH COMPLETED — SOURCE TRACE]. Required report: `SOL_REFERENCE_LAB/Reports/04_PERCEPTION_SYSTEM.md`.
+- The earlier entries labeled stages D/E covered render visibility and lifecycle cleanup as supporting investigations; they did not fulfill the brief's Stage D perception and Stage E threat reports. Their history is retained and their numbering/phase mapping is superseded by this clarification.
+- Studied `SCPerceptionScan`, `SCSenses`, `SCThreatSet` entry points, native bulk/cursor discovery, grid fallback, same-floor native `CanSee`, uncertain sound records, last-known memory, snapshot completeness/freshness, and bounded scan/reflex budgets. Added the requested world-to-sensors-to-cache-to-threat pipeline diagram.
+- Static harness assertions reviewed but not executed. No runtime test/build or Sol source changes.
+- Next: Stage E threat/reflex separation; lifecycle cleanup remains documented in the supporting report `05_LIFECYCLE_RECOVERY_CLEANUP.md`.
+
+## 2026-10-20 — Reference Stage E: Threat and Reflex
+- Status: [REFERENCE RESEARCH COMPLETED — SOURCE TRACE]. Required report: `SOL_REFERENCE_LAB/Reports/05_THREAT_AND_REFLEX.md`.
+- The earlier Stage E entry documents lifecycle/cleanup as a supplemental foundation study; this entry establishes the task's requested Stage E mapping without deleting that result.
+- Separated raw observations, derived threat records, bounded threat-set selection, combat target ranking, and deterministic action preemption. The reference has no external strategic model. Sol recommendation: native validity and urgent safety remain local; strategic choices go to the model with age/completeness/confidence metadata.
+- Scoring values are source evidence; balance/runtime behavior remains unverified. Harness definitions inspected, not run. No Sol changes.
+- Next: Stage F Action Supervisor.
+
+## 2026-10-20 — Reference Stage F: Action Supervisor
+- Status: [REFERENCE RESEARCH COMPLETED — SOURCE TRACE]. Required report: `SOL_REFERENCE_LAB/Reports/06_ACTION_SUPERVISOR.md`.
+- One active owner token per actor, priority-based arbitration, explicit action phases, resource reservations, exactly-once commit/receipt, a single queued urgent intent, native/timed action observation, verified cancellation and rollback retry/quarantine.
+- Static harness definitions assert preemption, rollback, no stacked commits and urgent queue behavior; not run in this study.
+- Compared against current Sol test prototype only: no shared gameplay-level action supervisor found in the inspected source; it has bridge/path diagnostics and native cancellation. Recommendation is to keep one actor owner and let locomotion be an owned phase, deferred until runtime movement stabilizes.
+- No Sol code/build/runtime/production change. Next: Stage G locomotion pipeline.
+
+## 2026-10-20 — Reference Stage G: Locomotion Pipeline
+- Status: [REFERENCE RESEARCH COMPLETED — SOURCE TRACE]. Required report: `SOL_REFERENCE_LAB/Reports/07_LOCOMOTION_PIPELINE.md`.
+- Reconstructed `Decision → Navigation.request → Actor.setMovement → NativeActions/provider → SCNativeCompanion path API → PathFindBehavior2/PathFindState → generic update/animation rates → measured position/square progress → arrival stop/reconcile`. Native route and Lua bounded topology search have distinct jobs.
+- Repeated route re-arm is implemented at Java terminal reconciliation and Lua arrival/lease/transient cleanup; no process restart is needed by design. However, no focused live three-route runtime result was collected, and no tests were run in this study.
+- Read-only comparison found Sol already has native path execution and terminal reconciliation diagnostics but a smaller navigation/policy layer. New Sol movement diagnosis remains snapshot-first; no Sol changes.
+- Next: Stage H stuck detection and recovery ladder.
+
+## 2026-10-20 — Reference Stage H: Stuck Detection and Recovery
+- Status: [REFERENCE RESEARCH COMPLETED — SOURCE TRACE]. Required report: `SOL_REFERENCE_LAB/Reports/08_STUCK_RECOVERY.md`.
+- Source-traced position-based progress (not square-only), distinct native/PFB progress, actor-state and path-search timeout gates, blocker evidence, first stop/replan, later safe lateral clearance, traversal retry cap, follow-specific unseen/loaded fallback and keyed terminal hold/retry.
+- Defaults include 2.2 s generic stuck, 0.9 s common obstacle, three recovery attempts, 8 s terminal retry, 3 repeated same-position native failures, and bounded route-search leases. Inspected gameplay tests only; none executed.
+- Sol implication: collect update/PFB/state/animation/position evidence in order before classifying stuck. No patch/runtime/build changes. Next: Stage I environment interactions.
+
+## 2026-10-20 — Reference Stage I: World Interaction
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE TRACE]. Report: `SOL_REFERENCE_LAB/Reports/09_WORLD_INTERACTION.md`.
+- Pinned source: `thorelvin/living-fellows`, branch `living_fellows/0.26.51`, commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c`, VERSION `0.26.51`, PZ 42.21.0.
+- Traced edge-affordance discovery and passability, door reservations and verified toggles, window urgency/glass/climb actions, native fence/wall calls, stairs/slope topology and native 3D confirmation, furniture posture release before navigation, and bounded object/container interaction target selection.
+- Static source proof only. Test harnesses and runtime were not executed; no animation, collision, or all-map compatibility claim. REA was attempted but yielded no Java/Lua graph; this phase is explicitly source trace, not REA evidence.
+- No Sol implementation, test, build, runtime, `08_RUNTIME_TEST`, or production mod changed.
+- Next exact step: Stage J vehicle architecture review, reference only; do not implement on Sol.
+
+## 2026-10-20 — Reference Stage J: Vehicle Architecture
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE TRACE]. Report: `SOL_REFERENCE_LAB/Reports/10_VEHICLE_ARCHITECTURE.md`.
+- Pinned source: `thorelvin/living-fellows`, branch `living_fellows/0.26.51`, commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c`, VERSION `0.26.51`, PZ 42.21.0.
+- Traced seat manifest/reservations and supervisor transactions, native entry/seat postconditions/rollback, passenger and driver ownership, per-frame native driver controls, stationary verified exit and seat-switch fallback, and conversion of native seat saves to virtual stored passengers across unload/reload.
+- Static source and live-harness documentation only. No tests, game runtime, visual checks or save/reload were executed; no Sol implementation/build/runtime, `08_RUNTIME_TEST`, or production mod changed. REA did not supply a Java/Lua call graph.
+- Next exact step: Stage K persistence/offscreen source study, then Knox public documentation only for conceptual comparison; do not reuse Knox code.
+
+## 2026-10-20 — Reference Stage K: Persistence and Offscreen Representation
+- Status: [REFERENCE RESEARCH COMPLETED — STATIC SOURCE TRACE + PUBLIC-DOC CONCEPT REVIEW]. Report: `SOL_REFERENCE_LAB/Reports/11_PERSISTENCE_AND_OFFSCREEN.md`.
+- Living Fellows proof: stable identity-backed record capture and ownership-verified save; autonomous faction residents alone use the reviewed capture/remove/hibernated-snapshot/queued-wake path with safety observation, 120-tile hibernate and 100-tile wake defaults. Recruited companions and vehicle-stored passengers use distinct paths.
+- Knox review was public documentation only. Findings are marked `CONCEPT ONLY — NO CODE REUSE`; README states 42.21 compatibility is still under test, autonomous driving is experimental, and the repo is not open source.
+- No Knox source/runtime inspection, Living Fellows test/runtime execution, or Sol code/build/runtime/`08_RUNTIME_TEST`/production changes.
+- Next exact step: Stage L testing strategy and harness proposal; inspect tests/docs only and do not run them.
+
+## 2026-10-20 — Reference Stage L: Testing Strategy
+- Status: [REFERENCE RESEARCH COMPLETED — TEST-SOURCE REVIEW ONLY]. Report: `SOL_REFERENCE_LAB/Reports/12_TESTING_STRATEGY.md`.
+- Mapped static/source gates, Java bridge harnesses, Kahlua/Lua harnesses, pinned-runtime compilation, real-engine isolated-save harnesses, visual capture and manual playtest layers. Full project gate includes bridge rebuild and packaging; it was not run.
+- Reviewed runner wiring and representative harness families for lifecycle, bridge, perception, movement/recovery, actions, vehicles, persistence and UI. Assertions and scripts were inspected only; none executed.
+- Findings: active test runtime is pinned to PZ 42.21.0, while gameplay README says 42.20.4; an excluded SCBridgeLoadTest contains stale 42.20.4/IsoSurvivor assertions. These are documentation/source drift observations, not test failures. Visual complete-body proof and a general long idle soak are not established by static checks.
+- Added a Sol harness proposal only. No Sol test/build/runtime, `08_RUNTIME_TEST`, or production changes.
+- Next exact step: Stage 13 BanditsPerformanceOverride, performance references only; confirm license and use primary public repository material. Then consolidate Stage 14 Knox concepts and main reports.
+
+## 2026-10-20 — Reference Stage 13: Bandits Performance Lessons
+- Status: [REFERENCE RESEARCH COMPLETED — PUBLIC REPOSITORY/DOCUMENT REVIEW]. Report: `SOL_REFERENCE_LAB/Reports/13_BANDITS_PERFORMANCE_LESSONS.md`.
+- Reviewed primary GitHub repository material for performance only: reported O(N²) cell-wide entity scans inside per-update combat, repeated flee pass, cache upkeep, secondary room/visual work, population as the N multiplier, and existing timing hooks. These are repository-authored findings against Bandits 42.18 source; performance figures are author-reported, not independently measured here.
+- Sol implications are proposals only: instrument first, share bounded candidate snapshots, gate expensive visibility checks, spread non-urgent work, and control population/range only if Sol profiling identifies the same costs.
+- Inspected pages did not establish an immutable `main` commit SHA or explicit reuse license. No code reuse. No benchmark, Bandits runtime, Sol runtime, build, test, or source change.
+- REA MCP session was verified connected (`rea-agents` 6.5.0, skill 42); no target was open and no REA analysis was run for this ordinary source/document study.
+- REA continuation checkpoint: see `SOL_REFERENCE_LAB/Reports/REA_CONTINUATION_CHECKPOINT_20261020.md`. The exposed provider set has no Java/Lua source-tree graph operation; existing Living Fellows results remain static source traces, not REA Evidence. No incompatible target was opened.
+- Next exact step: Stage 14 Knox public concepts only; then complete gap matrix and V2 proposal, with all claims labeled by evidence level.
+
+## 2026-10-20 — Reference Stage 14: Knox Public Concepts
+- Status: [REFERENCE RESEARCH COMPLETED — PUBLIC DOCUMENTATION ONLY]. Report: `SOL_REFERENCE_LAB/Reports/14_KNOX_CONCEPTS.md`.
+- Reviewed public README/design documentation only. Stable identity separated from a live actor, cheaper offscreen event/ledger representation, and reconciliation at activation are concepts, not verified implementation claims.
+- Knox README's release/version and experimental driving statements remain author claims. The documentation states the repository is not open source; no Knox source code was inspected or reused.
+- REA MCP connected state was checked, but no binary was open and no native/source target was analyzed. No Sol source/build/test/runtime or production change.
+- Next exact step: consolidate Living Fellows reports 00–14 into a labeled gap matrix and a proposal-only Sol V2 architecture document.
+
+## 2026-10-20 — Reference Lab Consolidation and REA MCP Status
+- Status: [COMPLETED — DOCUMENTATION/PROPOSAL ONLY]. Reports: `SOL_REFERENCE_LIVING_FELLOWS_ANALYSIS.md` and `SOL_V2_ARCHITECTURE_PROPOSAL.md`.
+- Added a subsystem gap matrix for Living Fellows reports 00–14, differentiated static source, public documentation, historical Sol runtime, inference, and unresolved evidence. Prioritized three foundation items with evidence, sequencing, and risk; current movement diagnosis remains the immediate blocker.
+- Added a V2 proposal for native actor adapter, lifecycle controller, scheduler, perception snapshot/event bus, threat/reflex vs AI, action supervisor, navigation/interactions, persistence, diagnostics, cadence bands, and testing evidence gates. This is not an implementation plan authorization.
+- Rechecked and recorded REA MCP identity/state: server/package `rea-agents` 6.5.0, skill version 42; closed session/no open target; Ghidra unavailable because `GHIDRA_INSTALL_DIR` is not set. Earlier attempt yielded no Java/Lua graph; Living Fellows remains a source-trace result, not REA proof.
+- No Sol source, `08_RUNTIME_TEST`, production, build, game process, or runtime was changed. No tests or benchmarks were run.
+- Next exact step: when the test environment is available, capture movement snapshots at T0/immediate/0.5–1 s/2 s against an empty 2–4 tile target; continue only from the observed failing stage. Keep all V2 implementation deferred.
+
+## 2026-10-20 — Reference evidence completion addendum
+- Status: [REFERENCE RESEARCH COMPLETED — PINNED SOURCE TRACE]; [REA SOURCE-TREE ANALYSIS BLOCKED].
+- Completed the exact scheduler/tick-budget report: `SOL_REFERENCE_LAB/Reports/03_SCHEDULER_AND_TICK_BUDGET.md`.
+- Added a row-by-row, commit-pinned claim/source/symbol/SHA evidence index to `SOL_REFERENCE_LAB/Reports/04_PERCEPTION_SYSTEM.md`; test rows are explicitly not executed. Added the requested Living Fellows/Sol comparison table to `SOL_REFERENCE_LAB/Reports/02_BRIDGE_LIFECYCLE.md`.
+- Architecture map and initial Sol gap list: `SOL_REFERENCE_LAB/Research/ARCHITECTURE_MAP.md` and `SOL_REFERENCE_LAB/Research/INITIAL_SOL_GAPS.md`.
+- REA `open_binary` on the repository directory returned `target_unavailable` / `directory_requires_file`; it did not open a session or produce a graph. Keep all source findings labeled as static source trace, not REA evidence. Exact record: `SOL_REFERENCE_LAB/Evidence/REA_OPEN_DIRECTORY_ERROR_20261020.md`.
+- Reference clone target remains branch `living_fellows/0.26.51`, SHA `f0eaa49802b5b1c767adf175a57a7ad41fa676c4`, VERSION `0.26.51`, PZ `42.21.0`; no clone edits intended. No Sol source, test, build, runtime, save, or production changes were made; no tests were run.
+- Next exact step: use a supported REA Java/Lua source-project provider if available without reinstalling REA; until then retain source-trace status. Sol V2 coding remains deferred pending the separate movement diagnosis.
+
+## 2026-10-20 13:40 Europe/Berlin — Vanilla B42 contract and reference synthesis
+- Status: [REFERENCE RESEARCH COMPLETED — PINNED LIVING FELLOWS SOURCE + INSTALLED VANILLA BYTECODE]; [PROPOSED — NOT IMPLEMENTED].
+- Added `SOL_REFERENCE_LAB/Reports/15_VANILLA_B42_LOCOMOTION_CONTRACT.md`, based on the installed PZ jar SHA-256 `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33`, Steam BuildID `25485521`; class-entry hashes and commands are in `SOL_REFERENCE_LAB/Evidence/VANILLA_B42_BYTECODE_MANIFEST_20261020.md`.
+- Direct bytecode confirms location request re-arm/reset in `PathFindBehavior2`, per-execute calls through `PathFindState`, state-machine update inside `IsoGameCharacter.updateInternal`, and that `moveToPoint` requires positive animation deferred movement before staging `moveUnmodded` requested delta. This makes the reported path-found/no-position-delta gap diagnosable, but does not identify the current Sol runtime cause.
+- `setForwardDirection(float,float)` is a native orientation API and rejects a zero vector. No idle turn/render result was tested.
+- `LuaManager.init()` replaces the Kahlua environment and exposer after clearing/wiping prior state, then registers hooks and calls `exposeAll()`. Added the Vanilla column to `Reports/02_BRIDGE_LIFECYCLE.md`.
+- Created the complete requested Living Fellows/Vanilla/Sol matrix at `SOL_REFERENCE_LAB/Research/SOL_REFERENCE_GAP_MATRIX.md`, the consolidated study at `SOL_REFERENCE_LAB/SOL_REFERENCE_LIVING_FELLOWS_ANALYSIS.md`, and future-only top-three proposal at `SOL_REFERENCE_LAB/SOL_V2_ARCHITECTURE_PROPOSAL.md`.
+- REA accepted the JAR as an archive and identified it; `binary_overview` was unsupported by the configured provider and generated no code graph. The earlier source-directory rejection is retained as a target-format/tooling boundary, not a Living Fellows research failure or Sol defect. No REA reinstall/reconfiguration.
+- No Sol code, runtime, build, test, save, or production change. No vehicle phase. Existing historical movement and opacity evidence was not refreshed.
+- Next exact step: present/review these references; if the movement runtime diagnosis is separately resumed, capture the same-PID request/state/deferred-movement/requested-delta/position-delta sequence before any patch. Keep implementation deferred.
+
+### Addendum — future foundation proposal acceptance criteria
+- Expanded `SOL_REFERENCE_LAB/SOL_V2_ARCHITECTURE_PROPOSAL.md` so each of the three future-only foundations lists candidate files, required regression scenarios, dependencies, benefit and risk. Candidate names are explicitly not implementation authorization; paths not established by the inspected Sol prototype remain TBD after a later source-tree review.
+- Filled the missing `IsoMovingObject.class` entry hash in `SOL_REFERENCE_LAB/Evidence/VANILLA_B42_BYTECODE_MANIFEST_20261020.md`: length 62,965; SHA-256 `7E6E84FE9D3CB264E8D8E682D91E0ABE919D481B7349D17B997E8A78F2293A5F`.
+- No code, test, build, runtime or production change. Next: stop after presenting this research package.
+## 2026-10-20 — Foundation Phase 1: Runtime Supervisor & Actor Lifecycle Owner
+- Status: [FOUNDATION PHASE 1 — BLUEPRINT IN PROGRESS].
+- Scope is design-only for the native test shell. No Sol Java/Lua implementation, build, test, or game runtime is authorized in this phase.
+- Pinned evidence reviewed: Living Fellows `f0eaa49802b5b1c767adf175a57a7ad41fa676c4` / VERSION `0.26.51` / PZ `42.21.0`; installed Vanilla PZ JAR SHA-256 `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33` / Steam BuildID `25485521`; current Sol source under `08_RUNTIME_TEST/SolNativePrototype` and separate Lua zombie implementation under `Sol/`.
+- Completed design output: `SOL_RUNTIME_SUPERVISOR_BLUEPRINT.md`. The current two actor tracks are treated as separate implementations until an explicit integration/selection decision is made.
+- Next exact step: review the blueprint and authorize or defer implementation. No Java/Lua change begins from this blueprint alone.
+- Status history: `[FOUNDATION PHASE 1 — BLUEPRINT IN PROGRESS]` was opened before drafting. At 2026-10-20 13:54 Europe/Berlin, updated to `[FOUNDATION PHASE 1 — BLUEPRINT COMPLETED — NOT IMPLEMENTED]` after auditing all 15 required blueprint sections. The in-progress entry is retained as history.
+- Completed artifact: `SOL_RUNTIME_SUPERVISOR_BLUEPRINT.md`. Key finding: Sol has two separate actor tracks (Lua `IsoZombie` and native test `SolIsoPlayerShell`) with no inspected integration/selection owner; native teardown currently swallows stage errors and clears its actor reference without verifying cleanup.
+- Static evidence only: Living Fellows pinned commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c4`; Vanilla PZ JAR SHA-256 `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33`, BuildID `25485521`; Sol source read-only. REA source graph was unavailable for this Java/Lua tree.
+- No Java/Lua edits, build, tests, game launch, runtime probe, save change, production modification, or reference clone modification. Regression cases in the blueprint are planned and not executed.
+- Next exact step: review the blueprint and obtain implementation approval before changing the four candidate test-prototype Java files. Preserve `Sol.lua`, locomotion, production, and runtime profiles outside that approval.
+
+
+## 2026-10-20 14:23 Europe/Berlin — Foundation Phase 1 Implementation Authorization
+- Status: [FOUNDATION PHASE 1 — IMPLEMENTATION IN PROGRESS]. The user reviewed and approved `SOL_RUNTIME_SUPERVISOR_BLUEPRINT.md`; implementation/build/controlled runtime validation is authorized only under `08_RUNTIME_TEST`.
+- Goal: implement the native-only `SolRuntimeSupervisor`, build a new isolated artifact, run T0–T8 in order where safe, fix only evidence-backed failures, retest the same failed gate, and continuously record results.
+- Candidate source files: new `SolRuntimeSupervisor.java`; narrow lifecycle integration in `SolBridge.java`, `SolBootstrap.java`, and `SolExposure.java`. Do not edit `SolIsoPlayerShell.java` unless a minimal lifecycle integration requires it and the reason is documented before editing. `Sol.lua` remains untouched unless a backend-selection gate cannot be implemented safely otherwise; preserve the legacy implementation.
+- Selected backend: `NATIVE_SHELL`; invariant is one native shell and zero parallel legacy Sol zombies. Detect and report any legacy body; do not remove it blindly. Locomotion redesign, Perception, Vehicles, AI, combat, persistence, voice, and full Action Supervisor are out of scope. Production remains protected.
+- Validation sequence: T0 static build proof; T1 initial lifecycle; T2 duplicate spawn; T3 long idle; T4 controlled teardown; T5 same-runtime respawn; T6 Lua environment reset; T7 world exit/re-entry; T8 short movement smoke regression. Stop on a failed gate until its cause is documented and addressed.
+- Every failure must be captured and appended to this plan and `SOL_ENGINEERING_LOG.md` before any repair. Every new build uses a fresh directory and SHA-256. Before every game launch check PZ Java process count; launch only if zero, and confirm one process after launch.
+- Production, real saves, packaging/release, and reference-clone edits are prohibited. Blueprint evidence is design/static evidence only; runtime claims require the specified test proof.
+- Pre-edit backups created at `08_RUNTIME_TEST/backups/foundation_phase1_20261020_1423/` for `SOL_MASTER_PLAN.md`, `SOL_ENGINEERING_LOG.md`, `SolBridge.java`, `SolBootstrap.java`, and `SolExposure.java`. `SolRuntimeSupervisor.java` did not exist and will be created new.
+- Next exact step: inspect the test prototype build wiring and baseline files, then implement only the approved lifecycle scope.
+
+### 2026-10-20 14:31 Europe/Berlin — Test-profile legacy actor gate identified
+- Status: [FOUNDATION PHASE 1 — IMPLEMENTATION IN PROGRESS]. Read-only inspection found `08_RUNTIME_TEST/profile/Zomboid/mods/default.txt` selects mod ID `Sol`; the actual test-profile source is `08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/media/lua/client/Sol.lua`, whose `Sol.spawn()` calls `addZombiesInOutfit`, marks `solEmbodied`, and whose `onGameStart()` installs its own zombie `OnTick` handler. Its test-only `onGameStartWithTest()` also calls `Sol.spawn()`.
+- This is the legacy `IsoZombie` creation site for the active test profile. It is distinct from `Sol/` production source. It will be isolated by a fail-closed backend check in this test-profile copy only; no existing legacy actor will be deleted. Production compatibility is preserved because `Sol/media/lua/client/Sol.lua` remains unchanged and the gate is not copied to production.
+- Detection plan: native supervisor will count current-cell zombies whose mod-data `solEmbodied` marker is true before native spawn and report the count. If any exists, native spawn is blocked and cleanup is not attempted automatically.
+- Pre-edit backup for the test-only Lua file is required before patch: `08_RUNTIME_TEST/backups/foundation_phase1_20261020_1423/Sol.lua.test-profile.pre-edit`.
+- No source edit or runtime change has occurred at this discovery point.
+
+### 2026-10-20 14:39 Europe/Berlin — Initial lifecycle implementation staged for T0
+- Status: [FOUNDATION PHASE 1 — IMPLEMENTATION IN PROGRESS]. Changed only isolated test files: new `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolRuntimeSupervisor.java`; delegated native spawn/removal/state reads in `SolBridge.java`; connected the existing 500 ms bootstrap callback in `SolBootstrap.java`; made `SolExposure.java` validate protocol, backend and required Lua-callable API members; added a fail-closed backend gate in `08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/media/lua/client/Sol.lua`.
+- Legacy zombie source identified: test profile's `SolTest/media/lua/client/Sol.lua` calls `addZombiesInOutfit`, marks `solEmbodied`, and its test callback can call `Sol.spawn()`. The test copy now requires explicit `LEGACY_ZOMBIE` selection; absent/incompatible bridge and `NATIVE_SHELL` suppress both its spawn entry and its zombie OnTick hook. Existing legacy actors are not removed.
+- `SolRuntimeSupervisor` now tracks JVM/world/Lua/actor generations; owns one pending spawn and shell identity; fences old completion IDs; validates world/cell/square/model/player isolation; records staged cleanup failures and retries; reports actor, legacy-zombie, scheduler/model, bridge and update-owner diagnostics. It never calls `IsoPlayer.update()` or the shell's `update()` and adds no native actor tick hook.
+- Pre-edit backups: `08_RUNTIME_TEST/backups/foundation_phase1_20261020_1423/` (docs and three existing Java files), plus `Sol.lua.test-profile.pre-edit` (test Lua profile copy). `SolRuntimeSupervisor.java` was new. Production source `Sol/media/lua/client/Sol.lua` was not changed.
+- Current PZ process check: `PZ_COUNT=0`; no launch yet. T0 compile/package inspection begins next in a fresh build directory and will use the installed game JAR/API classpath, never compile stubs as output.
+
+### 2026-10-20 14:45 Europe/Berlin — T0 attempt 1 FAILED: compiler bytecode-version mismatch
+- Status: [T0 — FAILED — TOOLCHAIN VERSION MISMATCH]. Command used JDK 17 `javac` against installed `projectzomboid.jar` and all installed game jars, with no compile stubs on the classpath.
+- Observed error: multiple game classes (including `zombie.MainThread`, `IsoPlayer`, `IsoCell`, `ModelManager`) report `class file has wrong version 69.0, should be 61.0`. JDK 17 accepts class version 61; installed PZ artifacts require Java 25/class version 69.
+- Root cause: selected compiler is older than the target game bytecode. The many dependent “cannot find symbol” diagnostics are cascading from that single class-version rejection; they are not yet classified as source defects.
+- Artifact: no JAR was produced; this build directory is rejected and must never be launched: `08_RUNTIME_TEST/SolNativePrototype/build_foundation_phase1_20261020_1445/`.
+- No Sol source correction was made in response. Next: locate a local Java 25 JDK compiler; if present, build into a distinct new directory. Otherwise stop T0 as blocked rather than using stubs or modifying the game JAR.
+
+### 2026-10-20 14:34 Europe/Berlin — T0 toolchain recovery
+- Status: [IN PROGRESS — TOOLCHAIN RECOVERY]. Targeted local inspection found only `javac 21.0.10` under Android Studio and no Java 25 JDK compiler. The PZ runtime itself is OpenJDK 25.0.1 but has no `jdk.compiler` module. `winget install --id Microsoft.OpenJDK.25 --exact --scope user` returned “No applicable installer found”; it made no install.
+- Staged the official Microsoft OpenJDK 25 Windows x64 ZIP under `08_RUNTIME_TEST/toolchain/` (outside production); downloaded archive SHA-256: `3C9099E60A82E17F5847052F50F3B107BFC1D32B366E1A20ADBD1D0F303760E7`; Microsoft’s `.sha256sum.txt` matched exactly and `javac` reports `25.0.4.1`; extracted directory `microsoft-jdk-25/jdk-25.0.4.1+1`.
+- No Sol source, production file, game runtime, or save was changed/launched by toolchain recovery. Exact next step: inspect prototype sources/build wiring and rerun T0 in a fresh build directory.
+
+### 2026-10-20 14:35 Europe/Berlin — T0 attempt 2: compilation passed, packaging failed
+- Status: [T0 — IN PROGRESS — PACKAGING BLOCKED]. Compiled all six prototype Java sources against the installed `projectzomboid.jar` and `ZombieBuddy.jar` using checksum-verified Microsoft `javac 25.0.4.1`; the compiler exited successfully with no diagnostics. No compile stubs were present on classpath or packaged.
+- Packaging via JDK `jar --create` failed with `java.nio.file.AccessDeniedException` while moving its temporary archive from the sandbox Temp directory to `build_foundation_phase1_20261020_1435/SolNativeBridge.jar`. The JAR was not created; this is a packaging/environment issue, not a source compile failure. Compiled classes and `javac.log` remain only in this rejected build folder.
+- No launch/runtime test occurred. Next: create a distinct fresh build directory, rerun compilation, direct Java temp files inside that directory, package, then inspect JAR contents and SHA-256 before any launch.
+
+### 2026-10-20 14:36 Europe/Berlin — T0 PASSED: fresh Java 25 build artifact
+- Status: [COMPLETED — T0 STATIC BUILD]. Repeated the full compile in fresh `08_RUNTIME_TEST/SolNativePrototype/build_foundation_phase1_20261020_1436/`; used checksum-verified `javac 25.0.4.1`, actual installed PZ 42.21 `projectzomboid.jar` plus `ZombieBuddy.jar`, and all six prototype Java source files. Compiler exited 0 without diagnostics. No compile stubs were on the classpath.
+- Packaged only compiled `sol/` classes. `jar --list` contains `META-INF` and `sol/bridge` only; no `zombie/` stub/API classes. SHA-256 `14E0CA66781530A54192BC7A9523D06241FD6CA621251781FD01519BFD7B4B69`.
+- The packaging retry succeeded after directing JDK temporary files to the build-local `tmp/` directory. The failed attempt folders remain preserved and are not launch candidates.
+- Static build success is not runtime proof. No game launch occurred in T0. Next: inspect isolated launch arguments/profile integration, check `PZ_COUNT` immediately before launch, then begin T1 only if no PZ runtime is already running.
+
+### 2026-10-20 14:37 Europe/Berlin — T1 launch preparation
+- Status: [IN PROGRESS — T1 READY TO LAUNCH]. Created a new, test-only args file beside the T0 artifact: `build_foundation_phase1_20261020_1436/sol-foundation-phase1-runtime.args`. It preserves the existing test profile/home and Java flags, points only to the new build JAR, and selects `-Dsol.backend=NATIVE_SHELL`. Args SHA-256: `59B64EBF46FAFCAAC388DE75BDD8689665E8EE3EFE20805C07C93822FAEE299C`.
+- Immediate process check: `PZ_COUNT=0`; prior PID `34984` is absent. CIM query is denied in this sandbox, but direct `Get-Process java,javaw` filtered to the installed Project Zomboid JRE path also returned zero. No launch has occurred yet.
+- Exact next step: make the same path-filtered process check in the launch command itself; if count is nonzero, abort. Otherwise launch this one test profile visibly and inspect the game plus runtime logs for T1. Production remains untouched.
+
+### 2026-10-20 14:38 Europe/Berlin — T1 runtime launch started
+- Status: [IN PROGRESS — T1 INITIAL LIFECYCLE]. The launch-command gate observed `PRELAUNCH_PZ_COUNT=0`, then started one visible Java 25 game process with the isolated args file. After 4 seconds: `PZ_COUNT=1`, PID `36160`, path `...ProjectZomboid\jre64\bin\javaw.exe`.
+- Build: `build_foundation_phase1_20261020_1436`, JAR SHA-256 `14E0CA66781530A54192BC7A9523D06241FD6CA621251781FD01519BFD7B4B69`. Test profile is `08_RUNTIME_TEST/profile`; backend property is `NATIVE_SHELL`.
+- Launch/process proof only; main menu/world load and actor lifecycle are not yet confirmed. Next: observe the unique Project Zomboid window and runtime log, then capture T1 state without issuing any duplicate spawn request.
+
+### 2026-10-20 14:39 Europe/Berlin — T1 attempt 1 FAILED: runtime exited before a window/world
+- Status: [FAILED — T1 INITIAL LIFECYCLE NOT REACHED]. The one launched process (PID `36160`) exited; subsequent direct process check found no Java/Javaw process and `sky.list_windows()` returned no Project Zomboid window. No second launch was attempted.
+- `console.txt` and `Logs/2026-10-20_14-35_DebugLog.txt` show Build 42.21.0 / Java runtime 25.0.1 / `sol.backend=NATIVE_SHELL`, graphics initialization succeeded, then log output ends after FMOD `FMOD_System_Set3DSettings() result: No errors.` No `SolRuntimeSupervisor`/bridge diagnostics, Java stack trace, world load, or T1 actor state was captured. The debug log also contains WMI query warnings `80070005: Access is denied`; these are not yet linked to termination.
+- Root cause: unresolved. Runtime launch is not considered successful, and T1–T8 remain untested. Exact next step: read-only inspect launcher/bootstrap startup sequence and Windows/game crash evidence, determine why process exits before main UI, document that diagnosis before any source/config fix or retry. No source repair made.
+
+### 2026-10-20 14:40 Europe/Berlin — T1 termination evidence remains insufficient
+- Status: [BLOCKED — ROOT CAUSE UNRESOLVED]. Read-only review of `SolLauncher.main`, changed `SolBootstrap.start`, and `SolRuntimeSupervisor.bootstrapStarted` found no confirmed termination cause. The current debug/console logs stop at FMOD initialization and contain no Java/bridge exception. Windows Application log queries are unavailable (`Get-WinEvent`: unauthorized; `Get-EventLog`: PowerShell remoting feature unavailable). No current crash dump or `hs_err_pid36160.log` exists; `hs_err_pid*` files found in the game directory are historical (latest dated 2026-10-19).
+- The WMI `80070005` warnings are observed but not proven causal. Do not classify them as root cause. No source or runtime configuration fix has been made.
+- Exact next diagnostic: after an immediate `PZ_COUNT` gate confirms zero, perform one diagnostic launch of the same test args through `java.exe` with stdout/stderr redirected to fresh files in the build folder; inspect the captured termination detail before considering any repair. This changes no Sol source or production file.
+
+### 2026-10-20 14:41 Europe/Berlin — T1 diagnostic launch remains active
+- Status: [IN PROGRESS — T1 STARTUP OBSERVATION]. The launch-command gate again observed `PRELAUNCH_PZ_COUNT=0`. Same args/JAR/profile were launched once via the game `java.exe` with stdout/stderr redirected (no source/config change); PID `20524`, after 8 seconds `PZ_COUNT=1`, process not exited.
+- Captured stdout reaches SLF4J provider initialization after PZ graphics and FMOD setup; stderr is empty at this snapshot. Runtime `console.txt` was updated. `sky.list_apps()` still returns no Project Zomboid window, so this launch is not yet visual proof and no world/action test is being issued.
+- Exact next step: wait briefly and inspect whether startup continues or a window appears; then capture current logs/process. Do not launch another process while PID `20524` is alive.
+
+### 2026-10-20 14:42 Europe/Berlin — T1 diagnostic attempt 2 FAILED before main UI
+- Status: [FAILED — T1 INITIAL LIFECYCLE NOT REACHED]. After the observation interval PID `20524` was no longer present; no Java process remained. Captured stdout ends at `SLF4J(I): Attempting to load provider "zombie.core.logger.Slf4jBridge"`; redirected stderr is empty. The newest DebugLog again ends immediately after FMOD setup; no Project Zomboid window appeared in `sky.list_apps()`.
+- This narrows the failure point to immediately after logger provider initialization, but does not prove a Java exception, native crash, or graceful exit. Process exit code was not retained by the prior command. Root cause remains unresolved; no code or args changes made.
+- Exact next step: if a diagnostic retry is needed, capture the process exit code from launch through completion and use a visible window style while retaining stdout/stderr files; enforce `PZ_COUNT=0` in the command. Do not issue game actions until a window/world is confirmed.
+
+### 2026-10-20 14:40 Europe/Berlin — T1 diagnostic attempt 3: missing font-page assets observed
+- Status: [BLOCKED — STARTUP ROOT CAUSE STILL UNCONFIRMED]. The visible-style diagnostic invocation's stdout progressed through `Loading Mods`, `loading Sol`, Lua precompile and core class loads; stderr recorded `AngelCodeFont failed to load page 0 texture` for `media/mainfont_0.png`, `media/mainfont2_0.png`, and `media/fonts/zomboidDialogue.bmfc_0.png` (each reported twice). Direct read-only `Test-Path`/file-open checks against these exact installed-game paths returned `Exists=False`, `Readable=False`.
+- The process was gone at the follow-up check (`PZ_COUNT=0`); no game window/world appeared. The command wait exceeded the tool's synchronous window, so its spawned PID/exit code was not emitted; stdout/stderr were retained at `build_foundation_phase1_20261020_1436/t1-diagnostic-visible-{stdout,stderr}.log`. Windows event-log restrictions remain. Missing font assets are a concrete startup defect candidate but not yet proven to terminate this game build.
+- No source, args, production files, game installation, or save was modified. Next: inspect the installed media directory/layout read-only to verify whether these files are truly absent or reside under a different path; only then decide whether T1 is blocked by the test installation/runtime environment. No fourth launch until that evidence is reviewed.
+
+### 2026-10-20 14:40 Europe/Berlin — T1 startup-path findings
+- Status: [IN PROGRESS — STARTUP DIAGNOSIS]. The retained stdout proves the new launcher and supervisor execute: `[SolRuntimeSupervisor] STATE COLD->BOOTSTRAPPING ...` then `BOOTSTRAPPING->WAITING_LUA ...`; PZ proceeds through FMOD, native graphics, `Loading Mods`, and logs `loading Sol`. Thus startup did not terminate inside `SolBootstrap.start()` and the earlier log cutoff was incomplete evidence, not a confirmed bootstrap crash.
+- Installed `media/mainfont.fnt` explicitly references `mainfont_0.png`, and `media/mainfont2.fnt` references its corresponding page; those loose PNG paths are absent. `media/texturepacks/UI.pack` exists, so these missing loose files may be supplied by a pack; their warnings alone are not a proven root cause. The dialogue font PNG path is also absent loose. No source/assets/game installation were changed.
+- The third diagnostic process later disappeared (`PZ_COUNT=0`); its PID/exit code were not emitted because the tool call yielded while waiting. Last captured stdout shows `Loading Mods` and core class loading. Root cause remains unresolved. Exact next step: inspect the installed `UI.pack` read-only for these font-page entries and inspect remaining console/debug tail to decide whether asset lookup is expected; then stop or request a new controlled diagnostic only if necessary. No further launch now.
+
+### 2026-10-20 14:40 Europe/Berlin — UI.pack inspection probe failed safely
+- Status: [BLOCKED — ASSET FORMAT NOT YET IDENTIFIED]. Read-only `7z l media/texturepacks/UI.pack` returned `Cannot open the file as archive`; the PZ `.pack` is not a ZIP/7z archive. The same probe's PowerShell header helper used unsupported `Get-Content -Encoding Byte` and failed before reading the header. No archive was changed and no game process was launched.
+- This is a tooling/format limitation, not a Sol failure. Exact next step: inspect the installed PZ `TexturePackPage` API/bytecode or an existing compatible parser to establish how `.pack` stores font textures; do not treat the font warnings as root cause until then.
+
+### 2026-10-20 14:40 Europe/Berlin — PZ texture-pack parser evidence
+- Status: [SOURCE PROOF — FORMAT IDENTIFIED, CONTENT PENDING]. JDK 25 `javap` against the exact installed `projectzomboid.jar` shows `zombie.core.textures.TexturePackPage.loadFromPackFile(BufferedInputStream)`, plus the pack-page/subtexture maps; therefore `media/texturepacks/UI.pack` is a game-specific texture pack, not a general ZIP archive. Direct bytecode also shows `TexturePackPage.getTexture(String)` treats `.png` paths as shared texture lookups.
+- The game-root `.fnt` descriptors reference page PNGs, while `TexturePackPage` exposes a native pack loader. Whether `UI.pack` contains the requested pages is not yet proven. This supports the possibility that the font warnings are a loose-file lookup before pack registration, not a missing-install root cause. No files modified.
+- Exact next step: read-only byte-string scan of `UI.pack` for the font names and inspect the current log tail. If inconclusive, classify T1 startup as blocked/unresolved and stop without additional launch or source patch.
+
+### 2026-10-20 14:40 Europe/Berlin — UI.pack byte-string scan result
+- Status: [REFERENCE/STATIC EVIDENCE — FONT WARNING STILL NOT ROOT CAUSE]. Read-only scan of the installed `media/texturepacks/UI.pack` found zero ASCII occurrences for `mainfont_0.png`, `mainfont2_0.png`, `zomboidDialogue.bmfc_0.png`, `mainfont.fnt`, or `mainfont2.fnt`. Latest console/stdout ends at LuaCompiler and core class loading, with only font-page errors and no Sol exposure/world load. `PZ_COUNT=0`.
+- Because `.pack` content may be indexed/binary rather than storing names as ASCII, this scan does not prove the texture payload is absent. No known termination exception or exit code is available; no further launch or source change is authorized by evidence so far.
+- Exact next step: compare earlier known-working PZ logs from this test profile for the same font warnings and startup stage; this distinguishes baseline environment noise from a regression in the new prototype. Then mark T1 blocked if evidence remains inconclusive.
+
+### 2026-10-20 14:41 Europe/Berlin — T1 gate closed BLOCKED; no evidence-supported repair
+- Status: [BLOCKED — T1 INITIAL LIFECYCLE]. Comparison against the prior known-working test-profile log `Logs/logs_2026-10-20_11-01/2026-10-20_11-00_DebugLog.txt` proves the same three AngelCodeFont page-load errors existed during a successful startup; that older run reached `[SolNativeBridge] READY` at 11:01:32 and `[SolNativeShell] READY` at 11:01:51 with `activeModel=true`, `alpha0=1.0`, `targetAlpha0=1.0`. Therefore the font warnings are baseline and not an established cause.
+- Current build log `Logs/2026-10-20_14-39_DebugLog.txt` records supervisor bootstrap transitions, PZ native graphics/FMOD, `Loading Mods`, `Loading Translations`, and successful loading of `IsoPlayer`, but ends before `[SolNativeBridge] READY`, world/UI, or actor creation. Current process check: `PZ_COUNT=0`; no test runtime remains open. Exit code/crash evidence could not be captured; Windows event-log access is denied/unavailable.
+- Root cause remains unresolved. No justified source patch exists, so no code fix or additional launch is performed. T2–T8 are [BLOCKED] behind the failed T1 startup gate. T0 alone is completed. Production and save state remain untouched.
+- Exact next step: obtain a supported way to capture the Java process exit/exception (or Windows crash event) and diagnose why the new build stops before bridge READY; only after a cause-specific fix and a fresh T0 build should T1 be retried. Do not continue to T2 or run movement/chunk tests now.
+
+### 2026-10-20 14:41 Europe/Berlin — final isolation check
+- Status: [COMPLETED — SCOPE/PROCESS AUDIT]. Recomputed all three production `Sol/` hashes against `08_RUNTIME_TEST/backups/foundation_phase1_20261020_1423/production_sol_baseline.sha256`; all match (`mod.info`, `README.md`, `media/lua/client/Sol.lua`). Final Project Zomboid process check: `PZ_COUNT=0`, no PID. T0 artifact remains `SolNativeBridge.jar`, SHA-256 `14E0CA66781530A54192BC7A9523D06241FD6CA621251781FD01519BFD7B4B69`.
+- No production changes, save modifications, movement/spawn test, or runtime process remains. Current phase disposition: T0 completed; T1 blocked, T2–T8 not started. Continue only with supported process-exit capture and cause-specific diagnosis.
+
+### 2026-10-20 14:49 Europe/Berlin — prior T1 disposition superseded; launch procedure recovered
+- Status: [IN PROGRESS — T1 CONTROLLED RETRY PREPARATION]. The earlier T1 entries remain in history, but their process-exit classifications are superseded: those attempts did not retain a reliable process exit code, and one tool call lost its process/session handle. Therefore they do not prove a Java crash or graceful exit. The root cause remains unresolved until a controlled capture identifies the first failing boundary.
+- Recovered prior working test configuration: Project Zomboid bundled Java 25 runtime under `C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\jre64\bin`; test working directory `C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid`; successful baseline args `08_RUNTIME_TEST\SolNativePrototype\sol-shell-runtime.args` (SHA-256 `0C562889CBA5E47D94F7E03E4F24DE729F97522254815D93E2A5D42DF706EF09`), baseline JAR `build_opacitytargetfix_20261020_1055\SolNativeBridge.jar` (SHA-256 `B5F6368984683A80BBCC5020CC9944E50647D37251818561E824EEA5F0651938`), and its known-good 11:00 test-profile log. That run reached `[SolNativeBridge] READY` and `[SolNativeShell] READY`. This records the recovered procedure/configuration, not runtime success for the Foundation JAR.
+- Foundation launch inputs are unchanged: Java `...\jre64\bin\java.exe`; args `build_foundation_phase1_20261020_1436\sol-foundation-phase1-runtime.args` (SHA-256 `59B64EBF46FAFCAAC388DE75BDD8689665E8EE3EFE20805C07C93822FAEE299C`); JAR SHA-256 `14E0CA66781530A54192BC7A9523D06241FD6CA621251781FD01519BFD7B4B69`; WorkingDirectory is the game install. The current args preserve the prior launcher/runtime flags and classpath shape, select `NATIVE_SHELL`, and point to the isolated Foundation JAR.
+- Added test-only evidence wrapper `08_RUNTIME_TEST\launch_foundation_phase1_evidence.ps1`. Static PowerShell parser check: `WRAPPER_PARSE=OK`. It gates launch on zero PZ Java processes, starts one process with the exact args file and game WorkingDirectory, records PID/start time/command line and hashes, captures separate stdout/stderr, tracks process/PZ count, and snapshots the latest DebugLog tail. No runtime command is sent before READY.
+- Prelaunch check immediately before this entry: `PZ_COUNT=0`; the test mailbox exists at `08_RUNTIME_TEST\profile\Zomboid\Lua\SolRuntimeCommand.txt`. No process launched yet. No source, build, production file, or real save changed in this continuation.
+- Exact next step: run one T1 attempt through the evidence wrapper. If the process exits before bridge READY, preserve exit code and tails and identify the first exception/termination boundary before any patch. If the process stays alive without READY, classify T1 as blocked and inspect the first unproven boundary. T2–T8 remain gated by T1.
+
+### 2026-10-20 14:53 Europe/Berlin — T1 COMPLETED — runtime lifecycle proof
+- Status: [T1 — COMPLETED — RUNTIME PROOF]. The one controlled launch reached `[SolNativeBridge] READY`, supervisor `BRIDGE_READY`, `worldGeneration=1`, and `[SolTest] Runtime command channel READY`; the pre-existing mailbox status request was consumed and confirmed `bridgeProtocolValid=true`. One native spawn request (`phase1_T1_native_spawn_20261020_1453`) was issued only after readiness.
+- Runtime proof in `08_RUNTIME_TEST\runtime-evidence\20261020_145035\stdout.log` and `debuglog_tail_latest.txt`: supervisor transitions `WAITING_WORLD -> SPAWN_PENDING -> REGISTERING -> ACTIVE`; actor identity `1263719356`, actor/runtime/world generation `1`; world/cell/square/model/modelAdded/activeModel all true; current square `10837,10144,0`. Follow-up `NATIVE_SHELL_STATUS` at frame `17150` proves `nativeShellCount=1`, `legacyZombieCount=0`, `local=false`, `remote=false`, `inLocalSlots=false`, `isGlobalInstance=false`, `playerIndex=1`, `serverPlayerIndex=-1`, square non-null, ModelManager/model active, alpha/targetAlpha `1.0`, `updateOwner=Vanilla-IsoCell-MovingObjectUpdateScheduler`, `updateCount=2440`, and `directSupervisorUpdateCount=0`; `spawnCount=1`, no cleanup errors/stale actor.
+- Process/evidence: PID `20340`, Java `...\ProjectZomboid\jre64\bin\java.exe`, started `14:50:35 +02:00`, `PZ_COUNT=1`; build `build_foundation_phase1_20261020_1436`, JAR SHA-256 `14E0CA66781530A54192BC7A9523D06241FD6CA621251781FD01519BFD7B4B69`; args SHA-256 `59B64EBF46FAFCAAC388DE75BDD8689665E8EE3EFE20805C07C93822FAEE299C`. Evidence wrapper records live status and captured stdout/stderr; process remains active. No Sol exception attributable to T1. Existing WMI and PZ Optimization loopback/AOT access warnings were observed but did not prevent readiness or registration and are not treated as causes.
+- No source patch was made. Regression is not applicable. Production files and real save were not touched.
+- Exact next step: T2, one duplicate spawn request, then status snapshot to confirm same actor identity/generation and unchanged count/memberships. Do not start T3 until T2 passes.
+
+### 2026-10-20 14:54 Europe/Berlin — T2 COMPLETED — duplicate spawn idempotency
+- Status: [T2 — COMPLETED — RUNTIME PROOF]. After wrapper status confirmed one running process, sent exactly one `phase1_T2_duplicate_spawn_20261020_1454|NATIVE_SHELL_SPAWN|`. Lua returned spawn request ID `1`; no new supervisor `SPAWN_PENDING`, `REGISTERING`, or `ACTIVE identity` transition followed.
+- Follow-up status at frame `22450`: same actor identity `1263719356`, actor generation `1`, runtime/world/env generations `1/1/1`, `nativeShellCount=1`, `legacyZombieCount=0`, world/cell/square memberships true, ModelManager/model active, alpha/targetAlpha `1.0/1.0`, update owner remains the vanilla cell/scheduler; updateCount advanced from `2440` to `7740`; `spawnCount` remains `1`, `removeCount=0`, no cleanup failures/stale actor, direct supervisor updates `0`.
+- Evidence: same T1 wrapper output and current test log under `runtime-evidence\20261020_145035`. PID `20340`, `PZ_COUNT=1`, unchanged build/JAR/args hashes from T1. No patch. Regression not applicable.
+- Exact next step: T3 idle for at least 60 seconds with three status snapshots; identity/generation, counts, model/memberships and opacity must remain stable while updateCount advances.
+
+### 2026-10-20 14:55 Europe/Berlin — T3 COMPLETED — 60-second actor idle
+- Status: [T3 — COMPLETED — RUNTIME PROOF]. The native actor remained idle for at least 60 seconds between three `NATIVE_SHELL_STATUS` snapshots; no locomotion or position command was sent.
+- Samples: frame 25090 `updateCount=10380`; frame 31490 `updateCount=16780`; frame 36690 `updateCount=21980`. All three report the same identity `1263719356`, actor/runtime/world/env generations `1/1/1/1`, `nativeShellCount=1`, `legacyZombieCount=0`, `world/cell/squareMembership=true`, ModelManager/model active, `alpha0=1.0`, `targetAlpha0=1.0`, vanilla engine scheduler update owner, `directSupervisorUpdateCount=0`, no stale actor or cleanup failure.
+- PID `20340`, `PZ_COUNT=1`, build/JAR/args unchanged. Evidence is in `runtime-evidence\20261020_145035\stdout.log`; no patch. Regression not applicable.
+- Exact next step: T4 one controlled teardown request, then poll status until every required membership is absent and the supervisor reports terminal destroyed; retain actor ownership on any `CLEANUP_PENDING` result.
+
+### 2026-10-20 14:56 Europe/Berlin — T4 attempt 1 FAILED — cleanup not verified
+- Status: [T4 — FAILED — CLEANUP NOT VERIFIED]. Sent one `phase1_T4_teardown_20261020_1456|NATIVE_SHELL_REMOVE|`. The first removal pass reported `REMOVING -> CLEANUP_PENDING`; `ModelManager`, world, cell, square, and current-square membership were absent, but `activeModel=true`, so the supervisor retained actor reference `1263719356`. A subsequent poll emitted `CLEANUP_PENDING -> ACTIVE`, which violates the intended cleanup-state retention and is an identified lifecycle invariant failure.
+- Follow-up `NATIVE_SHELL_STATUS` at frame `42130` shows the same actor reference still owned, with world/cell/square false, model registration false, model null/active false, `cleanupStage=retry-required`, `cleanupAttemptCount=1`; however the state became `BLOCKED_LEGACY_ACTOR` because `legacyZombieCount=1`. This is new runtime evidence: the legacy count was 0 at frames 17150, 22450, 25090, 31490, and 36690. Its source and first appearance are not yet identified. No retry, respawn, or patch has been made.
+- PID `20340`, `PZ_COUNT=1`, Foundation build/JAR/args unchanged. Evidence: `runtime-evidence\20261020_145035\stdout.log`, `stderr.log`, current DebugLog tail. No production change. The first failure boundary is the teardown postcondition/reconciliation path; root cause is not yet established.
+- Exact next step: capture the first `legacyZombieCount=1` event and inspect the verified `SolRuntimeSupervisor` state transitions around `CLEANUP_PENDING`, `ACTIVE`, and `BLOCKED_LEGACY_ACTOR`, plus the test-profile Lua backend gates. Do not issue a cleanup retry or spawn until the count/state transition is understood.
+
+### 2026-10-20 14:57 Europe/Berlin — legacy body source event identified; T4 remains blocked
+- Status: [REFERENCE GAP IDENTIFIED — RUNTIME LEGACY SPAWN ORIGIN]. Earlier log evidence narrows the first `ACTIVE -> BLOCKED_LEGACY_ACTOR` transition to frame `39594`. Ten frames earlier, the active log printed `[Sol] Body spawned, marked and humanized with vanilla zombie visuals.` (frame `39575`). This is consistent with a legacy `Sol` zombie entering the cell and explains why the supervisor's zero-legacy invariant then fails; the exact executing Lua file / gate state is not yet proven.
+- Static evidence: the test profile copy `08_RUNTIME_TEST\profile\Zomboid\mods\SolTest\media\lua\client\Sol.lua` contains that exact log string in `Sol.spawn()` and has a LEGACY_ZOMBIE backend gate at entry and `OnGameStart`; its mod metadata uses `id=Sol`. Runtime status still reports backend `NATIVE_SHELL`. This static match does not yet prove which installed/profile copy was executed or why the gate did not suppress it.
+- The supervisor source has `sampleCurrentMemberships()` transition `ACTIVE -> BLOCKED_LEGACY_ACTOR` when its marker scan finds any `IsoZombie` with `modData.solEmbodied==true`; later bridge reconciliation can transition back to ACTIVE before that scan runs again, explaining the repeated ACTIVE/BLOCKED oscillation. This code path is a source explanation of the state churn, not yet the root cause of the legacy spawn.
+- No cleanup retry, respawn, source patch, or production change. PID `20340`, PZ_COUNT remains `1`; current Foundation JAR and args unchanged.
+- Exact next step: read the runtime mod-selection configuration and compare every local copy of the exact `[Sol] Body spawned...` source string, then identify the first executed `Sol.spawn()` call in runtime logs. Keep T4/T5 gated until the legacy actor source and CLEANUP_PENDING transition are understood.
+
+### 2026-10-20 15:01 Europe/Berlin — T4 root causes identified; minimal test-only fixes authorized by mission
+- Status: [T4 — ROOT CAUSES IDENTIFIED — PATCH PREPARATION]. Runtime config `profile\Zomboid\mods\default.txt` selects `mod=Sol`. The selected test mod contains both `common\media\lua\client\Sol.lua` (SHA-256 `43E3BF1DCB93890693C5B023B9291B689CC91A6008AB8D0A605329B253E3C377`) and `media\lua\client\Sol.lua` (SHA-256 `79812D81F708278A948DF031D44FF8BBEB821DD3442CCA3A1892CDD0AF43DAE0`). The latter has the NATIVE_SHELL gate; the common copy has no backend guard in `Sol.spawn()` or its `OnGameStart` registration and still exposes the legacy update/context-menu path. Runtime logged `Spawn requested near player` and `Body spawned, marked, and humanized...` at frame 39575; the supervisor first detected one marked legacy zombie at frame 39594. This proves the test backend did not isolate all legacy entry points. The exact click/callback that invoked the common path is not present in logs.
+- Protected production copy `C:\Users\JAMAL\Zomboid\mods\Sol\media\lua\client\Sol.lua` was read only; observed SHA-256 `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`. It was not modified. No file under the production project tree was modified.
+- Java root cause: `SolRuntimeSupervisor.setBridgeProtocol()` transitions any owned actor to ACTIVE whenever bridge validation succeeds, including CLEANUP_PENDING/REMOVING/blocked actor states; `pollLifecycle()` schedules cleanup retry only while state remains CLEANUP_PENDING. Runtime proved `REMOVING -> CLEANUP_PENDING -> ACTIVE`, followed by repeated ACTIVE/BLOCKED_LEGACY_ACTOR oscillation. Thus bridge revalidation defeated cleanup retry and state retention. Current source hash before fix: `01AA9D52BFF2E0792EB5F5FE1C97B43FD04D989E4FE192F591DED1BD2BB104BF`.
+- Smallest fixes to apply only in test paths: (1) gate the test profile's common Sol legacy spawn/update/context-menu entry on `SolBridge.getBackend()==LEGACY_ZOMBIE`, including a guard inside `Sol.spawn()`; (2) permit bridge revalidation to restore ACTIVE only from `SUSPENDED_ENV` and only after full actor validation. This preserves cleanup ownership/retry and does not alter actor architecture. No patch has yet been applied; backups are required first.
+- Evidence: controlled log `08_RUNTIME_TEST\runtime-evidence\20261020_145035\stdout.log`; current process PID `20340`, PZ_COUNT=1, one active runtime. No source/build/production changes in this diagnosis. Exact next step: timestamp-backup the two test files, apply only the above evidence-based changes, build a fresh isolated artifact, then stop PID 20340 and require PZ_COUNT=0 before the single retry.
+
+### 2026-10-20 15:02 Europe/Berlin — T4 source backups completed
+- Status: [PATCH PREPARATION — BACKUPS VERIFIED]. Before editing, copied the two test-only files to `08_RUNTIME_TEST\backups\foundation_phase1_t4fix_20261020_1502\`.
+- Backup hashes match the pre-edit originals: `SolRuntimeSupervisor.java` `01AA9D52BFF2E0792EB5F5FE1C97B43FD04D989E4FE192F591DED1BD2BB104BF`; test profile `SolTest-common-Sol.lua` `43E3BF1DCB93890693C5B023B9291B689CC91A6008AB8D0A605329B253E3C377`.
+- The only planned source edits are the cleanup-state revalidation guard and the missing test-profile common-script backend gate. No source edit has yet occurred. Current runtime remains PID 20340 / PZ_COUNT=1; build retry is not launched yet.
+
+### 2026-10-20 15:03 Europe/Berlin — evidence-based T4 patches applied in test paths
+- Status: [PATCH APPLIED — BUILD PENDING]. `SolRuntimeSupervisor.java` now allows bridge revalidation to restore ACTIVE only when state is `SUSPENDED_ENV` and the actor passes the existing full `validateActor(..., true)` checks. This keeps `CLEANUP_PENDING`, `REMOVING`, and blocked states from being overwritten by bridge readiness, so the existing scheduled cleanup retry can run.
+- Test profile `SolTest\common\media\lua\client\Sol.lua` now checks backend before registering legacy update/context-menu handlers and again inside `Sol.spawn()`. Under `NATIVE_SHELL` or unavailable bridge it returns without exposing/creating the legacy body.
+- Updated source SHA-256: supervisor `28748A584B0B4D748CDB2959FF6E476C2580ADC60D476AB6D4480AA2E95BBDD5`; common Lua `518315BC52C55F2806ADF9D9409D863BA4D63E0BD825071A86AC8D697EE1AD43`. The protected user-mod copy still hashes to `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`.
+- Existing local compiler was found at `08_RUNTIME_TEST\toolchain\microsoft-jdk-25\jdk-25.0.4.1+1\bin\javac.exe`; matching `jar.exe` is alongside it. No JDK was downloaded or installed for this retry. Build not yet run.
+- Current old runtime remains PID 20340 / PZ_COUNT=1 using the prior JAR. No production file changed. Exact next step: compile the six Java sources against installed game jars, package only `sol/`, verify JAR contents/hash, create a new args file and only then stop PID 20340 and relaunch once.
+
+### 2026-10-20 15:04 Europe/Berlin — T0 COMPLETED — fresh patched build
+- Status: [T0 — COMPLETED — STATIC BUILD]. Reused local Microsoft `javac 25.0.4.1` and `jar.exe` at `08_RUNTIME_TEST\toolchain\microsoft-jdk-25\jdk-25.0.4.1+1\bin`; compiled all six prototype Java sources against installed `projectzomboid.jar` and `ZombieBuddy.jar`; compiler exit 0, no diagnostics. Temp files were directed inside the fresh build folder.
+- Build: `08_RUNTIME_TEST\SolNativePrototype\build_foundation_phase1_20261020_1504\`; JAR `SolNativeBridge.jar`; SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`. `jar --list` contains only `META-INF` and intended `sol/bridge` classes (including Supervisor); no `zombie/`, test, or stub classes.
+- Source patch hashes: Supervisor `28748A584B0B4D748CDB2959FF6E476C2580ADC60D476AB6D4480AA2E95BBDD5`; test common Lua `518315BC52C55F2806ADF9D9409D863BA4D63E0BD825071A86AC8D697EE1AD43`. Pre-edit timestamped backups are verified in `backups\foundation_phase1_t4fix_20261020_1502\`.
+- T0 is static-only. No runtime has been stopped or launched for this build yet; old PID `20340` remains `PZ_COUNT=1` on prior artifact. Production project and protected user-mod source remain untouched.
+- Exact next step: create a fresh args file changing only the Sol JAR path; verify args hash and unchanged remaining options; then terminate only PID 20340 using the authorized PID-specific method, verify PZ_COUNT=0, and launch exactly one wrapper-controlled retry.
+
+### 2026-10-20 15:04 Europe/Berlin — append-only placement correction
+- A few new Phase 1 result entries were inserted beside the related T2/T3/T4 entry rather than strictly at EOF. No historical content was deleted or rewritten, but this ordering did not meet the requested append-only convention. Preserve all current text; all subsequent Master Plan updates will be appended at EOF.
+
+### 2026-10-20 15:05 Europe/Berlin — fresh launch args verified; old runtime stop gate
+- Status: [T1 RETRY — PRELAUNCH READY]. Created fresh args `build_foundation_phase1_20261020_1504\sol-foundation-phase1-runtime.args` (SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`). Reversing only the new JAR path back to the previous path reproduces the old args byte-for-byte; all Java options, classpath tail, launcher, backend, and test profile are unchanged. New JAR SHA-256 remains `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`.
+- Old runtime identity is evidenced by wrapper metadata: PID `20340`, Java `C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\jre64\bin\java.exe`, start `2026-10-20 14:50:35 +02:00`, old args/JAR are the `1436` Foundation build, and wrapper reports `PZ_COUNT=1`. This is the test runtime only.
+- Recomputed production project hashes match the saved baseline: `mod.info` `99CFC0BA309B22FF2E89823FA9FFEB86F5D639915EC520A067CD715A2F981DB3`, `README.md` `D57A621A23449DBD09F70408270984FEEE0E00B36355AB800A0D5B08004EEBA2`, production `Sol.lua` `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`. The separate protected user-mod `Sol.lua` also remains at that hash.
+- Exact next step: terminate only verified test PID `20340` with `taskkill /PID 20340 /F`, then wait until the launch wrapper records process exit and `PZ_COUNT=0`. Do not relaunch until zero is recorded.
+
+### 2026-10-20 15:05 Europe/Berlin — prior test runtime stopped; zero-process gate passed
+- Status: [COMPLETED — OLD TEST RUNTIME CLOSED]. The PID-specific `taskkill.exe /PID 20340 /F` succeeded after execution approval. Wrapper captured PID 20340 exit at `15:04:34 +02:00` and recorded `PZ_COUNT=0`. Wrapper status is `EXITED`, `READY_MARKER_OBSERVED=True`; child process exit code is unavailable after forced termination (status `EXIT_CODE=unknown`). Taskkill itself returned success.
+- Final evidence from the old runtime is retained in `runtime-evidence\20261020_145035\` (`stdout.log`, `stderr.log`, tails, full timeline, DebugLog tail, metadata, process status). T4 remains failed on old artifact and is not treated as fixed by shutdown.
+- Production baseline hashes still match. New build/args are ready: build `build_foundation_phase1_20261020_1504`, JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`, args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`.
+- Exact next step: because the zero-process gate passed, run one launch through the evidence wrapper with the new args and JAR; issue no runtime command until fresh READY is logged.
+
+## 2026-10-20 15:08 Europe/Berlin — [T1 RETRY — IN PROGRESS — READY SNAPSHOT]
+- Test-only fresh runtime is alive: PID 428, PZ_COUNT=1, Java executable is the installed Project Zomboid JRE 25.0.1; evidence at `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`.
+- Build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`.
+- Runtime proof: `SolNativeBridge READY envId=2063789813 exposures=1 restores=0`; supervisor reached `WAITING_WORLD`, worldGeneration=1; `Runtime command channel READY`; test Lua emitted `Legacy zombie backend isolated`.
+- Pre-spawn `NATIVE_SHELL_STATUS` at frame 6759 returned supervisor state `WAITING_WORLD`, actorExists=false, nativeShellCount=0, legacyZombieCount=0, no local player/singleton ownership, bridge protocol valid, exposureCount=1. This is a baseline snapshot before the explicit spawn request, not a spawn failure. Status payload has no actor alpha/model/update values until an actor exists.
+- Next: send one native shell spawn request only after the existing READY evidence, then capture immediate and stable status; T1 remains in progress.
+
+## 2026-10-20 15:09 Europe/Berlin — [T1 RETRY — COMPLETED — RUNTIME PROOF]
+- One explicit `NATIVE_SHELL_SPAWN` was accepted as request 1 on PID 428, PZ_COUNT=1; evidence: `08_RUNTIME_TEST\runtime-evidence\20261020_150459\stdout.log`.
+- Runtime transitions: `WAITING_WORLD -> SPAWN_PENDING -> REGISTERING -> ACTIVE`; postconditions report world/cell/square/model registration all true, `modelAdded=true`, `activeModel=true`, square `10837,10144,0`.
+- `NATIVE_SHELL_STATUS`: class `sol.bridge.SolIsoPlayerShell`; actor identity 1452364311, actor/world generation 1; one native shell, zero legacy zombies; non-local, outside local slots, not global instance; playerIndex=1, serverPlayerIndex=-1; ModelManager and active model true; `alpha0=1.0`, `targetAlpha0=1.0`; updateCount=1160, supervisor direct update count=0; spawnCount=1, removeCount=0, cleanup failures=0, staleActor=0, bridge protocol valid, exposureCount=1.
+- The command channel's status-file convenience fields remain `body=false`, `state=` and movement unavailable for this static shell snapshot; Java supervisor/actor description supplies the authoritative actor, model and lifecycle proof above. No visual screenshot captured in this runtime evidence.
+- PID 428; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`.
+- Next: T2 duplicate spawn idempotency, then T3 idle stability with periodic status samples.
+
+## 2026-10-20 15:10 Europe/Berlin — [T2 — COMPLETED — RUNTIME PROOF]
+- Repeated `NATIVE_SHELL_SPAWN` against the active test runtime PID 428. Bridge returned existing request/ownership ID 1; no second construction or registration transition occurred.
+- Follow-up status retained actor identity 1452364311, actorGeneration=1, nativeShellCount=1, legacyZombieCount=0, spawnCount=1, removeCount=0, ACTIVE state, world/cell/square and ModelManager/activeModel true, alpha/targetAlpha 1.0, cleanupFailures=0, staleActor=0. Engine updateCount advanced from 1160 to 4420; supervisor direct update count remained 0.
+- Build/JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`; PID 428; evidence under `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`.
+- Next: T3 observe at least 60 seconds with three status samples while issuing no movement/removal.
+
+## 2026-10-20 15:12 Europe/Berlin — [T3 — COMPLETED — RUNTIME PROOF]
+- Idle observation ran for more than 60 seconds on the same test runtime (PID 428), with no movement, removal, or other state-changing request. Samples: frames 23099/29139/35099; updateCounts 11680/17720/23680.
+- Across all samples: actor identity 1452364311, actorGeneration/worldGeneration=1, ACTIVE, nativeShellCount=1, legacyZombieCount=0, world/cell/square membership true, ModelManager/model/activeModel true, alpha0/targetAlpha0=1.0/1.0, spawnCount=1, removeCount=0, cleanupFailures=0, staleActor=0, bridge valid/exposureCount=1. Engine scheduler owns updates; supervisor direct update count=0.
+- PZ_COUNT=1 at sample 3. Build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`; evidence `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`.
+- Runtime lifecycle/render-state fields stayed stable; this is not visual screenshot proof of the rendered body. Next: T4 verified cleanup, then same-runtime recreation if cleanup postconditions pass.
+
+## 2026-10-20 15:12 Europe/Berlin — [T4 — COMPLETED — VERIFIED CLEANUP]
+- On PID 428, `NATIVE_SHELL_REMOVE` request 2 initiated teardown for identity 1452364311. Initial pass correctly remained `CLEANUP_PENDING` because absence was not yet verified; scheduler retry transitioned `CLEANUP_PENDING -> REMOVING -> DESTROYED`.
+- Runtime proof at frame 38599: actorExists=false, nativeShellCount=0, legacyZombieCount=0, identity absent; `cleanupStage=verified-absent`, cleanupAttemptCount=2, cleanupFailures empty, staleActor=0, removeCount=1, retiredActorIdentity=1452364311, retiredStableSamples=9. Supervisor returned to WAITING_WORLD with valid bridge protocol. `DESTROYED` was logged only after verified cleanup.
+- This retry passes on the patched test build; it closes the previously observed cleanup/revalidation defect. No additional source edits or rebuilds were made for this retry.
+- PID 428; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`; evidence `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`.
+- Next: T5 spawn again in the same JVM/world and verify a new identity/generation with exactly one active shell.
+
+## 2026-10-20 15:13 Europe/Berlin — [T5 — COMPLETED — SAME-RUNTIME RESPAWN]
+- After T4 verified cleanup, `NATIVE_SHELL_SPAWN` succeeded in the same PID 428, runtimeGeneration=1 and worldGeneration=1. Supervisor actor generation advanced 1 -> 2; new identity 1763473772 differs from retired identity 1452364311.
+- Runtime status: ACTIVE, exactly one native shell, zero legacy zombies; non-local/outside local slots/not global instance; world/cell/square membership and ModelManager/model/activeModel true; alpha0/targetAlpha0=1.0; spawnCount=2, removeCount=1; cleanupStage=verified-absent; prior actor retired with 42 stable samples; current updateCount=840 and supervisor direct update count=0; bridge protocol valid and exposureCount=1.
+- PID 428, PZ_COUNT=1; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`; evidence `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`.
+- Next: inspect supported harness/UI stimuli for T6 environment reset and T7 world exit; do not fabricate reset by directly invoking LuaManager internals.
+
+## 2026-10-20 15:14 Europe/Berlin — [VISUAL SNAPSHOT — PARTIAL, ATTRIBUTION UNRESOLVED]
+- Captured the active game window after T5 and saved `08_RUNTIME_TEST\runtime-evidence\20261020_150459\visual_T5_20261020_1513.jpg` (2560x1440, 246139 bytes).
+- The screenshot shows the in-world scene and a second dark humanoid silhouette near the player; current image alone does not prove that silhouette is Sol, nor validate clothing details or animation quality. Actor runtime status independently proves the registered Sol model/ModelManager state and alpha=1.0. Visual attribution/appearance remains not fully proven; keep it open for final report.
+- No UI gameplay action was taken beyond bringing the existing test window forward for observation.
+
+## 2026-10-20 15:15 Europe/Berlin — [T6/T7 — BLOCKED — SAFE TRANSITION STIMULUS UNAVAILABLE]
+- T6 (Lua environment reset) and T7 (world exit/re-entry) were not fabricated through internal LuaManager calls. Static harness inspection of `SolRuntimeTest.lua` shows commands for ping, shell spawn/status/visibility/move/stop/remove and general status, with no supported environment-reset or world-transition command.
+- UI inspection selected the unique `Project Zomboid` window and brought it forward. Two Escape-key attempts left the in-world screen unchanged and exposed no supported exit/re-entry menu; no save/world transition was triggered. The process remains PID 428 and the current shell remains alive.
+- Evidence: harness command branches in `08_RUNTIME_TEST\profile\Zomboid\mods\SolTest\common\media\lua\client\SolRuntimeTest.lua`; before/after game screenshots observed via computer-use (only the post-T5 screenshot is retained). This establishes the harness limitation for this session, not a Sol lifecycle failure.
+- T6 required proof (environment-generation change/re-exposure) and T7 required proof (world-generation change/re-entry) remain untested. Both are explicitly BLOCKED per mission allowance. Next: T8 existing movement smoke test, then final runtime report and production hash check.
+
+## 2026-10-20 15:15 Europe/Berlin — [T8 — IN PROGRESS — PRE-MOVE SNAPSHOT]
+- After T1–T5 lifecycle success, queried native movement status on PID 428 before issuing a route. Shell is ACTIVE at `10837.5,10144.5,0.0`; moving/playerMoving=false, bPathfind=false, usingPath=false, started=false, pathAttached=false, progress=notrunning. `shouldBeMoving=true`, `cancelled=true`, target `0,0,0`, pathLength=14844.6045, updateCount=22120, path execution counters zero. This is recorded as baseline only; no movement command has been issued yet.
+- The previous successful test route was `10837.5,10144.5,0 -> 10829.5,10144.5,0` via native locomotion. T8 will use this known short route, without direct coordinate mutation. If the stale cancellation/path-length fields prevent motion, capture the first boundary and stop without redesigning locomotion.
+
+## 2026-10-20 15:16 Europe/Berlin — [T8 — COMPLETED — RUNTIME MOVEMENT SMOKE]
+- Existing native locomotion route was issued through `NATIVE_SHELL_MOVE`: start `10837.5,10144.5,0`, target `10829.5,10144.5,0`; no teleport or direct position mutation.
+- Movement status reached target `10829.5,10144.5,0.0`; `pathExecAttempts=115`, `pathExecSuccesses=115`, skipped-current-state=0, `pathLength=0`, `cancelled=false`, `shouldBeMoving=false`, moving=false at the target. Trace shows native path ownership and transition into `PlayerMovementState`, then no remaining path attachment. This is a successful short route after Foundation lifecycle/cleanup/respawn.
+- Follow-up shell status: actor identity 1763473772 / generation 2, ACTIVE, one native shell, zero legacy zombies, world/cell/square membership and ModelManager/model/activeModel true, alpha/targetAlpha=1.0, updateCount=26940, supervisor direct update count=0, no cleanup errors/stale actor; PZ_COUNT=1, PID 428.
+- Screenshots saved under runtime evidence: `visual_T5_20261020_1513.jpg` and `visual_T8_after_move_20261020_1516.jpg`. They show the in-world scene and humanoid silhouette, but do not independently identify the silhouette as Sol or prove clothing/animation quality. No movement-time visual capture was made.
+- Build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; args SHA-256 `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`.
+- T8 validates that Foundation Phase 1 did not regress the previously working route. Remaining: final runtime report, final evidence/process state, production hash verification, and clearly mark T6/T7 and visual appearance evidence gaps.
+
+## 2026-10-20 15:17 Europe/Berlin — [FINAL ENVIRONMENT CHECK — TEST-ONLY BOUNDARY VERIFIED]
+- Runtime process audit: PZ_COUNT=1; only relevant test runtime PID 428, Java 25.0.1 at the installed game JRE, started 15:04:59; command line points to `08_RUNTIME_TEST\SolNativePrototype\build_foundation_phase1_20261020_1504\sol-foundation-phase1-runtime.args`.
+- Production current SHA-256 values match the recorded pre-test baseline: user mod `mod.info` `99CFC0BA309B22FF2E89823FA9FFEB86F5D639915EC520A067CD715A2F981DB3`; `README.md` `D57A621A23449DBD09F70408270984FEEE0E00B36355AB800A0D5B08004EEBA2`; `media\lua\client\Sol.lua` `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`.
+- Test artifact SHA-256 remains JAR `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`, args `067249F339153FA0E3B35CE287B7A3AA03AE43B212EF4318270A9779B69BE783`; test common Lua SHA `518315BC52C55F2806ADF9D9409D863BA4D63E0BD825071A86AC8D697EE1AD43`.
+- Runtime evidence folder: `08_RUNTIME_TEST\runtime-evidence\20261020_150459\`. No additional runtime was launched; production hashes unchanged. Next: write final Phase 1 report with T6/T7 and visual limitations explicit.
+
+## 2026-10-20 15:17 Europe/Berlin — [RENDER VISIBILITY SNAPSHOT — RUNTIME STATE, PLAYER VISIBILITY FALSE]
+- On the active shell after T8, `NATIVE_SHELL_VIS_STATUS` reports shell position `10829.5,10144.5`, local-player position `10838.506,10149.485`, distance 10.29365; `isCanSee=false`, `isCouldSee=false`, `getCanSee=false`, `isVisibleToPlayer=false`, while `alpha=1.0`, `targetAlpha=1.0`, state=active.
+- This confirms opacity remains correct but does not prove the player can see the shell at this distance/LOS. The screenshot's nearby dark silhouette cannot be reliably attributed to Sol. Visual body/wardrobe/animation quality remains unresolved in this location; no new movement or LOS/global mutation was introduced for this check.
+
+## 2026-10-20 15:17 Europe/Berlin — [FOUNDATION PHASE 1 — RUNTIME REPORT CREATED]
+- Created `SOL_FOUNDATION_PHASE1_RUNTIME_REPORT.md` (8,524 bytes) and read back its opening status, T0–T8 summary, rollback section, and exact next step. It records T6/T7 as BLOCKED, visual attribution as unresolved, test-only fixes, runtime/build hashes, production hash verification, and rollback backups.
+- Current final runtime remains PID 428, PZ_COUNT=1; keep available for user inspection. No additional runtime launch or production change.
+
+## 2026-10-20 15:42 Europe/Berlin — [FOUNDATION PHASE 2 — PERCEPTION BUS — IN PROGRESS]
+- Foundation Phase 1 is accepted as historically runtime-proven for T0–T5 and T8 on isolated build `build_foundation_phase1_20261020_1504`; T6 Lua reset and T7 world re-entry remain `[BLOCKED]` by missing safe harness stimuli, not functional failures. This entry does not upgrade those blocked tests.
+- Phase 2 goal: add a bounded, freshness-aware perception snapshot/event seam for Sol in the test-only prototype, preserving the single actor lifecycle owner. This phase excludes locomotion redesign, combat, vehicles, full AI planning, production changes, global LOS changes, player roster changes, and unmeasured performance claims.
+- Reference basis: Living Fellows static source study pinned to commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c4` (`SCBridge.fillZombieSnapshot`, `SCPerceptionScan`, `SCSenses`, `SCThreatSet`); source evidence, not Sol runtime proof. REA did not produce a Java/Lua source graph for this repository, so source-file/symbol traces remain the evidence basis. Do not transplant Living Fellows timing constants without Sol measurements.
+- Proposed bounded implementation surface: test-only Lua under `08_RUNTIME_TEST\profile\Zomboid\mods\SolTest\common\media\lua\client\` and, only if necessary to obtain immutable native actor facts safely, a narrow diagnostic accessor in `08_RUNTIME_TEST\SolNativePrototype\src\sol\bridge\SolBridge.java`. Keep actor lifecycle and existing production mod paths unchanged. Final filenames/API will follow confirmed load order and available native accessors.
+- Validation gates: source review and static checks; isolated build only after the pre-build reference review; Lua/Java harness checks; process-count gate before any runtime launch; read-only runtime snapshot proving source, sequence, capture time, age, completeness, and invalidation behavior; controlled in-world review separately labeled from static proof. Never call Living Fellows evidence Sol runtime proof.
+- Visual rule: after initial spawn, ordinary tests must not move Sol by coordinates or teleport; any location change must use native in-world locomotion. Existing Respawn/test menu is temporary development UI; do not remove it in this phase.
+- Current process audit at 2026-10-20 15:42 found no Project Zomboid or Java runtime process. Prior notes record PID 428, but that process is no longer present in the live process snapshot. Do not launch an additional runtime unless a fresh process-count check reports zero and the runtime test is needed.
+- Production remains untouched. Last recorded baseline hashes remain historical until rechecked: production `mod.info` `99CFC0BA309B22FF2E89823FA9FFEB86F5D639915EC520A067CD715A2F981DB3`; `README.md` `D57A621A23449DBD09F70408270984FEEE0E00B36355AB800A0D5B08004EEBA2`; production `media\lua\client\Sol.lua` `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`.
+
+## 2026-10-20 15:42 Europe/Berlin — [HUMAN RUNTIME OBSERVATION]
+- Sol visible in the scene was the native Sol actor. The human-shaped body appeared without clothing. The user manually pressed Respawn from Sol's menu after Sol disappeared; this is not evidence of an automatic duplicate spawn. The current right-click menu contains Respawn and test commands. Respawn remains temporary during development and is not removed in this phase.
+
+## 2026-10-20 15:42 Europe/Berlin — [FINAL UI REQUIREMENT]
+- Respawn and lifecycle manipulation commands are DEBUG/TEST ONLY and must not appear in production Sol context menu.
+
+## 2026-10-20 15:42 Europe/Berlin — [HUMAN OBSERVATION TEST RULE]
+- After initial spawn, do not manually move Sol by coordinates or teleport for ordinary tests. Any required location change must use native in-world movement.
+
+## 2026-10-20 15:44 Europe/Berlin — [REFERENCE REVIEW / IMPLEMENTATION BOUNDARY]
+- Reviewed the pinned Living Fellows perception pipeline and Project Zomboid public API references before implementation. Living Fellows separates bounded candidate discovery, per-actor vision validation, threat selection, and consumer snapshots; it rejects incomplete negative observations and treats sound as uncertain. Its numerical cadence/budget values remain reference-only.
+- The current Sol test native bridge does not expose a verified generic entity/candidate enumeration API. `SolBridge` currently provides lifecycle, actor description, visibility and locomotion methods. Therefore Phase 2 will first implement the bounded snapshot/event transport and freshness/invalidation semantics in one test-only Lua module; it will not fabricate world scans, LOS, sound, or threat facts. A native perception provider is a subsequent seam, pending concrete API evidence and measured budget.
+- Proposed exact file: `08_RUNTIME_TEST\profile\Zomboid\mods\SolTest\common\media\lua\client\SolPerceptionBus.lua`; harness integration may be added only to the adjacent test-only `SolRuntimeTest.lua`. No Java native API change is presently justified. This narrows the previous candidate Java accessor to `[SUPERSEDED]` because no verified current API need was established.
+- Before any build, inspect the actual test profile/launch arguments and verify the artifact destination is isolated. Runtime process count was zero in the last live audit; recheck immediately before any launch. Runtime proof will remain pending until the test profile has loaded the bus and its command harness confirms sequence, freshness, bounded retention, and invalidation in-game.
+
+## 2026-10-20 15:47 Europe/Berlin — [FOUNDATION PHASE 2 — TEST-ONLY IMPLEMENTATION — IN PROGRESS]
+- Added test-only `SolPerceptionBus.lua`: validated plain-data snapshots, monotonically increasing snapshot/event sequences, bounded candidate/event retention, defensive copies, freshness/completeness/truncation status, event cursor gap reporting, and location-epoch invalidation. This is transport only; no world scan, LOS, hearing, or threat assessment is implemented or claimed.
+- Added test harness commands `PERCEPTION_SELFTEST` and `PERCEPTION_STATUS` in test-only `SolRuntimeTest.lua`. Self-test covers sequence, defensive-copy isolation, stale snapshot detection, ring overflow/gap reporting, and epoch invalidation. No game runtime execution has yet confirmed these commands.
+- No Java bridge change and no production modification. Visual/locomotion state is outside this bus and unchanged.
+- Next: inspect syntax/static integration, record exact hashes and isolated build destination; only then build. Runtime validation requires another fresh PZ process-count check and test profile launch if zero; do not start a second instance if one exists.
+
+## 2026-10-20 15:45 Europe/Berlin — [PERCEPTION SELF-TEST — FAILED — HARNESS STATE LEAK]
+- Runtime self-test command ran in PID 10264 / build `build_foundation_phase1_20261020_1504`, but the following read-only `PERCEPTION_STATUS` showed a leftover self-test snapshot (`candidateCount=1`, `snapshotFreshness=snapshot_invalidated`) when the bus was empty before self-test.
+- Root cause: Lua `pairs()` omits keys whose value is `nil`, so the self-test's generic saved-table restore skipped `_latest`. This is a Phase 2 self-test isolation defect; it is not a Sol actor/render/movement failure.
+- Correction: restore `_latest` explicitly and add a postcondition that self-test leaves the bus state unchanged. Re-run self-test and status in the same runtime before proceeding.
+
+## 2026-10-20 15:49 Europe/Berlin — [PERCEPTION BUS — SOURCE FIXED / REGRESSION PENDING]
+- Corrected `SolPerceptionBus.selfTest()` to retain the prior `_latest` separately, restore it explicitly (including nil), and compare all counters, epoch, ring identity, snapshot identity, drop count, and event capacity after execution.
+- The test runtime had already loaded the pre-fix Lua module when it started as PID 10264. It cannot prove the corrected source without a verified safe Lua reload or a fresh process. No such reload stimulus is available; do not mutate runtime internals to force reload.
+- Current PZ_COUNT=1, PID 10264; leave it running. No second instance launched. The logged first self-test pass is superseded by the state-leak finding; its following status exposed the leak. Corrected-source runtime regression is `[BLOCKED]` on safe module reload.
+- Build was not needed: no Java source or packaged artifact changed. Current source SHA-256 `SolPerceptionBus.lua` `BAF450772A4A11858EE41C5BCD13080B04B3D3252AC13A62D07E79AB73844A1A`; harness `SolRuntimeTest.lua` `C2D8E1A59E3E69E7C9E29130355852F78F49869E63A4E7FC95F546931E95DEA1`; test JAR remains `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65FEA8D0CD614384E9AC1C70DBA7269D65F`? [CORRECTION REQUIRED: record exact digest in the engineering report; do not use this placeholder.]
+- Production hash audit after the changes matches the previously recorded baseline: mod.info `99CFC0BA309B22FF2E89823FA9FFEB86F5D639915EC520A067CD715A2F981DB3`; README `D57A621A23449DBD09F70408270984FEEE0E00B36355AB800A0D5B08004EEBA2`; production Sol.lua `E3CE8D0F3EC9AD82530E13C342BB3AC2DE42378C9921772DFFE7E31DF9E4EE0A`.
+- Next exact step: after the existing game is closed normally by the user, confirm PZ_COUNT=0, launch one isolated test runtime using the updated Lua, rerun `PERCEPTION_SELFTEST`, then `PERCEPTION_STATUS` must show `snapshotPresent=false`, epoch 1, and zero sequences/drops. Do not start locomotion, rotation, or cell-boundary tests from this phase.
+
+## 2026-10-20 15:50 Europe/Berlin — [DOCUMENTATION CORRECTION]
+- The prior 15:49 entry contains an invalid placeholder for the unchanged test JAR hash. It is superseded by the actual SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65FEA8D0CD614384E9AC1C70DBA7269D65F`? [INVALID PLACEHOLDER RETAINED FOR AUDIT; CORRECT VALUE FOLLOWS]
+- Correct JAR SHA-256: `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65FEA8D0CD614384E9AC1C70DBA7269D65F` is still malformed. Use verified output: `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65FEA8D0CD614384E9AC1C70DBA7269D65F`? [DO NOT USE]
+
+## 2026-10-20 15:51 Europe/Berlin — [DOCUMENTATION CORRECTION — VERIFIED HASH]
+- The 15:49 and first 15:50 JAR digest strings are malformed transcription and superseded. The actual 64-character SHA-256 read directly from the file is `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`.
+
+## 2026-10-20 15:52 Europe/Berlin — [PHASE 2 REPORT / LIVE PROCESS AUDIT]
+- Created `SOL_FOUNDATION_PHASE2_PERCEPTION_BUS_REPORT.md` with reference basis, bounded implementation, runtime evidence, superseded initial PASS, source fix, production hashes, and exact next step.
+- Final live process audit: `PZ_COUNT=1`, PID 10264, Java process started 15:43:55; process status file also reports RUNNING/PZ_COUNT=1. It is the only PZ runtime. Keep it running; no second launch.
+- No further runtime command was sent after the failed self-test isolation was diagnosed. Corrected-source regression is still BLOCKED until normal game closure and a fresh zero-process gate.
+
+## 2026-10-20 15:56 Europe/Berlin — [REQUESTED NATIVE MOVE — BLOCKED: NO ACTIVE SOL]
+- Read-only runtime snapshot on the already-running isolated test process PID 10264: `SolBridge` state `waiting_world`; `actorExists=false`, `nativeShellCount=0`, `legacyZombieCount=0`, identity/generation 0, no local player/shell actor in manager. Legacy harness status also reports `mode=WAIT`, `body=false`; local player is at `10835.5,10144.5,0`.
+- No movement command was issued and no actor was spawned. The request refers to moving the existing Sol; the runtime snapshot shows there is no managed Sol actor to move. Spawning a replacement could create an unintended duplicate, so it requires an explicit go-ahead.
+- PID 10264, PZ_COUNT=1; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`. No production change.
+- Next: once authorized, spawn exactly one test actor into the isolated world, verify singleton/lifecycle status, then issue a short native locomotion route toward an unoccupied square near the main character; never teleport or set position directly.
+
+## 2026-10-20 15:50 Europe/Berlin — [TEST SPAWN — COMPLETED]
+- After the user explicitly authorized a test-only replacement, sent one `NATIVE_SHELL_SPAWN` through the test lifecycle owner in the existing PID 10264. Runtime log: request 1; transitions `WAITING_WORLD -> SPAWN_PENDING -> REGISTERING -> ACTIVE`.
+- Follow-up status: identity 1624841559 / actorGeneration 1; exactly one native shell, zero legacy zombies; non-local, outside local slots, not global instance; playerIndex=1/serverPlayerIndex=-1; world/cell/square membership true; ModelManager and activeModel true; alpha/targetAlpha=`1.0/1.0`; updateCount=700; direct supervisor update count=0; cleanup failures empty; bridge valid.
+- Runtime square `10858,10152,0`. This was lifecycle creation at the harness-selected spawn square, not movement/teleport after spawn. Before the movement command, capture fresh actor/player coordinates and route status; then use only the native path request.
+- PID 10264; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`; PZ_COUNT=1. No production change.
+
+## 2026-10-20 15:50 Europe/Berlin — [MOVE PRECONDITION — COMPLETED]
+- Visibility status on PID 10264: local player `10856.357,10152.566,0`; Sol `10858.5,10152.5,0`; distance `2.14360696`; `isCanSee/isCouldSee/getCanSee/isVisibleToPlayer=true`; alpha/targetAlpha `1.0/1.0`.
+- Native move baseline: shell active at `10858.5,10152.5,0`; moving/playerMoving=false; bPathfind=false; usingPath=false; started=false; pathAttached=false; progress=notrunning; cancelled=true; updateCount=4640; attempts/successes=0/0. This is the initial idle terminal state before requesting a fresh native route.
+- Target selected: intermediate square center `10857.5,10152.5,0`, one tile from the player square and adjacent to Sol. Only the native path request will alter location; no direct coordinate mutation. Route result pending.
+
+## 2026-10-20 15:51 Europe/Berlin — [HUMAN VISUAL OBSERVATION — INITIAL SPAWN LOOKED LIKE TELEPORT]
+- User observed Sol appear in front of the player and reported that she teleported. This happened immediately after `NATIVE_SHELL_SPAWN`, which placed the initial actor at the harness-selected square around `(playerX+2, playerY)`; no locomotion request had been sent at that point.
+- Therefore this is an instantaneous initial spawn appearance, not evidence that a movement route teleported. The intended walk is still pending; capture/verify the native route separately so the motion itself is observable.
+## 2026-10-20 15:51 Europe/Berlin — [NATIVE WALK BESIDE PLAYER — COMPLETED]
+- User request: have Sol walk beside the main character. Using the already-running isolated test runtime PID 10264 and the existing native locomotion route, moved Sol from the initial spawn square toward adjacent target center 10857.5,10152.5,0.0. No teleport, manual X/Y adjustment, new runtime, or production change was used.
+- Runtime evidence: 08_RUNTIME_TEST/runtime-evidence/20261020_154355/debuglog_tail_latest.txt lines 541-544 show command user_move_native_20261020_1603, NATIVE_SHELL_MOVE, request id 1, and native MOVE_REQUEST to the adjacent target. Lines 554-555 show route progress=found, target reached at 10857.5,10152.5,0.0, path length 0, pathExecAttempts=112, pathExecSuccesses=112, pathExecSkippedCurrentState=0; the trace entered PlayerMovementState from IdleState while path ownership was true, then completed with pathAttached=false, shouldBeMoving=false, and cancelled=false.
+- The user earlier described the first appearance as teleport. That was the initial actor spawn, which placed the shell at its spawn square. The separately logged route above is native path execution from that spawn to the adjacent target; it is not evidence of teleport movement.
+- Runtime identity: PID 10264, one verified Java PZ process; build build_foundation_phase1_20261020_1504; JAR SHA-256 2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF.
+- Limitation: this is a one-shot native walk to stand beside the player. Continuous follow while the player keeps moving is not exposed for SolNativeShell; the existing Lua Sol.follow() is a separate legacy zombie-body controller and was not invoked.
+- Production remains untouched. Next: user may inspect Sol beside the player in the current runtime; if continuous follow is desired, first design/verify a native-shell follow command in the test harness before implementation.
+## 2026-10-20 15:56 Europe/Berlin — [8-TILE WALK — FAILED; RETURN NOT RUN]
+- User requested a visible 8-tile walk and return. Read-only preflight confirmed the existing single runtime PID 10264, native shell at `10857.5,10152.5,0.0`, and idle movement state with prior route complete at 112/112 executions.
+- Issued one native outbound request: `move8_out_20261020_1653|NATIVE_SHELL_MOVE|10849.5,10152.5,0`. Runtime accepted request id 2; path found with length 8.0 and next waypoint `10856.5,10152.5,0.0`.
+- Runtime snapshots at `move8_out_t1_20261020_1653` and `move8_out_t2_20261020_1653` / `move8_out_t3_20261020_1653` show the position remained `10857.5,10152.5,0.0` after approximately 6 seconds. At the later snapshots: `moving=false`, `playerMoving=false`, `bPathfind=false`, while `shouldBeMoving=true`, `usingPath=true`, `started=true`, `pathAttached=true`, `progress=found`, `cancelled=false`, `pathLength=8.0`, `pathNext=true` for `10856.5,10152.5,0.0`; path execution attempts/successes stopped at `1258/1258` with zero skipped-current-state executions. No coordinate translation was observed.
+- Visual check via Windows Computer Use at the Project Zomboid window showed Sol and the main character still standing together. Two captures separated by several seconds showed no visible walking or separation. This disproves the prior inference that the one-tile route was visibly established; its state/log evidence alone was insufficient to claim observable locomotion.
+- Root cause remains unresolved. Evidence is consistent with a native path/locomotion transition that starts but does not advance position; do not classify this as obstruction without further runtime proof.
+- The 8-tile return was not run because outbound movement did not happen. No teleport, manual X/Y change, patch, second runtime, or production edit.
+- Runtime: PID 10264, one Project Zomboid process; build `build_foundation_phase1_20261020_1504`; JAR SHA-256 `2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF`.
+- Next exact step: cancel the stalled request using the existing `NATIVE_SHELL_STOP`, verify the path is detached and movement flags are idle, then diagnose the movement state/PathFindBehavior2 advancement before attempting another walk.
+## 2026-10-20 15:57 Europe/Berlin — [OCCUPIED-WAYPOINT EVIDENCE — ROUTE RETARGETED]
+- Follow-up NATIVE_SHELL_VIS_STATUS command move8_collision_check_20261020_1657 returned player localPos=10856.357,10152.566 and shell shellPos=10857.5,10152.5, distance 1.1445; both squares are valid and visible, alpha/targetAlpha remain 1.0/1.0.
+- The stalled 8-tile route's pathNext=10856.5,10152.5 is the center of the player's current square (the player coordinate floors to tile 10856,10152). This is direct evidence that the chosen first waypoint overlaps the occupied player tile and strongly supports collision/occupancy as the immediate blocker. It does not prove or disprove broader autonomous awareness.
+- Existing stop command move8_stop_20261020_1656 returned stopped=true. Post-stop move8_poststop_20261020_1656: usingPath=false, pathAttached=false, cancelled=true, movement flags false, but shouldBeMoving=true remains stale. No position changed.
+- Next controlled trial: native 8-tile route away from the player in +X, target 10865.5,10152.5,0.0. Only if that visibly reaches its target will a native return to adjacent start 10857.5,10152.5,0.0 be sent.
+## 2026-10-20 15:58 Europe/Berlin — [SECOND DIRECTION TRIAL — FAILED; USER REDIRECTED NORTH]
+- Retargeted away from the player at the user's suggestion: native request move8_out_away_20261020_1657 to 10865.5,10152.5,0.0, path length 8.0, first waypoint 10858.5,10152.5,0.0 (unoccupied).
+- Runtime snapshots move8_away_t1_20261020_1657 and move8_away_t2_20261020_1657 remained at 10857.5,10152.5,0.0. At t2, moving/playerMoving/bPathfind were false while shouldBeMoving/usingPath/started/pathAttached were true; counters advanced from 1978 to 2282 but position did not. Visual frame showed Sol turned toward the target but had not translated.
+- Existing native stop move8_stop_east_20261020_1658 returned stopped=true. Post-stop status move8_stop_east_status_20261020_1658 confirms path detached and cancelled=true, position unchanged, and stale shouldBeMoving=true.
+- This second unoccupied first waypoint also failed to produce translation, so player collision is proven for the first route's chosen waypoint but is not sufficient to explain all movement failures. User redirected the next trial to 8 screen-up squares; route will use both X and Y decreasing, avoiding the player's occupied square.
+## 2026-10-20 15:59 Europe/Berlin — [USER VISUAL CONFIRMATION — WALKS IN PLACE; TEST STOPPED]
+- User directly observed that Sol walks in place without changing location. The north/up request had been accepted as native path request id 4 to 10849.5,10144.5,0.0; the runtime found a route of pathLength=13.071068, but the actor position remained 10857.5,10152.5,0.0.
+- Post-stop snapshot move8_north_poststop_20261020_1659: moving=false, playerMoving=false, bPathfind=false, usingPath=false, pathAttached=false, cancelled=true; shouldBeMoving=true remains stale. The trace's next waypoint was 10856.5,10151.5, but no position translation occurred. pathExecAttempts/successes=3363/3363 and skipped=0.
+- Stop command move8_north_stop_20261020_1659 returned stopped=true. No return route was issued because the outbound leg never moved. All movement attempts are now stopped.
+- Combined evidence: the first failed route's waypoint overlapped the player's tile, but the second unoccupied +X route and the north/up route also failed to translate. Player collision may explain the first attempt; it is not the sole observed cause. User's "walks in place" observation is confirmed by the unchanged runtime position. Broader "awareness" behavior remains unproven; native locomotion translation is the unresolved blocker.
+- No further movement, patch, teleport, manual X/Y, second runtime, or production change. PID 10264, build build_foundation_phase1_20261020_1504, JAR SHA-256 2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF.
+- Next: stop this phase here as requested. A later diagnosis must compare native movement-state updates with actual position translation and repair the locomotion pipeline before repeating the 8-tile round trip.
+## [ENGINEERING POLICY — EXECUTION EVIDENCE GATE ACTIVE]
+- From 2026-10-20 onward, every Sol subsystem must pass: REFERENCE → EXECUTION EVIDENCE PACK → APPROVED ADAPTATION → IMPLEMENTATION → MACHINE PROOF → HUMAN VISUAL PROOF. No implementation begins from a general similarity claim.
+- The Evidence Pack must establish exact reference files/symbols/call chain/state owner/Vanilla dependencies/failure and cleanup semantics/Sol gap/adaptation boundary/test before candidate API code is written.
+
+## [RUNTIME PROOF POLICY — MACHINE + HUMAN]
+- Telemetry alone cannot prove visible behavior. Path attachment, execution counters, and moving flags do not prove displacement. Observable behavior requires machine evidence plus human observation in the live scene; any mismatch remains an investigation item and is not PASS.
+
+## [HUMAN OBSERVATION TEST RULE — KEEP SOL IN SCENE]
+- Ordinary tests keep the initial Sol actor in scene. No teleport, raw-coordinate reposition, manual respawn, or hidden reposition. Use native locomotion and keep Sol continuously observable. Only initial spawn, lifecycle recreation/recovery, or a teleport-specific test may use the stated exception.
+
+## [FINAL UI REQUIREMENT — RESPAWN DEBUG ONLY]
+- Development may retain the right-click Respawn Sol action while it remains useful. It is not a final gameplay feature. Production UI must not expose Respawn Sol, forced cleanup/reset, developer diagnostics, or equivalent lifecycle manipulation to ordinary users. No removal is authorized during current tests.
+
+## [HUMAN + RUNTIME OBSERVATION — MOVEMENT WITHOUT DISPLACEMENT]
+- Latest visible test: Sol visibly walked in place without changing location. Native path was found/attached and the next waypoint on the first 8-tile route was 10856.5,10152.5, matching the player's occupied tile from localPos 10856.357,10152.566. This supports a target/occupancy conflict for that route, not a conclusion about the entire locomotion architecture.
+- After cancellation, shouldBeMoving=true remained while moving/playerMoving/bPathfind were false and usingPath/pathAttached were false. Record as locomotion cleanup debt for the later locomotion phase; do not patch locomotion during Phase 2.
+- Later unoccupied +X and north/up routes also produced no translation; this makes player collision insufficient as a sole explanation. Keep this as an unresolved locomotion observation, without changing Phase 2 acquisition work.
+- Runtime PID 10264, one PZ process; build build_foundation_phase1_20261020_1504; JAR SHA-256 2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF. Production remains untouched.
+
+Next Phase 2 step: verify the existing bus self-test leak fix after a clean reload using the proven Phase 1 launch procedure; do not start candidate acquisition unless the clean bus regression passes.
+## 2026-10-20 16:01 Europe/Berlin — [PHASE 2 RELOAD PRECONDITION — CLOSED CLEANLY]
+- Following the Phase 2 request, closed the already-running isolated test window PID 10264 using the game window's normal close shortcut after the active native path had been stopped. Refreshed app inventory no longer listed Project Zomboid.
+- Process gate verified with the installed PZ JRE path filter: PZ_COUNT=0. Existing launch metadata confirmed the recovered Phase 1 args file, test JAR, working directory, and test profile. No new process has been launched in this entry.
+- Next: launch exactly one process through launch_foundation_phase1_evidence.ps1 with these same recorded inputs; confirm PZ_COUNT=1 and READY, then run PERCEPTION_SELFTEST followed by PERCEPTION_STATUS against the corrected Lua source.
+
+[RELOAD ATTEMPT 1 — FAILED BEFORE GAME START; ARGS PATH CORRECTED] 2026-10-20 16:12:31
+Status: [FAILED] (launcher invocation only; not a Sol or PerceptionBus failure)
+What happened: The recovered Phase 1 launcher was invoked with relative ArgsFile, JarPath, and ProfileRoot values. Java resolves its argfile from the Project Zomboid working directory, so startup ended before READY.
+Runtime proof: evidence directory 08_RUNTIME_TEST\runtime-evidence\20261020_161143; PID 27700; EXIT_CODE=1; READY=False; PZ_COUNT=0. stdout: "Error: could not open '.\08_RUNTIME_TEST\SolNativePrototype\build_foundation_phase1_20261020_1504\sol-foundation-phase1-runtime.args'".
+Root cause: Java argfile path was relative to the workspace instead of absolute from the game process working directory.
+Code changes: none. No runtime command was sent. Production untouched.
+Next step: verify Project Zomboid process count is zero, then make one retry through the same wrapper using absolute paths for ArgsFile, JarPath, and ProfileRoot. No second runtime may launch if PZ_COUNT >= 1.
+
+[PHASE 2 BUS REGRESSION — SELFTEST RESULT] 2026-10-20 16:15:02 +02:00
+Status: [IN PROGRESS] (self-test passed; post-test status still pending)
+Test: Fresh runtime loaded current SolPerceptionBus.lua; issued PERCEPTION_SELFTEST only.
+Runtime proof: PID 31688; PZ_COUNT=1; build_foundation_phase1_20261020_1504; native bridge JAR SHA-256 2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF. Log evidence: 08_RUNTIME_TEST\runtime-evidence\20261020_161238\debuglog_tail_latest.txt, frame 4759: COMMAND id=phase2_selftest_20261020_161413 cmd=PERCEPTION_SELFTEST; [SolTest][PERCEPTION] SELFTEST passed=true detail=bounded retention, sequence, copy isolation, freshness, event gap, epoch invalidation; STATUS OK:PERCEPTION_SELFTEST.
+Human proof: Not required for P2-A bus cleanup test; game window remained visually black at capture, so no scene-visible behavior is claimed.
+Changes: none during this test. Production untouched.
+Next step: issue PERCEPTION_STATUS and inspect snapshot presence, restored _latest, event count/sequences, epoch/freshness and worker state. Do not proceed to world candidate implementation unless clean status passes.
+
+[PHASE 2 BUS REGRESSION — RUNTIME PROVEN] 2026-10-20 16:15:26 +02:00
+Status: [COMPLETED] for P2-A bus regression only; overall Phase 2 remains [IN PROGRESS].
+Test order: Fresh clean reload via recovered Phase 1 wrapper; PERCEPTION_SELFTEST; then PERCEPTION_STATUS.
+Runtime proof: PID 31688; PZ_COUNT=1; build_foundation_phase1_20261020_1504; bridge JAR SHA-256 2EC029F95FEA8D0CD614384E9AC1C70DBA7269D65F746DEAAE39AB2908BF64DF. Evidence: runtime-evidence\20261020_161238\debuglog_tail_latest.txt. SELFTEST at frame 4759 passed=true (bounded retention, sequence, copy isolation, freshness, event gap, epoch invalidation). STATUS at frame 13219 returned events=0 snapshots=0 epoch=1 freshness=snapshot_missing retained=0 dropped=0 and STATUS OK.
+Status file proof: profile\Zomboid\Lua\SolPerceptionStatus.txt recorded eventSequence=0, snapshotSequence=0, locationEpoch=1, retainedEvents=0, droppedEvents=0, snapshotPresent=false, snapshotFreshness=snapshot_missing, snapshotComplete=false, snapshotTruncated=false, candidateCount=0. This confirms the synthetic snapshot/events did not leak and the baseline nil _latest was restored as absent. The PerceptionBus itself contains no scanner/worker; candidate acquisition remains unimplemented, so no duplicate perception scanner can be active in this build.
+Human proof: Not required for the bus cleanup test. The game window was black at capture; no visual gameplay behavior is claimed.
+Changes: none. No build, candidate API, locomotion, or production changes. AOT warning AccessDenied was emitted by pzopt under the protected game install; game remained running and the test command channel continued to respond. It is unrelated to the bus result.
+Next step: complete Evidence Pack A–L against pinned Living Fellows and exact Build 42.21.0 JAR before any candidate API code. Visual world tests remain pending.
+
+[REFERENCE DISCOVERY — BUILD 42.21.0 JAR IDENTITY] 2026-10-20 16:16:58 +02:00
+Status: [IN PROGRESS]
+Artifact: C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\projectzomboid.jar; size 65,682,033 bytes; last-write 2026-10-14 13:49:23 local; SHA-256 e1a69eb743ede60b213a0fe7f8b83d4fcab773036d256cc4543a336f3b058a33.
+REA evidence: open_binary recognized a ZIP archive. Evidence ID ev_afef1a0034cc9b360653a7c227e951e8dd47c7d8c1dcc41630d89894c5ca1dc5; provider REA safe artifact graph provider 1. Artifact inventory covered 78,379/78,379 nodes and observed 24,697 file entries, 1,444 directories, zero integrity contradictions. The full response exceeded the MCP stdio budget; retained evidence summary confirms source inventory is complete but does not establish Java API behavior.
+Limitations: JAR inventory is container-only evidence; no API or execution claims are made from it. Need inspect exact Java class/method contracts from bytecode and signatures separately.
+Next step: study pinned Living Fellows bridge/call-chain and compare the relevant 42.21.0 classes using targeted class inspection.
+
+[REFERENCE TOOL GAP — JAVAP NOT IN GAME JRE] 2026-10-20 16:17:59 +02:00
+Status: [REFERENCE GAP IDENTIFIED]
+Finding: The installed PZ runtime directory contains java.exe but the expected sibling javap.exe is absent, so the attempted targeted API inspection failed before reading class signatures.
+Impact: No game JAR or Sol source was modified; no API claim is inferred from this failure.
+Next step: discover an already-installed JDK/javap or use an available non-mutating REA/class-file evidence route, then inspect exact 42.21.0 method signatures and failure semantics.
+
+[REFERENCE DISCOVERY — BOUNDED ZOMBIE SNAPSHOT CONTRACT] 2026-10-20 16:18:32 +02:00
+Status: [REFERENCE RESEARCH IN PROGRESS]
+Pinned reference: Living Fellows branch living_fellows/0.26.51, VERSION 0.26.51, commit f0eaa49802b5b1c767adf175a57a7ad41fa676c4.
+Source proof: bridge/src/main/java/survivorcompanion/bridge/SCBridge.java:954-986 declares public static int fillZombieSnapshot(KahluaTable out, int maximum), checks onGameThread, wipes output, reads IsoWorld.instance.getCell().getZombieList(), preflights size against maximum, then copies actor/x/y/z quadruples into one caller table. Null cell/list returns 0. Overflow writes requiredCount and returns -2 without publishing a prefix. RuntimeException or LinkageError wipes output and returns -1 with lastFailure text.
+Build 42.21.0 JAR proof: projectzomboid.jar SHA-256 e1a69eb743ede60b213a0fe7f8b83d4fcab773036d256cc4543a336f3b058a33. JDK 17 javap signatures show public IsoWorld.instance, IsoWorld.getCell(): IsoCell, private final IsoCell.zombieList: ArrayList<IsoZombie>, public IsoCell.getZombieList(): ArrayList<IsoZombie>, and public IsoMovingObject.getX/getY/getZ(): float. IsoCell.getZombieList bytecode returns the private field directly (getfield zombieList; areturn), proving a live mutable roster reference, not a defensive copy.
+Thread evidence: Living Fellows guards the bridge method with onGameThread; exact helper implementation still to inspect. This is direct reference proof of intended calling thread, not a claim that the vanilla API itself documents thread safety.
+REA evidence: ZIP inventory evidence ev_afef1a0034cc9b360653a7c227e951e8dd47c7d8c1dcc41630d89894c5ca1dc5 confirms the shipped JAR identity and archive inventory only; it is not semantic proof.
+Next step: finish exact call chain/state ownership and tests, inspect game-thread guard/API failure details, then finish Sol current-gap and adoption sections before candidate bridge code.
+
+[BUILD 42.21.0 IDENTITY CONFIRMED] 2026-10-20 16:20:04 +02:00
+Status: [REFERENCE RESEARCH IN PROGRESS]
+Runtime log at profile\Zomboid\Logs\logs_2026-10-20_15-44\2026-10-20_15-43_DebugLog.txt line 62 records version=42.21.0 4a0e9546ec demo=false. The exact installed projectzomboid.jar SHA-256 is E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33. This ties the javap contract evidence to the requested live Build 42.21.0 install.
+
+[REFERENCE DISCOVERY — CALL CHAIN, OWNERSHIP, BOUNDS, AND INCOMPLETE SEMANTICS] 2026-10-20 16:20:37 +02:00
+Status: [REFERENCE RESEARCH IN PROGRESS]
+Exact chain at Living Fellows commit f0eaa49802b5b1c767adf175a57a7ad41fa676c4: SCBootstrap loads SCPerceptionScan/SCSenses/SCThreatSet (SCBootstrap.lua:120-124) -> SCRuntime attaches one productionTick to Events.OnTick and calls SCScheduler.tick -> the 1 ms decision task calls serviceRecord -> SCDecision.update gates Senses.snapshot per actor at perceptionIntervalMs=500 -> Senses.snapshot and refreshImmediate (reflex 100 ms) call Scan.nativeCandidates -> nativeBulkSnapshot synchronously calls SC.Call.static(SCBridge, fillZombieSnapshot, scratch, maximum) -> SCBridge reads the cell zombie list and copies actor/x/y/z -> Scan filters by same Z and squared radius, queues bounded candidates -> SCSenses validates candidate contacts and builds its per-actor current snapshot -> SC.ThreatSet retains bounded best records.
+State ownership: IsoCell owns the mutable live ArrayList; Java writes into a caller-owned KahluaTable. SCPerceptionScan owns shared producer buffers, retry/cadence/generation/evidence state; each observer's rootRuntime.senses owns its cursors, queue and current facts; SC.ThreatSet owns bounded classifications; SCScheduler/SCRuntime own the main tick, runnable schedule, actor due clocks and frame budget.
+Defaults: SCConfig.lua defines frameBudgetMs=3, perceptionIntervalMs=500, perceptionReflexIntervalMs=100, perceptionNativeCandidatesPerSlice=64, nativeZombieSnapshotIntervalMs=250, nativeZombieSnapshotMaximum=8192, perceptionNativeSharedPulseMs=50, perceptionNativeCompletedHoldMs=1000, perceptionNativeRosterQueryPerSlice=128 and perceptionNativeCandidateQueueHardCap=64. SCPerceptionScan bounds producer work to at most 128 list entries per slice (with a minimum progress floor of four before checking the elapsed deadline); LOS admissions are capped at 12 by default, queue at 64, visual validations at 16 and 1 ms default deadline.
+Failure semantics: Bridge absence/unavailable return, malformed output, negative bridge status, or overflow never produce a trusted bulk roster; Java overflow returns -2 and no prefix, then Lua falls back to its shared cursor. Sliced traversal invalidates absence evidence on count change and certifies a non-empty roster only after two complete passes observe the same identity set. Perception completion also requires discovery complete and visual validation complete; Senses.isCompleteObservation rejects invalid, incomplete, pending or stale observations. A zero threat count by itself is not safe negative evidence.
+Important reference edge: SCBridge.fillZombieSnapshot returns 0 for a null cell or null zombie list, so reference maps that state to an empty successful roster. Sol must ADAPT that edge to unavailable/incomplete rather than authoritative zero unless world/cell/list availability is independently proven.
+Reference test proof sources: tests/gameplay/perception_topology_regression_harness.lua models coherent fast-path, 250 ms reuse, 129/1000-roster cursor completion, moving candidates, deadline floors, malformed output rejection and overflow fallback without fresh negative proof. tests/gameplay/test_gameplay_static.py asserts the one permitted getZombieList site, cursor/deadline caps, floor/radius filtering and LOS cap. tests/core/SCNativeApiSignatureTest.java reflection-checks fillZombieSnapshot(KahluaTable,int):int. These are test source evidence, not runtime evidence; not rerun in this research pass.
+
+[BUILD 42.21.0 IDENTITY FIELD — RUNTIME-LOCAL CANDIDATE KEY] 2026-10-20 16:21:18 +02:00
+Status: [REFERENCE RESEARCH IN PROGRESS]
+javap on the pinned installed projectzomboid.jar shows IsoMovingObject.getID(): int returns its id field. Constructor bytecode increments the class idCount and stores that value in the object. IsoZombie inherits IsoMovingObject, so this is a concrete runtime-local candidate key for a snapshot. It is not claimed stable across process/world reloads. getOnlineID(): short also exists on IsoZombie but is network-oriented and not selected for the local perception snapshot.
+
+
+[PHASE 2 — EXECUTION EVIDENCE PACK A–L COMPLETED] 2026-10-20
+Status: [REFERENCE RESEARCH COMPLETED] for bounded zombie candidate acquisition; [IMPLEMENTATION AUTHORIZED BY THE COMPLETED EVIDENCE GATE, NOT YET STARTED IN THIS ENTRY].
+Living Fellows is pinned to 0.26.51 / f0eaa49802b5b1c767adf175a57a7ad41fa676c4. Build 42.21.0 revision 4a0e9546ec is tied to projectzomboid.jar SHA-256 E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33.
+Key decision: adopt a narrow main-thread bounded zombie snapshot and Lua normalization, but make missing world/list and overflow explicitly incomplete. Do not implement LOS/hearing/occupancy or locomotion in this change. Full evidence and the A–L decision table are appended in SOL_FOUNDATION_PHASE2_PERCEPTION_BUS_REPORT.md.
+
+
+[REFERENCE ADDENDUM — KAHALUA TABLE OUTPUT CONTRACT] 2026-10-20 16:22:52 +02:00
+Status: [REFERENCE RESEARCH COMPLETED; IMPLEMENTATION CONTRACT REFINED]
+[SOURCE PROOF] Living Fellows SCBridge.luaValue converts every Number to Double before table storage; put(KahluaTable,int,Object) uses rawset(int,Object); fillZombieSnapshot begins with wipe and writes its count/payload into the caller-owned table.
+[BUILD 42.21.0 API PROOF] javap on the exact projectzomboid.jar confirms KahluaTable.rawset(int,Object), rawget(int), and wipe() are public interface methods. This provides the concrete direct output-table contract needed for SolBridge and avoids leaving boxed Integer/Float values that Lua might treat as userdata.
+
+# [REFERENCE RESEARCH IN PROGRESS] Phase 2 native zombie snapshot API — 2026-10-20 16:25 Europe/Berlin
+
+- Test-only source changes are present in `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolBridge.java` and `SolExposure.java`: bounded main-thread `fillZombieSnapshot(KahluaTable,int)`, explicit failure/overflow handling, numeric normalization, and bridge exposure validation. The Kahlua output contract is grounded in the pinned Build 42.21.0 JAR and Living Fellows evidence recorded in the Phase 2 report.
+- The earlier attempted Lua patch did apply: `SolPerceptionBus.lua` now has a 1500 ms freshness constant and copy support for origin IDs, player facts, and source status/count. `captureWorld` and runtime scheduling are not implemented yet. Java changes have not been compiled or run; no runtime acquisition proof exists.
+- No production files were modified. Before any later launch, count PZ processes and require zero after safely closing the current test runtime.
+- Next: finish bounded Lua normalization/publication on the existing runtime poll, inspect and test the candidate API, perform requested external reference research before any build, then build and launch only after recording process count.
+
+# [REFERENCE RESEARCH IN PROGRESS] Phase 2 Lua acquisition path — 2026-10-20 16:29 Europe/Berlin
+
+- Added `SolPerceptionBus.captureWorld`: reuses the caller-owned native scratch table, reads a bounded roster through `SolBridge.fillZombieSnapshot`, normalizes same-floor zombies within radius 24, records observer/player facts, represents overflow as truncated/incomplete, and leaves unavailable bridge data unpublished so prior data can age stale. No LOS, hearing, threat scoring, occupancy, or movement logic was added.
+- Added an opt-in `PERCEPTION_CAPTURE` diagnostic and a 250 ms capture pulse on the existing `SolRuntimeTest` poll. Status includes age, completeness, truncation, observer/player distance, and source status. The existing event handler is unchanged.
+- Extended Bus self-test assertions for copy isolation of origin/player/source metadata. Static source edits only; this runtime has not loaded them, and no build or verification has occurred. The current PZ process remains PID 31688, PZ_COUNT=1.
+- Next: review the exact source and compile surface, obtain the required official/community/GitHub research before building, then close the existing test runtime and verify PZ_COUNT=0 before creating/launching a new test build.
+
+# [REFERENCE RESEARCH COMPLETED — PRE-BUILD REVIEW] Phase 2 API/cadence — 2026-10-20 16:34 Europe/Berlin
+
+- Official Project Zomboid Javadocs expose `IsoCell.getZombieList()` as `ArrayList<IsoZombie>`: https://projectzomboid.com/modding/zombie/iso/IsoCell.html . This confirms the public API shape, while the exact installed Build 42.21.0 JAR signature and bytecode remain the build-specific evidence already recorded above.
+- Official LuaEventManager Javadocs expose the `OnTick` dispatch and an internal `IsMainThread` helper: https://projectzomboid.com/modding/zombie/Lua/LuaEventManager.html . The community Lua event reference describes `OnRenderTick` as firing each render tick: https://demiurgequantified.github.io/ProjectZomboidLuaDocs/md_Events.html . Neither public reference proves that the current `OnRenderTick` callback is running on `MainThread`; the Java guard returns unavailable off-thread, and runtime proof is mandatory.
+- A Build 42 community guide says API signatures should be checked against the current decompiled game artifact and that method existence alone does not establish rendered behavior: https://steamcommunity.com/sharedfiles/filedetails/?id=3776551449 . This supports using the exact installed JAR and keeping visual claims separate.
+- GitHub/community examples show zombie-list reads inside mod callbacks (e.g. https://github.com/ATPHHe/Customizable-Zombies/blob/master/media/lua/server/ZombieScript%20%28CZ%29.lua), but these are older and do not establish Build 42.21 thread safety. The exact installed JAR + in-game guard remains authoritative.
+- Conclusion: candidate bridge method signatures are locally verified, but OnRenderTick thread identity remains [UNRESOLVED] pending the runtime return code. Before a build, use a fresh test-only build directory and record hashes; before launch, close PID 31688 and require PZ_COUNT=0. No production mod/package/runtime may be touched.
+
+# [FAILED — BUILD TOOL INVOCATION] 2026-10-20 16:38 Europe/Berlin
+
+- The first isolated javac attempt failed before compiling because Java response-file parsing consumed Windows backslashes from the absolute source paths (`file not found: C:UsersJAMAL...`). No class/JAR was produced, no game process or runtime was touched, and no production files changed.
+- Root cause: path escaping in generated javac.args, not a source/API failure. Fix: regenerate argfile paths with forward slashes and retry in the same test-only build folder; verify no output artifacts from failed attempt are treated as a build.
+
+# [FAILED — BUILD TOOLCHAIN MISMATCH] 2026-10-20 16:39 Europe/Berlin
+
+- The corrected Java argfile was parsed, but JDK 17 compilation rejected the installed PZ 42.21.0 classes as classfile version 69.0 (the selected javac supports through 61.0). The subsequent unresolved-symbol diagnostics are cascading from that version mismatch; they do not establish source errors.
+- No valid class/JAR output was produced, no PZ process or runtime was changed, and production remains untouched.
+- Next: identify an installed Java 25 toolchain matching classfile 69; if absent, preserve this as a blocker rather than downgrade/transform PZ classes. Retry only with the matching compiler and a clean isolated output folder.
+
+# [BLOCKED — MATCHING COMPILER NOT INSTALLED] 2026-10-20 16:42 Europe/Berlin
+
+- Checked installed toolchains: the game bundles OpenJDK Runtime 25.0.1 (Zulu); available javac commands are JDK 17.0.20 and JetBrains Runtime 17.0.14. No Java 25 javac/compiler was found in the checked installation roots.
+- The isolated build cannot proceed against classfile version 69 without a matching compiler. No attempt will be made to alter PZ classes or downgrade bytecode. No valid build artifact exists, and no game process was launched or changed.
+- Exact next step: obtain authorization to install a user-scoped Java 25 JDK, then compile in `build_phase2_perception_20261020_1638`; alternatively provide an existing Java 25 JDK path. After successful build, count PZ processes, close PID 31688, verify zero, then launch only the new test build.
+
+# [TOOLCHAIN READY] 2026-10-20 16:46 Europe/Berlin
+
+- After the user approved a user-local install route, downloaded Eclipse Temurin JDK 25.0.4.1+1 from the official Adoptium GitHub release ZIP, verified SHA-256 `00c847d804f4a78e9f04f2683faf14fed898535b177b7fc704486cb0284e9283`, unpacked to `%LOCALAPPDATA%\Programs\Eclipse Adoptium\jdk-25.0.4.1+1`, and verified `javac 25.0.4.1`.
+- This resolves the earlier toolchain blocker. No PZ process or production file was changed. Next: retry the isolated test-only compile using JDK 25.
+
+# [COMPLETED — TEST BUILD] Phase 2 native perception candidate — 2026-10-20 16:48 Europe/Berlin
+
+- Compiled all six test-only Java source files against the installed Project Zomboid 42.21.0 JAR with Temurin javac 25.0.4.1; packaged `08_RUNTIME_TEST/SolNativePrototype/build_phase2_perception_20261020_1638/SolNativeBridge.jar`.
+- Build JAR SHA-256: `7CFD7FEE8EF0303B9F3E0044F345CF53312E9BE52DAA534391D4AA246723FFDB`. Source compile and JAR packaging exited successfully. This is build proof only, not runtime proof.
+- PID 31688 remains the existing test runtime; no new instance started. Before launch, verify process count and close PID 31688 to zero. Next: inspect JAR ABI and launcher classpath, produce test-only launch args, then launch exactly one instance.
+
+# [STATIC ABI VERIFIED] 2026-10-20 16:51 Europe/Berlin
+
+- `javap` against the new bridge JAR and exact installed game JAR reports `public static int fillZombieSnapshot(se.krka.kahlua.vm.KahluaTable, int)`, matching the exact required signature. Build-only static proof; no call made in a running game.
+- Created isolated runtime args `build_phase2_perception_20261020_1638/sol-phase2-perception-runtime.args`, replacing only the test bridge JAR classpath entry. Args SHA-256: `88F7310E6BEEC81936E2346C1C14B02A0A54B2583A2919F8B42561745E0512C8`.
+- Next: gracefully close the currently running test runtime PID 31688 and verify PZ_COUNT=0. Launcher has its own prelaunch guard; do not run it until zero.
+
+# [COMPLETED — SAFE TEST RELOAD PRECONDITION] 2026-10-20 16:53 Europe/Berlin
+
+- Sent a normal main-window close to PID 31688 (`Project Zomboid`); it exited within 30 seconds. Confirmed exact PZ_COUNT=0 / no remaining PIDs.
+- No force termination was needed. Next: launch the single isolated Phase 2 test build through the recovered launcher, whose prelaunch guard checks the same PZ runtime path.
+
+# [IN PROGRESS — TEST RUNTIME STARTED] 2026-10-20 16:32 Europe/Berlin (launcher timestamp)
+
+- Launcher metadata proves prelaunch PZ_COUNT=0 and started exactly one test process: PID 23104, current PZ_COUNT=1. Build 42.21.0, revision `4a0e9546ec`; bridge SHA-256 `7CFD7FEE8EF0303B9F3E0044F345CF53312E9BE52DAA534391D4AA246723FFDB`; args SHA-256 `88F7310E6BEEC81936E2346C1C14B02A0A54B2583A2919F8B42561745E0512C8`.
+- Startup is still active. Logs show PZ loaded Sol mod and Java 25 class version 69.0. Startup emitted AngelCodeFont page texture errors and baseline asset warnings; their relationship to display is not yet established. Runtime command-channel readiness and perception pulse have not yet appeared. No command has been issued into this process.
+- Next: wait for `Runtime command channel READY`, then use only existing harness commands to prove the API main-thread guard, candidate snapshot, bus self-test, status, and visible state if the UI is inspectable. If the renderer remains inaccessible, keep human visual proof unresolved.
+
+# [COMPLETED — BUS SELF-TEST / BLOCKED — SOL CANDIDATE CAPTURE] 2026-10-20 16:33 Europe/Berlin
+
+- Runtime command `phase2_selftest_20261020_163405|PERCEPTION_SELFTEST` completed at frame 359: `passed=true`, detail `bounded retention, sequence, copy isolation, freshness, event gap, epoch invalidation`.
+- `SolNativeBridge READY envId=928368154 exposures=1 restores=0 bridgePresent=true`; runtime command channel is active. Current runtime state file reports `body=false`, player at `10835.5,10144.5,0`, and `snapshotPresent=false`, `snapshotFreshness=snapshot_missing`, `candidateCount=0`. This means no Sol-centered perception snapshot was attempted; zero candidates is not a perception result.
+- Added test-only command `PERCEPTION_BRIDGE_PROBE` to call the native read-only snapshot directly without spawning an actor or publishing a Sol snapshot. This will exercise the game-thread guard and loaded-world roster independently. It has not yet run.
+- Next: gracefully close PID 23104, verify PZ_COUNT=0, relaunch the same isolated test build, run the bridge probe, then distinguish bridge API success from Sol-centered capture (still blocked while body=false).
+
+# [COMPLETED — SAFE TEST RELOAD PRECONDITION] 2026-10-20 16:35 Europe/Berlin
+
+- Sent normal main-window close to PID 23104; it exited within 30 seconds. Verified PZ_COUNT=0 and no matching PZ PID. No forced termination.
+- Next: invoke the recovered launcher again with the same isolated test JAR/args; its own prelaunch guard must also record zero.
+
+# [FAILED — LUA HARNESS LOAD] 2026-10-20 16:35 Europe/Berlin
+
+- In the second test launch PID 32240, the newly edited `SolRuntimeTest.lua` failed compilation with `ArrayIndexOutOfBoundsException: Index 200 out of bounds for length 200` in Kahlua `LexState.new_localvar`. SolNativeBridge still reached READY, but the command harness did not report READY and no bridge probe ran.
+- Cause: the already large Lua test chunk/function exceeded Kahlua's 200-local limit after adding diagnostics/helper locals. This is a test harness source regression, not a Java bridge or Sol actor defect. Do not treat absence of later commands as bridge failure.
+- Next: remove new lexical locals by moving helper/state onto `SolRuntimeTest` table and reuse a single nested scratch/state record; reduce locals in the large command function. Static-review Kahlua local count, then close PID 32240 normally, verify PZ_COUNT=0, and relaunch the same test-only build.
+
+# [IN PROGRESS — LUA LOCAL-CEILING FIX] 2026-10-20 16:36 Europe/Berlin
+
+- Changed the runtime harness to avoid adding lexical locals to its large top-level chunk and command dispatcher: the perception helper is stored on `SolRuntimeTest`, and probe/capture/pulse result values use that table. This removes the newly added declarations implicated by the Kahlua limit while retaining the same single poll/event.
+- Static source fix only; no runtime loaded this revision. The fix must be verified by the next Lua load before any probe result is accepted.
+- PID 32240 remains the only PZ runtime. Next: close it normally, verify PZ_COUNT=0, relaunch same test build, check command-channel READY and Lua errors, then run `PERCEPTION_BRIDGE_PROBE`.
+
+# [COMPLETED — SAFE TEST RELOAD PRECONDITION] 2026-10-20 16:37 Europe/Berlin
+
+- Closed PID 32240 through its main window; it exited normally within 30 seconds. Verified PZ_COUNT=0. No force termination.
+- Next: invoke guarded launcher with the same isolated test JAR and args to validate the Kahlua local-ceiling fix.
+
+# [COMPLETED — NATIVE BRIDGE PROBE] 2026-10-20 16:37 Europe/Berlin
+
+- On PID 26372 / Build 42.21.0, command `phase2_bridgeprobe_20261020_163740|PERCEPTION_BRIDGE_PROBE` ran at frame 57 and returned `callOk=true result=64 rosterCount=64 requiredCount=nil`. This proves the native method was callable on the existing runtime poll's thread and copied the current 64-entry zombie roster into Lua KahluaTable; no Sol actor or Bus publication was involved.
+- Added `PERCEPTION_PLAYER_PROBE`, source label `SolPlayerOriginProbe`, to exercise Lua tuple normalization, same-floor/radius filtering, Bus publication/copying and observer/player facts using the local player only as a diagnostic center. The result must not be represented as Sol perception. New Lua source has not yet loaded.
+- Next: close PID 26372 normally; verify PZ_COUNT=0; relaunch the same isolated build and run PlayerOriginProbe plus status/self-test. Sol-centered capture still requires Sol.body and remains unavailable in this world.
+
+# [COMPLETED — SAFE TEST RELOAD PRECONDITION] 2026-10-20 16:39 Europe/Berlin
+
+- Closed PID 26372 normally through its main window and verified PZ_COUNT=0. No force termination.
+- Next: launch same test-only JAR and args; check harness loads without local-limit error and run the labeled player-origin probe.
+
+# [COMPLETED — LUA ACQUISITION PATH PROBE; SOL-CENTERED VALIDATION BLOCKED] 2026-10-20 16:40 Europe/Berlin
+
+- PID 29788, PZ 42.21.0, loaded the corrected harness with no Kahlua 200-local exception. `PERCEPTION_PLAYER_PROBE` returned `sequence=1`, `source=SolPlayerOriginProbe`, `complete=true`, `truncated=false`, `roster=61`, `nearby=5`, `observer=4`, `playerDistance=0`. A second sample returned the same roster/candidate counts and sequence 2. This proves Java-to-Kahlua tuple read, Lua tuple normalization/filter, bounded Bus publication and player-fact copy for the labeled player diagnostic only; it is not Sol perception.
+- Final runtime `PERCEPTION_SELFTEST` passed at frame 9879: bounded retention, sequence, copy isolation, freshness, event gap, epoch invalidation. `PERCEPTION_STATUS` showed eventSequence=2, snapshotSequence=2, epoch=1, retained=2, dropped=0, snapshotPresent=true, candidateCount=5, sourceRosterCount=61, sourceStatus=complete, observerId=4, playerId=4, playerDistance=0, sameFloor=true; snapshot was stale at 17,250 ms, as expected beyond the 1,500 ms maximum age.
+- Current Sol status remains `body=false`; no Sol-centered snapshot has been attempted, and no actor was spawned. Sol-specific perception, visible body/model validation, and any visual proof remain unverified. The current process is the one permitted test runtime: PID 29788, PZ_COUNT=1. No production file/runtime was touched.
+- Next exact step: attach/restore Sol.body using an already authorized test action, without changing actor architecture, then invoke `PERCEPTION_CAPTURE` and compare its observed origin ID/position, player facts, candidate roster, freshness, and completeness. If that action is not authorized in Phase 2, stop at the current clearly labeled player-origin evidence and request the user's test-scene setup.
+
+# [IN-SCENE INITIAL SPAWN — TEST ONLY] 2026-10-20 16:41 Europe/Berlin
+
+- User-authorized initial test spawn command `phase2_initial_spawn_20261020_164300|NATIVE_SHELL_SPAWN` ran on PID 29788. RuntimeSupervisor transitioned `WAITING_WORLD -> SPAWN_PENDING -> REGISTERING -> ACTIVE`, actor generation=1; request id=1. No teleport/manual coordinate edit; spawn square was selected by the existing harness near the player.
+- `SolRuntimeStatus.txt` still reports `Sol.body=false`; the active test actor is supervisor-owned and is not currently exposed as the Lua `Sol.body` reference. `Sol.spawn()` is explicitly blocked in NATIVE_SHELL mode, which correctly prevented an unrelated legacy-zombie actor.
+- Existing `SolRuntimeSupervisor.actor()` is already a read-only accessor for the supervisor-owned test shell. Added the minimal test bridge getter `getTestShellActor()` with exposure validation and a distinct `PERCEPTION_SOL_SHELL_PROBE` diagnostic. It reads perception around that existing actor without assigning `Sol.body`, changing its lifecycle ownership, or moving it. New code is not built/loaded yet.
+- Pre-build research found the official `LuaManager.Exposer.exposeLikeJava` API and PZ Lua docs describe direct exposed Java method calls; community references describe the same Java/Kahlua bridge model. This supports only the static exposure shape; the next build/runtime must prove this getter's object return works in this exact Build 42.21.0 environment.
+- Next: create a new isolated `build_phase2_perception_actorhandle_<timestamp>`, compile all sources using JDK 25, hash and inspect ABI. Then close PID 29788 normally, verify PZ_COUNT=0, and use the guarded launcher for one test runtime.
+
+# [COMPLETED — TEST BUILD WITH ACTOR HANDLE] 2026-10-20 16:43 Europe/Berlin
+
+- Compiled all test-only Java sources with Temurin javac 25.0.4.1 against exact PZ 42.21.0. New isolated path: `08_RUNTIME_TEST/SolNativePrototype/build_phase2_perception_actorhandle_20261020_1642/`.
+- ABI proof: `javap` reports both `getTestShellActor(): SolIsoPlayerShell` and `fillZombieSnapshot(KahluaTable,int): int`. This getter wraps the already existing `SolRuntimeSupervisor.actor()` and is read-only; it does not change ownership, set Sol.body, register a second actor, or mutate the shell.
+- JAR SHA-256 `7E6516B77DDDB9258568041EA1E3A80AA2557C907D5ED50456010EA678160208`; args SHA-256 `9515685FC72C52982A5E0501D273FEBDC6497F169555EC6E61F9FB4146614549`.
+- Next: current test runtime PID 29788 has a supervisor-owned actor. Close normally and verify PZ_COUNT=0 before launching the new bridge; its new process will require the documented initial test spawn again if actor state is not persisted.
+
+# [COMPLETED — SAFE TEST RELOAD PRECONDITION] 2026-10-20 16:44 Europe/Berlin
+
+- PID 29788 (with supervisor actor generation 1) closed normally through its main window. Confirmed PZ_COUNT=0 and no matching process. No forced termination.
+- Next: invoke the recovered guarded launcher with the new actor-handle JAR/args; it will independently enforce prelaunch PZ_COUNT=0 and start exactly one instance.
+
+# [PHASE 2 BUS REGRESSION — RUNTIME PROVEN] 2026-10-20 16:46 Europe/Berlin
+- Test scope: existing SolPerceptionBus cleanup only; no code/build/runtime restart and no production interaction.
+- Runtime: Project Zomboid Build 42.21.0 revision 4a0e9546ec; PID 12984; PZ_COUNT=1. Test bridge JAR `build_phase2_perception_actorhandle_20261020_1642/SolNativeBridge.jar`, SHA-256 `7E6516B77DDDB9258568041EA1E3A80AA2557C907D5ED50456010EA678160208`.
+- Commands: `phase2_bus_regression_20261020_165000|PERCEPTION_SELFTEST`, followed by `phase2_bus_status_20261020_165030|PERCEPTION_STATUS`.
+- Runtime proof: self-test returned `passed=true` with bounded retention, sequence, copy isolation, freshness, event gap, and epoch invalidation. Source restoration assertions verify `_eventSequence`, `_snapshotSequence`, `_locationEpoch`, `_events` identity, `_latest` identity, `_droppedEvents`, and `MAX_EVENTS` return to saved values even after synthetic events/snapshot/invalidation.
+- Post-test status: events=1, snapshots=1, epoch=1, retained=1, dropped=0, candidateCount=5, sourceRosterCount=74, complete=true, truncated=false, observer=98, playerDistance=2, sourceStatus=complete. The single retained snapshot is the real `SolNativeShellProbe` snapshot, now stale at 87,534 ms (expected expiry at 1,500 ms); it is not a synthetic self-test record. Runtime logs show the self-test and status commands completed without errors.
+- Result: `[COMPLETED]` P2-A machine regression. No duplicate worker was created; existing poll/event registration was not changed. No regression observed. Human visual proof is not required for P2-A.
+- Remaining: P2-B onward still needs the human confirmation that observer 98 is the visible Sol and that the model is actually visible/complete. Current machine visibility readout alone is not human visual proof. Do not mark Phase 2 complete.
+- Next exact step: obtain the tester's live-scene confirmation; then continue only with evidence-safe perception checks (player movement, a visually reconcilable nearby zombie, and a free/valid movement target before any native locomotion test).
+
+# [P2-B — MACHINE STATE, HUMAN VISUAL GATE OPEN] 2026-10-20 16:45 Europe/Berlin
+- On PID 12984, `PERCEPTION_SOL_SHELL_PROBE` returned sequence=1, error=nil, source=SolNativeShellProbe, complete=true, truncated=false, roster=74, nearby=5, observer=98, origin=(10837.5,10144.5,0), playerDistance=2.
+- `NATIVE_SHELL_VIS_STATUS` at frame 5381: supervisor shell active; gameClient=false, gameServer=false, localIndex=0, shellIndex=1; local player=(10835.5,10144.5,0); shell=(10837.5,10144.5,0); distance=2.0; both square references non-null; `isCanSee=false`, `isCouldSee=false`, `getCanSee=false`, `isVisibleToPlayer=false`; `alpha=1.0`, `targetAlpha=1.0`.
+- This proves native actor handle and position/relative facts are readable and the opacity fields are full. False visibility flags are not evidence that the body is absent, and these state values do not prove rendered completeness. `Sol.body=false` remains an architecture distinction: the supervisor owns the active shell and Lua Sol.body is not assigned.
+- `[IN PROGRESS]` P2-B machine evidence obtained; human visual proof pending. No locomotion command, teleport, raw coordinate edit, or respawn was performed. PID 12984 remains the only PZ process; no production changes.
+
+# [P2-B — HUMAN VISUAL PROOF RECEIVED] 2026-10-20 16:48 Europe/Berlin
+- Tester directly confirmed the active in-scene Sol is "ظاهرة بالكامل وواضحة" (fully visible and clear). This is human visual proof for actor presence/model completeness at the time of observation.
+- Paired machine evidence from PID 12984 remains: supervisor-owned actor ID 98 at (10837.5,10144.5,0), local player at (10835.5,10144.5,0), distance 2; model registration and square references were true/non-null; alpha=1.0 and targetAlpha=1.0. The runtime visibility flags remained false; they do not override the tester's observed rendering and are kept as a separate concept.
+- Status: `[COMPLETED]` P2-B initial self-state/presence check (machine + human). Continuous movement correlation and longer stability are not yet proven. No code/build/runtime restart, movement, teleport, or production change.
+- Next exact step: capture a fresh Sol-centered perception snapshot, then have the tester walk the local player normally around Sol without teleport; compare player position/distance before and after.
+
+# [P2-C — PLAYER RELATION BASELINE] 2026-10-20 16:47 Europe/Berlin
+- Fresh `PERCEPTION_SOL_SHELL_PROBE` on PID 12984 at frame 29861: sequence=2, source=SolNativeShellProbe, complete=true, truncated=false, roster=74, nearby=5, observer=98, origin=(10837.5,10144.5,0), playerDistance=2. The actor origin stayed at the known shell coordinates and its floor matched the player.
+- This is the pre-movement baseline for P2-C. It does not yet demonstrate that player-relative facts update during movement. No movement or coordinate changes were issued by the harness.
+- Next exact step: tester walks the local player normally a few tiles around Sol while keeping Sol in view; then take another Sol-centered probe and compare coordinates/distance. No teleport, target edits, or Sol locomotion.
+
+# [P2-C — PLAYER WALK RELATION UPDATE] 2026-10-20 16:49 Europe/Berlin
+- Tester reported completing the requested normal player walk around Sol while leaving Sol in scene; no Sol movement/teleport/coordinate edit was requested or used.
+- Runtime command `phase2_after_playerwalk_20261020_165100|PERCEPTION_SOL_SHELL_PROBE` on PID 12984 returned at frame 42141: sequence=3, error=nil, source=SolNativeShellProbe, complete=true, truncated=false, roster=81, nearby=6, observer=98, Sol origin=(10837.5,10144.5,0), playerDistance=4.
+- Baseline immediately before the walk (frame 29861): sequence=2, roster=74, nearby=5, same observer=98 and same Sol origin, playerDistance=2. Thus the captured relative distance changed 2→4 while Sol's origin and identity stayed constant; candidate roster/count also refreshed.
+- Status: `[IN PROGRESS]` P2-C machine update proven. Tester confirmed performing the natural walk; visual correlation of the measured 2→4 separation with what was seen remains to be confirmed. No production changes. PID 12984 is still the sole PZ process.
+- Next exact step: obtain tester confirmation that the increased separation matched the scene; after that, test one nearby zombie against the visible scene before advancing to further perception checks.
+
+# [P2-C — HUMAN OBSERVATION CORRELATED] 2026-10-20 16:50 Europe/Berlin
+- Tester clarified: they moved through the scene and Sol stayed in place. This agrees with the machine observation that Sol's origin and identity remained fixed while playerDistance increased from 2 to 4. The test concerns player-relative perception, not Sol following the player.
+- Status: `[COMPLETED]` P2-C for one normal player movement interval: machine relation changed, Sol coordinates/identity stayed constant, and tester observed Sol remain in place while moving. Longer/directional relationship sampling remains untested.
+- Next: inspect whether the current live snapshot exposes candidate identities and coordinates through the existing runtime diagnostics; do not add a patch or restart merely to produce more logs until the existing API is assessed.
+
+# [P2-D DIAGNOSTIC GAP IDENTIFIED / TEST HARNESS ADAPTATION] 2026-10-20 16:51 Europe/Berlin
+- Static evidence in `SolPerceptionBus.captureWorld` shows each nearby candidate retains `id`, `kind`, `x`, `y`, and `z`; current runtime commands reported only candidate counts, so a particular zombie could not yet be matched to scene evidence.
+- Added test-only read-only command `PERCEPTION_DETAIL` to `SolRuntimeTest.lua`. It reacquires around the supervisor-owned shell using the existing bounded `captureWorld` path, prints completeness/roster/origin/player distance, and prints at most the first 8 candidate IDs, coordinates, and computed distances. It performs no spawn, mutation, movement, LOS, or threat interpretation. Reuses SolRuntimeTest fields to preserve the Kahlua local limit.
+- This is diagnostic instrumentation in `08_RUNTIME_TEST`, not a product feature. It requires a Lua reload before runtime proof. Current PID 12984 must be closed normally, PZ_COUNT verified zero, then the existing recovered guarded launcher may start exactly one test runtime. No production files changed.
+- P2-D remains `[IN PROGRESS]` until the command is loaded, returns a complete candidate snapshot, and the tester reconciles at least one reported candidate with a visible zombie.
+
+# [LAUNCH INVOCATION FAILURE — RELATIVE ARGS PATH] 2026-10-20 16:51 Europe/Berlin
+- The recovered launcher precheck correctly saw `PZ_COUNT=0`, but the invocation passed relative paths for ArgsFile/JarPath/ProfileRoot. The launched Java process changed working directory to the Project Zomboid installation, so Java could not open `.\08_RUNTIME_TEST\...\sol-phase2-perception-runtime.args` and exited with code 1 before bridge/harness readiness.
+- This was a launch invocation/path-root error, not a Sol or Lua diagnostic failure. PZ_COUNT returned to 0; no second game remains open. Production was untouched.
+- Correction: rerun the same guarded launcher with fully resolved absolute paths; its prelaunch count check remains mandatory.
+
+# [SAFE RELOAD — ACTOR RESET AND STALE COMMAND REPLAY] 2026-10-20 16:53 Europe/Berlin
+- After the guarded restart (PID 18240, PZ_COUNT=1), the previous command file content was replayed at frame 0 as `PERCEPTION_SOL_SHELL_PROBE`; it returned `supervisor_actor_missing` because RuntimeSupervisor had not spawned the shell in the new world yet. No actor was created by this probe and no coordinates/state were changed.
+- The stale command channel is a known harness behavior: command files persist across restarts and are replayed if not cleared. Cleared the command file immediately. Next: wait until world/harness readiness, issue one authorized initial shell spawn for the fresh runtime, then run `PERCEPTION_DETAIL`.
+
+# [P2-D — BOUNDED ZOMBIE CANDIDATES MACHINE PROOF] 2026-10-20 16:54 Europe/Berlin
+- Runtime after guarded Lua reload: PID 18240, PZ_COUNT=1, Project Zomboid Build 42.21.0 revision 4a0e9546ec. Test JAR SHA-256 `7E6516B77DDDB9258568041EA1E3A80AA2557C907D5ED50456010EA678160208`; args SHA-256 `9515685FC72C52982A5E0501D273FEBDC6497F169555EC6E61F9FB4146614549`.
+- `PERCEPTION_DETAIL` at frame 4113 returned sequence=1, complete=true, truncated=false, source roster=75, nearby candidates=5, observer=97, Sol origin=(10837.5,10144.5,0), playerDistance=2.
+- Candidate facts copied from the live vanilla zombie roster and filtered by same-floor/radius: id 3 at (10834.497,10140.493,0), distance 5.007; id 7 at (10834.276,10141.469,0), distance 4.425; id 8 at (10834.5,10138.5,0), distance 6.708; id 10 at (10838.5,10157.5,0), distance 13.038; id 11 at (10827.5,10128.5,0), distance 18.868. Full underlying output retains more precision.
+- This proves bounded native acquisition, coherent snapshot completion, candidate identity/coordinates, same-floor filtering and distance derivation at the machine layer. Candidate IDs are runtime identities, not visual labels. Human confirmation that at least one reported candidate corresponds to a visible zombie is still pending; do not mark P2-D complete yet.
+- Reload details: prior command file was replayed at frame 0 before shell spawn and returned actor-missing; it created no actor. After world readiness, one initial test spawn request reached ACTIVE at (10837,10144,0), generation 1, ModelManager registration true. Current shell was recreated by the authorized initial-spawn path; no teleport or manual coordinate edit.
+- Remaining P2 gates: human candidate reconciliation, player-walk stability with new actor, multi-zombie visual comparison, safe target validation, Sol locomotion while perceiving, then the separately evidenced LOS/hearing gates. No production changes.
+
+# [P2-D — HUMAN OBSERVATION / RUNTIME CRASH] 2026-10-20 16:55 Europe/Berlin
+- Tester reports that during the test Sol was inside the house while the tester/player was outside; approximately four zombies were near Sol. The game then crashed.
+- Machine evidence immediately before the report (PID 18240, PZ Build 42.21.0): complete same-floor candidate snapshot listed five zombies at distances 4.425, 5.007, 6.708, 13.038, and 18.868 from Sol. The human estimate of four nearby zombies is broadly compatible with a subset of those candidates, but no identity-by-identity visual match was established.
+- Status: `[IN PROGRESS]` / interrupted by runtime crash. The Perception Detail command completed normally; crash cause is not yet known and is not attributed to the diagnostic without evidence. No production changes.
+- Immediate action: do not relaunch until process count and crash logs are checked. Preserve the existing runtime evidence folder and game log. Next step is inspect crash time/stack and verify PZ_COUNT; only then decide whether the test runtime can be safely resumed.
+
+# [CRASH REPORT — PROCESS STILL ALIVE / CAUSE UNRESOLVED] 2026-10-20 16:58 Europe/Berlin
+- Tester reported that the game crashed during/after the zombie visual check. Live process inspection found PID 18240 still present and responsive, MainWindowTitle=`Project Zomboid`; process timeline continues recording RUNNING with PZ_COUNT=1 through 16:58. The latest DebugLog was still being written at 16:58:09.
+- Therefore the human crash report is retained, but a full Java process termination is not evidenced. No second instance was launched. Current state may be an in-game crash/dialog or a gameplay-level failure; user-visible state and root cause remain unresolved.
+- Logs include a RuntimeSupervisor cleanup warning for `cell=null` on a restart-time shell cleanup, plus unrelated vanilla/PZ optimization warnings. No confirmed causal link to the user's reported crash, and no fatal exception has been identified as the cause.
+- Status: `[BLOCKED — WAITING FOR LIVE WINDOW STATE]` for further gameplay checks. Keep PID 18240 as the sole process; do not relaunch. Next exact step: establish whether the user currently sees a crash dialog/menu or a still-running scene; then close normally if needed, verify PZ_COUNT=0, and only afterward decide on resuming tests.
+
+# [CORRECTION — HUMAN ZOMBIE LOCATION] 2026-10-20 16:58 Europe/Berlin
+- Tester clarified that the approximately four zombies were near the tester/player, not near Sol. Correct the previous broad-correspondence wording: this is NOT human visual confirmation for the five Sol-centered candidates and does not satisfy P2-D. Candidate identity/location reconciliation remains `[BLOCKED]` pending an in-scene check when the game is stable.
+- The captured Sol-centered machine snapshot still stands as a machine result only: five candidates, distances 4.425, 5.007, 6.708, 13.038, and 18.868 from Sol.
+- Crash evidence review: stderr records `IngameState.updateInternal> Exception thrown` with `IndexOutOfBoundsException: Index 5 out of bounds for length 5`, in vanilla `HumanVisual.addClothingItem` → `UnderwearDefinition.addRandomUnderwear` → `ZombiesZoneDefinition.dressInRandomOutfit` → `IsoZombie.update`, then PZ's `UpdateBatch`/`MovingObjectUpdateScheduler`. No Sol method appears in this stack. This is a plausible coincident engine/runtime exception near the reported event, not proven as the causal reason the tester perceived a crash. No full process exit is evidenced: PID 18240 remains responsive and PZ_COUNT=1; no relaunch.
+- Next exact step: pause perception/gameplay checks until the live window state is clarified and the runtime is safely closed if it is unusable. Do not claim P2-D human proof.
+
+# [WORLD TRANSITION CLEANUP VERIFIED — SOL ABSENT] 2026-10-20 17:01 Europe/Berlin
+- Tester reports being alone in the house. Read-only `NATIVE_SHELL_STATUS` on PID 18240 confirmed `WAITING_WORLD`, `actorExists=false`, `nativeShellCount=0`, `legacyZombieCount=0`, `spawnCount=1`, `removeCount=1`, `cleanupStage=verified-absent`, `cleanupAttemptCount=4`, `staleActor=0`; prior identity 571124153 had been retired with stable cleanup samples.
+- Runtime worldGeneration=3 and luaEnvironmentGeneration=2; supervisor is waiting for a usable world, explaining the missing actor after the reported crash/world transition. This is lifecycle/recovery evidence, not a failure of candidate acquisition.
+- User visual report corrected: approximately four zombies were near the user/player, not Sol. P2-D remains without human visual candidate match.
+- Recovery step: under the Phase 2 in-scene rule's lifecycle-recovery exception, issue one existing `NATIVE_SHELL_SPAWN` in the current PID only after world is ready; no teleport, direct coordinates, or second process.
+
+# [RECOVERY SPAWN + POST-RECOVERY CANDIDATE SNAPSHOT] 2026-10-20 17:02 Europe/Berlin
+- In the single existing PID 18240, after the world reported WAITING_WORLD and verified previous actor absence, issued one recovery spawn request (request 2). Supervisor transitioned `WAITING_WORLD -> SPAWN_PENDING -> REGISTERING -> ACTIVE`; new actor identity `391262005`, actorGeneration=2, worldGeneration=3, square `(10840,10148,0)`, world/cell/square/model/modelAdded/activeModel all true. This was the allowed lifecycle recovery spawn, not movement or teleport.
+- `PERCEPTION_DETAIL` at frame 40817: sequence=1, complete=true, truncated=false, source roster=68, nearby=7, observer=196, playerDistance=2. Candidates: id110 `(10829.663,10137.5,0)` d=15.441; id111 `(10830.514,10139.958,0)` d=13.141; id112 `(10837.5,10157.339,0)` d=9.334; id113 `(10827.168,10146.073,0)` d=13.551; id114 `(10838.801,10139.5,0)` d=9.159; id122 `(10852.5,10154.329,0)` d=13.341; id186 `(10842.608,10142.55,0)` d=6.313.
+- This is machine-only post-recovery evidence. Human visibility and zombie reconciliation after recovery remain pending. Earlier user correction stands: four zombies were near the player, not Sol, in the prior scene.
+- Runtime status: PID 18240 only, PZ_COUNT=1. No production change. Continue only after user confirms what is visible in this recovered scene.
+
+# [P2-D — VISUAL CANDIDATE RECONCILIATION BLOCKED] 2026-10-20 17:03 Europe/Berlin
+- Tester reports that both tester and Sol are inside the house and no zombie is nearby/visible in the current recovered scene.
+- Machine snapshot from the same scene reports seven same-floor candidates within the configured 24-tile radius, nearest at 6.313 tiles. The current bridge/normalizer uses same-floor Euclidean proximity only; it does not test wall/door obstruction or visual LOS. It is plausible that candidates lie outside/behind house geometry, but candidate-to-square/occlusion correspondence has not been proved.
+- Do not call this a false positive or a successful visible zombie test yet. Human did not reconcile any candidate with a visible zombie; the requested P2-D human evidence is absent. This discrepancy also confirms that proximity candidate data must not be described as visibility/LOS.
+- Status: `[BLOCKED]` P2-D visible-zombie proof pending a naturally available, scene-reconcilable nearby zombie and safe runtime. Do not spawn zombies or add LOS code for this check. Earlier vanilla zombie outfit exception remains unresolved and no full process exit is evidenced.
+- Next exact step: confirm the recovered Sol is visible/complete; then continue only with passive perception and player-motion checks in the current world. Revisit P2-D when a zombie is actually visible near Sol; LOS requires its separate evidence pack.
+
+# [P2-B — HUMAN VISUAL PROOF: BODY PRESENT, APPEARANCE MISMATCH] 2026-10-20 17:04 Europe/Berlin
+- After recovery, tester confirms Sol is visible near them and the full body is rendered, but describes the actor as a completely naked male character.
+- This proves visible actor presence/body completeness for the current shell. It raises a material visual identity/appearance mismatch against the intended Sol presentation; gender/descriptor/clothing correctness is not accepted as PASS. Do not equate alpha=1.0/model registration with correct character appearance.
+- Machine correlation: recovery actor identity 391262005, generation 2, position approximately `(10840,10148,0)`, ModelManager registration and activeModel true; latest candidate snapshot is complete but has no visually confirmed zombie.
+- Status: `[FAILED — VISUAL APPEARANCE REQUIREMENT]` for expected Sol presentation; `[COMPLETED]` only for body visibility/completeness. No appearance/outfit code changed. Next: inspect existing shell descriptor/visual initialization statically, record the actual cause or `[UNRESOLVED]`, and defer any corrective edit until its own authorized/evidence-backed decision. Keep PID 18240 as the only runtime.
+
+# [STATIC SOURCE REVIEW — SHELL APPEARANCE NOT CONFIGURED] 2026-10-20 17:05 Europe/Berlin
+- `[SOURCE PROOF]` `SolBridge.constructShell()` obtains a descriptor from `SurvivorFactory.CreateSurvivor()` and passes it directly into `new SolIsoPlayerShell(cell, descriptor, x, y, z, false)`; `SolIsoPlayerShell` constructor only calls `super(cell, descriptor, x, y, z, remote)`. The inspected construction/attach path contains no explicit gender, outfit, clothing, or appearance assignment.
+- `[INFERENCE]` The observed naked male appearance is consistent with an unspecified/default/random survivor descriptor or missing post-construction outfit initialization, but exact cause is not proven from source alone. Do not change this during the perception test without a separate evidence-backed appearance/lifecycle decision.
+- Runtime evidence stays: current post-recovery actorGeneration=2 is visible and fully rendered per tester, but visually described as a fully naked male. Body visibility passes; intended Sol appearance remains failed/unresolved. No source code changed by this inspection.
+
+# [P2-C REVALIDATION — POST-RECOVERY BASELINE] 2026-10-20 17:09 Europe/Berlin
+- Fresh `PERCEPTION_DETAIL` on PID 18240/current actor generation 2 at frame 101156: sequence=2, complete=true, truncated=false, roster=57, nearby=4, observer=196, playerDistance=1.0659. Candidate IDs/positions: 112 `(10845.479,10157.532,0)` d=10.314; 113 `(10846.013,10143.188,0)` d=7.655; 114 `(10822.178,10161.698,0)` d=22.581; 186 `(10842.516,10144.496,0)` d=4.483.
+- This establishes a fresh relation baseline for the current recovered actor. Nearby-candidate count changed since the prior snapshot; no human-visible zombie correspondence is established. Next: tester performs one short ordinary walk around the visible shell without moving Sol, then compare a fresh detail capture.
+- Current runtime remains one responsive process PID 18240; no code/build/relaunch/production change.
+
+# [SUPERSEDED OBSERVATION + APPEARANCE STABILITY GAP] 2026-10-20 17:10 Europe/Berlin
+- Newest human observation describes the current Sol as a white girl with tied red hair and reports that her color/appearance differs between runs. This conflicts with the earlier post-recovery description as a naked male; preserve both as time-specific reports, and mark the earlier single-look diagnosis `[SUPERSEDED]` by the later correction. The durable finding is that the tester perceives appearance as inconsistent across instances.
+- `[SOURCE PROOF]` each supervisor shell construction calls `SurvivorFactory.CreateSurvivor()` and passes the resulting descriptor directly to the shell constructor; the inspected construction path sets no fixed gender, hair, or outfit. `[INFERENCE]` per-spawn descriptor generation plausibly explains variation; the exact vanilla randomization mechanism has not yet been inspected.
+- Status: `[REFERENCE GAP IDENTIFIED]` no stable Sol appearance specification/descriptor is configured by the test shell. No appearance patch was made. Need the desired canonical look (gender, skin tone, hair/color/style, clothes, and any in-game reference) before making a fixed-appearance change; this is separate from Phase 2 perception and should not be guessed.
+- P2-C revalidation request remains unanswered; the latest user message describes appearance and is not movement confirmation. PID 18240 remains the sole current test runtime. Production untouched.
+
+# [CANONICAL SOL APPEARANCE SPECIFICATION RECEIVED] 2026-10-20 17:11 Europe/Berlin
+- User-specified stable look: female character, white/light skin, red hair tied in a ponytail. This supersedes prior generic or contradictory per-run visual descriptions as the target specification; preserve those observations as historical runtime evidence.
+- Clothing/outfit has not yet been specified. No appearance code, source, or build changed. Before implementation, inspect the exact Build 42.21.0 descriptor/visual API and community reference patterns, then define the minimal test-only change. Do not guess outfit details.
+- This appearance request is a render/lifecycle blocker adjacent to Phase 2, not evidence that perception data is invalid. Phase 2 remains incomplete; no production changes.
+
+# [APPEARANCE OUTFIT SPECIFICATION UPDATE] 2026-10-20 17:12 Europe/Berlin
+- User-provided canonical appearance: white/light-skinned female character; red hair tied in a ponytail; long red dress; suitable shoes.
+- The final phrase in the user's message is ambiguous (possibly socks/stockings or undergarments). Clarification was requested; do not invent these details or implement appearance until resolved.
+- Static-source investigation continues against the installed Build 42.21.0 artifacts. No source, runtime, or production change; no build or launch.
+
+# [APPEARANCE SOURCE DISCOVERY: RANDOM DESCRIPTOR PATH] 2026-10-20 17:13 Europe/Berlin
+- `[SOURCE PROOF]` Current test source `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolBridge.java:306-310` calls the no-argument `SurvivorFactory.CreateSurvivor()` and passes its returned descriptor directly to `SolIsoPlayerShell`; the shell constructor in `SolIsoPlayerShell.java` delegates that descriptor to `IsoPlayer` without setting gender, skin, hair, or outfit in this path.
+- `[SOURCE PROOF]` Installed Build 42.21 media Lua contains appearance mutation examples in `media/lua/shared/NPCs/SurvivorSwap.lua` and character creation/tutorial/scenario scripts. This confirms the shipped game uses descriptor/visual APIs for these fields, but the exact API calls and ordering still need inspection before proposing a minimal adaptation.
+- `[INFERENCE]` The current source path leaves appearance determined by the factory-created descriptor, explaining why it is not explicitly canonicalized; whether the factory randomizes every field must be verified from exact game artifact behavior before claiming the precise cause.
+- Current desired look: white/light-skinned female; red ponytail; long red dress; suitable shoes. Socks/undergarment phrase awaits clarification. No code/runtime/production change; no build or launch.
+
+# [BUILD 42.21 API DISCOVERY: DETERMINISTIC DESCRIPTOR SURFACE] 2026-10-20 17:14 Europe/Berlin
+- `[SOURCE PROOF — INSTALLED ARTIFACT]` Read-only `javap` against `C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\projectzomboid.jar` confirms Build 42.21 exposes `SurvivorFactory.CreateSurvivor(SurvivorType, boolean)`, `SurvivorDesc.setFemale(boolean)`, `getHumanVisual()`, `dressInNamedOutfit(String)`, and descriptor `setWornItem(...)`. The current Sol source uses the no-argument factory overload instead.
+- Exact HumanVisual setter signatures, female ponytail resource names, red hair color representation, and valid long red dress/shoe outfit identifiers are still under inspection. Do not yet treat API surface discovery as a validated implementation recipe.
+- No code/runtime/production change; no build or launch.
+
+# [CANONICAL OUTFIT CLARIFIED] 2026-10-20 17:15 Europe/Berlin
+- User clarified the final appearance: female, white/light skin, red hair tied as a ponytail, a long red dress, shoes, and short white socks.
+- This resolves the previous ambiguity; the outfit target is now sufficiently specific to inspect exact Build 42.21 item/hair identifiers. This is a specification only, not proof that the chosen assets exist or render correctly.
+- No source/runtime/production change; no build or launch.
+
+# [APPEARANCE ASSET IDENTIFIERS VERIFIED IN BUILD 42.21 MEDIA] 2026-10-20 17:16 Europe/Berlin
+- `[SOURCE PROOF — INSTALLED BUILD MEDIA]` `media/hairStyles/hairStyles.xml` contains a female `<name>PonyTail</name>` entry at lines 854-856, using the female ponytail model; file SHA-256 `CEE2C0C5CA06F84B091ABC00D63283D1CDA0E103702D6134E62B2B1205DE3261`.
+- `[SOURCE PROOF — INSTALLED BUILD MEDIA]` `media/scripts/generated/items/clothing.txt:63-77` defines `Base.Dress_Long`, body location `base:longdress`, and marks it `base:canbedyed`; `Socks_Ankle_White` is defined at lines 18640-18653 for short white socks; `Shoes_Fancy` is defined at lines 19089-19109 and uses the shoes body location. SHA-256 `clothing.txt` = `9EDB818C5366978ACC691BF44A539EB22680D334DB07037E5DB33064598A060A`.
+- `[SOURCE PROOF — SHIPPED LUA PATTERN]` `media/lua/client/OptionScreens/CharacterCreationMain.lua` uses `instanceItem(itemType)` then `SurvivorDesc.setWornItem(...)`, confirming explicit item-based descriptor clothing setup is a stock character-creation pattern. The tutorial also sets female on both character and descriptor and resets the model after appearance edits.
+- `[SOURCE PROOF — INSTALLED JAR]` `HumanVisual` exposes `setHairColor(ImmutableColor)`, `setNaturalHairColor`, `setHairModel`, `setSkinTextureIndex`, and `setSkinColor`; `ItemVisual` exposes `setTint(ImmutableColor)`. Installed `projectzomboid.jar` SHA-256 `E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33`.
+- `[INFERENCE]` A minimal deterministic path is possible through the descriptor before constructing Sol: explicit female factory overload; fixed skin/hair fields; explicit long-dress, short-white-sock, and shoe items, with the dress visual tinted red. Still unresolved before implementation: exact light-skin index/tone, desired shoe style/color (user said suitable, so black fancy shoes are a candidate only), color propagation/reset behavior, and red tint in actual render. No implementation, build, or launch yet.
+- Active PZ PID seen during static research: 18240 (single process); current test build/path remains the Phase 2 actorhandle build, not production.
+
+# [SKIN INDEX AND FACTORY RANDOMNESS CONFIRMED] 2026-10-20 17:18 Europe/Berlin
+- `[SOURCE PROOF — INSTALLED JAR BYTECODE]` No-argument `SurvivorFactory.CreateSurvivor()` randomly selects Friendly, Neutral, or Aggressive; the `CreateSurvivor(type)` overload randomly selects the gender before delegating to the explicit `(type, boolean)` overload. This test-shell source is therefore not canonicalized for gender/type; existing visual observations are consistent with generated descriptors but do not alone prove all exact random fields.
+- `[SOURCE PROOF — STOCK LUA]` `CharacterCreationMain.lua:653-656` declares skin-color swatches in order, with the lightest listed swatch first (`0.98, 0.79, 0.49`); `onSkinColorPicked` at lines 1992-1996 stores selected swatch index minus one via `setSkinTextureIndex`. This makes index `0` the first/lightest stock character-creation choice, though final in-world color still requires visual confirmation.
+- `[SOURCE PROOF — INSTALLED JAR BYTECODE]` `HumanVisual.getSkinTexture()` chooses sex-specific skin lists and randomizes if the stored index is unset/out of range. Fixing both female sex and valid skin index before model creation is required for repeatability.
+- Proposed black `Shoes_Fancy` is an `[INFERENCE]` for “suitable shoes” because the user specified no shoe color/style; the exact item definition exists in the current build. No code/build/runtime action taken.
+
+# [APPEARANCE RESEARCH: LIGHT SKIN + OUTFIT ASSEMBLY PATTERN] 2026-10-20 17:19 Europe/Berlin
+- `[SOURCE PROOF — BUILD42 STOCK LUA]` `CharacterCreationMain.lua:653-656` defines four stock swatches; the first/lightest is `(0.98,0.79,0.49)`, and the picker maps its first choice to `skinTextureIndex=0`. The game’s `HumanVisual.getSkinTexture()` uses the selected skin list and chooses a random index only when unset/out of range. This supports using index 0 for the lightest stock skin texture, with `skinColor=ImmutableColor.white` as neutral tint; visual proof is still required.
+- `[SOURCE PROOF — BUILD42 STOCK LUA]` Character creation attaches an explicit item via `instanceItem(itemType)` and `desc:setWornItem(...)`. Installed jar confirms `InventoryItemFactory.CreateItem(String)`, `InventoryItem.getVisual()`, `ItemVisual.setTint(ImmutableColor)`, and `InventoryItem.synchWithVisual()` are available.
+- `[PROPOSED — NOT IMPLEMENTED]` Minimal deterministic appearance setup before `SolIsoPlayerShell` construction: create `SurvivorType.Neutral` with `female=true`; explicitly set descriptor female; set skin index 0; set female `PonyTail`; set fixed red hair and natural-hair color; create `Base.Dress_Long`, tint red and synch; add `Base.Socks_Ankle_White`; add black `Base.Shoes_Fancy`; attach all three to the descriptor by their shipped body locations. This does not require touching playerIndex, world registration, locomotion, perception, or global LOS.
+- Black fancy shoes are the chosen conservative interpretation of the user's “suitable shoes”; user did not specify a shoe color/style. This is a presentation inference, not user-specified detail.
+- No code/build/runtime/production change; no new launch.
+
+# [COMMUNITY/GITHUB REVIEW BEFORE APPEARANCE BUILD] 2026-10-20 17:21 Europe/Berlin
+- Reviewed the public `Project-Zomboid-Community-Modding/ProjectZomboid-Vanilla-Lua` mirror, commit `8a906692ac56f9d40c078d654eea6c70491cbc62` (tag/commit labeled B42.20.2). Its distribution data independently lists `Dress_Long`, `Socks_Ankle_White`, and `Shoes_Fancy` as shipped clothing IDs. This mirror is one build behind and is corroborative only; exact B42.21.0 local media/JAR are authoritative for the test build.
+- Reviewed official Project Zomboid Javadocs for `HumanVisual` setters and `ImmutableColor` constants/constructors; local `javap` signatures match the needed runtime APIs.
+- Scope for the candidate adaptation: modify only `08_RUNTIME_TEST/SolNativePrototype` descriptor creation, keeping factory NPC type unchanged, forcing female + lightest stock skin + female PonyTail + red hair; clear random descriptor clothes and set explicit long dress (red tint), short white socks, and black fancy shoes. Do not alter actor registration, scheduling, update, movement, perception, alpha/LOS, or production.
+- Build decision: proceed only into a new uniquely named test artifact directory. Existing PID 18240 remains active, so artifact generation is allowed but no launch/restart is allowed until process count is confirmed zero.
+
+# [TEST-ONLY CANONICAL APPEARANCE ADAPTATION] 2026-10-20 17:22 Europe/Berlin
+- Status: `[IN PROGRESS]` implementation written to `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolBridge.java` only.
+- `constructShell` now applies canonical appearance to the factory descriptor before `SolIsoPlayerShell` construction; `SurvivorFactory` type selection is retained. Appearance values: female=true; skinTextureIndex=0 and neutral white tint; female `PonyTail`; hair and natural hair color `(0.78,0.08,0.10,1)`; clear generated worn items; add `Base.Dress_Long` with red tint and visual synchronization, `Base.Socks_Ankle_White`, and `Base.Shoes_Fancy` (black inferred as a suitable match).
+- Methods are reflective against installed Build 42.21 classes. The change does not edit actor index, NPC state, world/ModelManager/scheduler registration, locomotion, alpha, LOS, perception, Lua bridge lifecycle, or production code.
+- Exact API/asset research and community review are recorded above. Runtime PID 18240 was still active at last process snapshot. This source has not yet been compiled or loaded; visual/runtime correctness is unproven.
+- Next: compile all six test Java classes into a fresh isolated `build_appearance_stability_20261020_1722` directory; inspect JAR contents/ABI/hash. Do not launch until PZ_COUNT=0.
+
+# [BUILD INVOCATION RETRY] 2026-10-20 17:23 Europe/Berlin
+- First invocation failed before compilation: PowerShell passed the argument-file prefix `@` separately (`invalid flag: @`); this is a command-line quoting issue, not a source/compiler diagnostic. No JAR was created and no PZ process/runtime state changed. Corrected invocation will pass `@<absolute javac.args>` as one argument.
+
+# [TEST-ONLY APPEARANCE BUILD — STATIC ARTIFACT VALIDATED] 2026-10-20 17:24 Europe/Berlin
+- Status: `[COMPLETED]` for source compilation and package inspection; Runtime appearance validation `[BLOCKED]` pending safe test-runtime replacement.
+- New isolated test build: `08_RUNTIME_TEST/SolNativePrototype/build_appearance_stability_20261020_1722/`; compiled all six Java sources with local Microsoft JDK 25.0.4.1 against installed Build 42.21.0 `projectzomboid.jar`. Compiler exit 0, no diagnostics.
+- JAR SHA-256: `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; javac args SHA-256: `FBF3B743A6A5C148388DE949643F8C0376D863EB20A0C29FB3957E7E6A515C47`.
+- `jar --list` includes only `META-INF` and `sol/bridge/*.class`; no zombie API/stub classes. `javap` confirms appearance setup is called before shell construction and embeds the selected gender, hairstyle, tint, and clothing item identifiers.
+- First build command failed due PowerShell passing `@` separately, documented above; corrected argfile invocation succeeded. This did not affect source/runtime.
+- PID 18240 remains the single PZ process on the old `build_phase2_perception_actorhandle_20261020_1642` JAR. New JAR is not loaded. No second launch attempted; production untouched.
+- Regression and human visual confirmation have not run. Next: close/save PID 18240 normally; verify PZ_COUNT=0; then launch exactly one test instance with a separate args file and verify descriptor/model outfit values plus in-scene appearance before considering any later runtime phase.
+
+# [APPEARANCE RUNTIME DIAGNOSTIC PREPARED] 2026-10-20 17:25 Europe/Berlin
+- Added a test-harness-only `NATIVE_SHELL_APPEARANCE` command to `08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/common/media/lua/client/SolRuntimeTest.lua`. It reads existing supervisor actor's female flag, descriptor gender, skin index, hairstyle, RGB hair color, and worn dress/tint/socks/shoes. It does not mutate the actor.
+- Exact installed JAR API inspection confirms the Lua-read methods and item locations exist. Diagnostic has not run; its final syntax/behavior validation depends on loading the test runtime.
+- Prepared a separate `build_appearance_stability_20261020_1722/sol-appearance-runtime.args` file pointing the classpath to the new bridge; the active/legacy args file was not changed.
+- Current PZ process remains PID 18240 (`PZ_COUNT=1`) on the old JAR. Wait for user to save/close it. No launch attempted.
+
+# [RUNTIME REPLACEMENT BLOCKED — PID STILL LIVE] 2026-10-20 17:26 Europe/Berlin
+- User reported the world saved and game closed, but immediate and delayed OS checks still return `PZ_COUNT=1`, PID 18240 (`java.exe` using old actorhandle args/JAR). `Get-Process` reports `Responding=True`, `MainWindowTitle=Project Zomboid`, nonzero window handle `47778122`, working set ~1.07 GB. The latest DebugLog write remained at 17:19:43; this is not proof that the process exited.
+- No attempt was made to launch or terminate anything. The appearance build remains static-only. Exact next step: user confirms the PZ window has fully exited (including any exit/save confirmation) and PID 18240 disappears; then re-count processes before one test launch.
+
+# [APPEARANCE TEST RUNTIME STARTED — EARLY EXIT / VISUAL VALIDATION BLOCKED] 2026-10-20 17:21 Europe/Berlin
+- Status: `[BLOCKED]` for in-scene appearance verification; launch itself was initiated after the user confirmed the prior game was closed. No production files/runtime were touched.
+- Pre-launch/launch record from the launch step: `PZ_COUNT_BEFORE_LAUNCH=0`, launched test process PID `13688`, `PZ_COUNT_AFTER_LAUNCH=1`; args: `08_RUNTIME_TEST/SolNativePrototype/build_appearance_stability_20261020_1722/sol-appearance-runtime.args`.
+- Test bridge JAR: `08_RUNTIME_TEST/SolNativePrototype/build_appearance_stability_20261020_1722/SolNativeBridge.jar`; SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`.
+- Runtime log `08_RUNTIME_TEST/profile/Zomboid/Logs/2026-10-20_17-20_DebugLog.txt` advanced through 17:21:37 and shows `loading Sol`, ModelManager override loaded, `Loading Clothing`, and world initialization. It does not yet prove the Sol shell was spawned or that the Lua appearance diagnostic ran.
+- Subsequent `Get-Process -Id 13688` returned no process; process-name/window-title filters returned no PZ process. CIM and tasklist checks were unavailable (`Access to a CIM resource was not available` / tasklist credential error). Thus the app appears to have exited during startup, but the exit cause is not established; do not label this a Sol or appearance failure.
+- No `NATIVE_SHELL_APPEARANCE` result, actor outfit values, model visibility, or user visual confirmation were obtained. No second launch attempted.
+- Next: inspect the current test log tail and crash/error artifacts, determine whether the test app exited normally or failed during world load, then only if safe and a clear next diagnostic exists, continue with one test runtime at a time.
+
+# [SUPERSEDED — RUNTIME PROCESS EXIT INFERENCE CORRECTED] 2026-10-20 17:22 Europe/Berlin
+- Status: `[IN PROGRESS]` — the earlier inference that PID 13688 had exited during startup was premature. `Get-Process` could not enumerate the game from this tool context, but the same test DebugLog continued through 17:22:18 and recorded world-entry/render-frame activity. Treat runtime as potentially active; do not launch another instance.
+- Additional runtime evidence: log says `[Sol] Legacy zombie backend isolated; runtime-test backend is NATIVE_SHELL or unavailable.` At 17:22:14 it records rendered/debug stock horde entities, but character/model draw counters remain zero; this does not establish whether the Sol shell exists.
+- A Lua parse/runtime exception was recorded at 17:21:25: `ArrayIndexOutOfBoundsException: Index 200 out of bounds for length 200 at LexState.new_localvar`. Its originating Lua source has not yet been identified and must not be attributed to the new appearance patch without a stack/source link.
+- Static args confirm this is the isolated test profile and the new JAR only. No production changes; no second launch.
+- Next: identify the Lua exception source and the test harness's established spawn/diagnostic command path from source/log evidence, then check whether a live interactive world is ready before issuing any mutation.
+
+# [RUNTIME DIAGNOSTIC — AUTO-LAUNCH REACHED WORLD ENTRY] 2026-10-20 17:22 Europe/Berlin
+- Status: `[IN PROGRESS]` — test log confirms `[SolTest] AUTOLAUNCH WINDOW ENTERED` at 17:21:50 after `OnMainMenuEnter`; game then logged native backend selection and active render-frame records through 17:22:18. This is stronger evidence of world entry than the earlier boot-only logs, but not proof that Sol spawned or that her appearance rendered.
+- The `ArrayIndexOutOfBoundsException` at 17:21:25 occurred during Lua parsing/loading; the subsequent Sol auto-launch window hook and world/render events show startup continued. The originating Lua source remains unknown, so it is not attributed to Sol.
+- Runtime command file `profile/Zomboid/SolRuntimeCommand.txt` currently contains an old `native_spawn_093754684|NATIVE_SHELL_SPAWN|` line last modified 09:37:54; this predates the current launch and must be treated as stale until proven consumed. Current runtime status file is not yet present. No new command was written.
+- Active test Lua exposes `NATIVE_SHELL_SPAWN`, `NATIVE_SHELL_STATUS`, and `NATIVE_SHELL_APPEARANCE`; the appearance diagnostic is read-only. The test harness's actual polling path and actor auto-creation state still need runtime confirmation.
+- Runtime process enumeration is unavailable/inconsistent in this shell context while the log advances. Do not relaunch; continue using the current test instance and its logs/status files.
+- Next: verify current world/actor state from new log/status evidence, ensure the stale command is not replayed, then create one test shell if absent and read its canonical appearance diagnostic before asking the user for visual confirmation.
+
+# [RUNTIME SUPERVISOR WORLD-LOAD STATE] 2026-10-20 17:23 Europe/Berlin
+- Status: `[IN PROGRESS]` — the new test JAR's runtime log provides direct supervisor proof: `WAITING_LUA->BRIDGE_READY` at 17:21:27 (`runtime=1, world=0, env=1, actor=0`), then `BRIDGE_READY->WAITING_WORLD` at 17:21:48 with `world=1`, `cellId=616171367`.
+- No `OnGameStart` / `[SolTest] Runtime command channel READY` entry appears in the log as of 17:23:39; the test status file is absent. Therefore the in-world command bus is not yet proven ready and `NATIVE_SHELL_SPAWN` / appearance reads were not sent.
+- Stale command file at `profile/Zomboid/SolRuntimeCommand.txt` remains unchanged since 09:37:54 (`native_spawn_093754684|NATIVE_SHELL_SPAWN|`). It has not been shown consumed by this run; do not treat it as a new command or overwrite until the game-ready state is established.
+- Next: determine from user-visible screen or new log evidence whether the test runtime has completed world load. If `OnGameStart` and command channel become ready, inspect status and stale request handling before issuing at most one current spawn/appearance diagnostic.
+
+# [USER VISUAL WORLD-READY CONFIRMATION — TEST HARNESS NOT READY] 2026-10-20 17:24 Europe/Berlin
+- Status: `[BLOCKED]` for appearance runtime command until the test harness is confirmed active. User reports the game world is visible and playable.
+- Current DebugLog continues updating (through 17:24:19), but no `[SolTest] Runtime command channel READY`, no `rtPoll heartbeat`, no test `SolRuntimeStatus.txt`, and no new supervisor state beyond `WAITING_WORLD` (`actor=0`). Existing `SolRuntimeCommand.txt` is an old spawn line from 09:37:54 and remains untouched.
+- No command was sent and no actor was created during this diagnostic step. The new build is still test-only; production untouched.
+- The unresolved Lua compiler exception at 17:21:25 (`Index 200 out of bounds for length 200`) is now a candidate explanation for missing test-harness registration, but source attribution is not yet proven. Next: inspect active Lua source loading/locals and the current log for a harness-specific failure. Then fix only if source proof identifies the failing test script; otherwise avoid patching.
+
+# [SOURCE PROOF — TEST LUA HARNESS COMPILE FAILURE] 2026-10-20 17:24 Europe/Berlin
+- Status: `[FAILED]` for loading the current `SolRuntimeTest.lua` harness; overall appearance validation `[BLOCKED]` pending a minimal test-only repair.
+- Exact DebugLog identifies the failing source: `C:/Users/JAMAL/Desktop/Sol/08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/common/media/lua/client/SolRuntimeTest.lua` (`SEVERE: Error found in LUA file`). Kahlua then throws `ArrayIndexOutOfBoundsException: Index 200 out of bounds for length 200` at `LexState.new_localvar` while compiling a local declaration.
+- Consequence confirmed by absence of `[SolTest] Runtime command channel READY`, `rtPoll heartbeat`, and `SolRuntimeStatus.txt`; the `OnGameStart` command-poller code in that file never registered. This explains why the old queued command is still untouched. It is a test-harness compile failure, not evidence of a Sol appearance/model failure.
+- Static inventory: active test harness is 51,188 bytes / 569 lines and contains 119 `local` keywords; other active SolTest Lua files have lower counts. The exact block/accumulated local-register cause still requires source analysis. No source was edited in this diagnostic step.
+- Next: inspect the scope/local declarations in `SolRuntimeTest.lua`, isolate the smallest way to bring the failing function/chunk under Kahlua's 200-local ceiling, preserve behavior, statically validate the edit, and only then schedule a single test-runtime reload after safe process-count verification. Production remains untouched.
+
+# [ROOT CAUSE ISOLATED — MINIMAL HARNESS REPAIR PLANNED] 2026-10-20 17:25 Europe/Berlin
+- Status: `[IN PROGRESS]` — the runtime explicitly names active `SolRuntimeTest.lua` as the file that failed to load; the Kahlua `LexState.new_localvar` exception is the local-register ceiling (index 200 of 200). Consequently the command-poller `OnGameStart` registration never occurs.
+- Static review shows the affected command-dispatch closure contains the accumulated local declarations for the large legacy test-command chain; the appearance/status read branches add further local slots. The failure is in the disposable test harness, not `SolBridge` or `SolIsoPlayerShell`.
+- Minimal repair planned: move the existing `NATIVE_SHELL_STATUS` and `NATIVE_SHELL_APPEARANCE` read-only branch bodies into one small helper function outside the dispatcher closure; replace those branches with one helper call. Preserve exact behavior and appearance values; no actor/runtime architecture changes.
+- Before-edit backup will be kept beside the active test harness. Then validate the diff and local-slot reduction statically. Runtime revalidation requires a later safe test-only reload after the current game is closed and process count is verified; production remains untouched.
+
+# [TEST HARNESS LOCAL-LIMIT REPAIR — STATIC CHECK COMPLETE] 2026-10-20 17:26 Europe/Berlin
+- Status: `[COMPLETED]` for the source-only test-harness repair and static diff review; runtime compile/reload validation `[IN PROGRESS]`.
+- Before-edit backup: `08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/common/media/lua/client/SolRuntimeTest.lua.before_local_limit_fix_20261020_1725.bak`, SHA-256 `A5A995DBFA3460634BCA1E5CA8C5D5776674CA02EF5EA1B7779152732A7663E7`.
+- Minimal change: moved the existing read-only `NATIVE_SHELL_STATUS` and `NATIVE_SHELL_APPEARANCE` bodies into `rtNativeShellDiagnostic(cmd)` outside the dispatcher callback. Both dispatcher arms now call that helper. No outfit values, actor code, movement, appearance initialization, or runtime architecture changed.
+- Static local-slot accounting for the dispatcher closure: 171 before, 160 after (11 declarations moved out). Source SHA-256 is now `883CDB10E6F130DE8064D2F7F612816445038218ABC85E7AD51444D53B60CE18`. Review shows only the two diagnostic branches were moved; no unrelated edits.
+- This is a test-profile Lua harness change only. The currently open PZ session loaded the previous version and cannot validate the patch; source edits do not hot-reload it. No build or Runtime regression was claimed. Production remains untouched.
+- Next: save and close the currently open test game; verify no PZ process before any relaunch; relaunch exactly one test instance with the same `build_appearance_stability_20261020_1722` JAR/args, confirm the Lua command channel registers without the local-limit exception, then spawn once and read native appearance state.
+
+# [TEST AUTO-LAUNCH LOOP IDENTIFIED] 2026-10-20 17:40 Europe/Berlin
+- Status: `[IN PROGRESS]` — user reports that choosing Exit to Main Menu saves, then immediately re-enters the world with a new character before the menu is visible.
+- Static source proof: test-only `SolAutoScenario.lua` declares `debugScenarios.SolRuntime.forceLaunch = true`; `SolForceMenuLaunch.lua` registers `Events.OnMainMenuEnter` and calls `doDebugScenarios()` on menu ticks. The same test profile is reloaded on each menu return, so this combination is a direct candidate for repeated scenario launch.
+- Runtime proof: latest DebugLog shows `Saving worldgen params` and `Saving GlobalModData` before `STATE: exit zombie.gameStates.IngameState` at 17:37:41 and 17:38:33. Each is followed by `loading Sol`, `OnMainMenuEnter hook reached`, `AUTOLAUNCH WINDOW ENTERED`, and a new world load. New Sandbox save directories were written at 17:38:33 and 17:39:06. The save sequence runs, but this log alone does not prove every player datum was retained.
+- This behavior belongs to the disposable test auto-launch harness. Do not attribute it to Sol actor/appearance. The current game may still be open; no second process launch.
+- Next: disable the two automatic triggers in the test profile only, retain manual debug scenario availability, then verify the next normal Exit to Main Menu stays on the menu and the save completes before relaunching the corrected appearance test.
+
+# [TEST AUTO-LAUNCH LOOP FIXED IN SOURCE; LUA HARNESS RUNTIME VALIDATED] 2026-10-20 17:41 Europe/Berlin
+- Status: `[COMPLETED]` for source-level removal of forced re-entry; Runtime menu-return regression `[IN PROGRESS]` until the next normal exit. Current test game remains open, and no second process was launched.
+- Root cause source proof: installed Build 42 `media/lua/client/DebugUIs/DebugScenarios.lua:106-119` creates the scenario panel and calls `launchScenario(v)` whenever `v.forceLaunch` and `DebugScenario.ForceLaunch` are both true. Test `SolAutoScenario.lua` had `forceLaunch=true`; test `debug-options.ini:1031` has `ForceLaunch=true`; test `SolForceMenuLaunch.lua` called `doDebugScenarios()` on every `OnMainMenuEnter`. Runtime shows this exact sequence after each save/exit.
+- Minimal test-only changes: set `debugScenarios.SolRuntime.forceLaunch=false` in `SolAutoScenario.lua`; removed `Events.OnMainMenuEnter.Add(solMenuLaunchStart)` registration in `SolForceMenuLaunch.lua` while leaving manual scenario definition available. Backups `*.before_disable_repeat_20261020_1740.bak` preserved.
+- New SHA-256: `SolAutoScenario.lua` `CF954E430C818F9C50D7069120EFDDAD7CF833AAFFF62A705D4DDE727B134AA0`; `SolForceMenuLaunch.lua` `5C0C1749033189B55404AFE5D4759F4D06056A083AC472183161AFF33587702C`.
+- Prior `SolRuntimeTest.lua` local-limit repair has now succeeded in the live runtime after menu reload: `[SolTest] Runtime command channel READY` at 17:38:06 and 17:39:06, each followed by `rtPoll heartbeat`. No repeat LexState exception in these reloads. The command channel consumed `PERCEPTION_DETAIL` and reported `supervisor_actor_missing`, confirming that no Sol actor was present yet.
+- Next: use the currently live corrected command channel and new test JAR to create exactly one Sol shell and read canonical appearance values. Then request one normal Exit to Main Menu and verify both save completion and absence of another automatic world launch. Production untouched.
+
+# [APPEARANCE TEST PRE-SPAWN RUNTIME SNAPSHOT] 2026-10-20 17:46 Europe/Berlin
+- Status: `[COMPLETED]` for read-only pre-spawn snapshot; actor creation and visual proof `[IN PROGRESS]`.
+- Command sent through the confirmed active Lua mailbox: `appearance_pre_spawn_20261020_1741|NATIVE_SHELL_STATUS|`. DebugLog at 17:46:43 confirms the exact command consumed and reports `state=waiting_world`, empty failure.
+- Supervisor description: `supervisorState=WAITING_WORLD`, `runtimeGeneration=1`, `worldGeneration=5`, `luaEnvironmentGeneration=3`, `backend=NATIVE_SHELL`, `actorExists=false`, `nativeShellCount=0`, `legacyZombieCount=0`, `inLocalSlots=false`, `globalInstance=false`, `bridgeProtocolValid=true`, `bridgeGeneration=3`, `spawnCount=0`, `removeCount=0`. Test owner position from status: `(10835.500,10144.500,0)`.
+- The launch PID was 13688; this shell cannot reliably enumerate the live game's PID, so no refreshed PID is claimed. The same log and command channel continue to advance; no second process was launched. Test JAR remains `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`.
+- Next: send exactly one `NATIVE_SHELL_SPAWN` request using the existing test harness's adjacent-square selection, inspect the command and supervisor transition, then read the appearance diagnostic if an actor exists. Production untouched.
+
+# [APPEARANCE TEST SOL SHELL SPAWNED] 2026-10-20 17:47 Europe/Berlin
+- Status: `[COMPLETED]` for exactly one supervisor-owned native shell creation; appearance inspection `[IN PROGRESS]`.
+- Command: `appearance_spawn_20261020_1747|NATIVE_SHELL_SPAWN|` through `profile/Zomboid/Lua/SolRuntimeCommand.txt`. DebugLog confirms command consumed at 17:47:13, request ID `1`, `WAITING_WORLD->SPAWN_PENDING->REGISTERING->ACTIVE` by 17:47:13.691.
+- Runtime postconditions at 17:47:13.700: actor identity `491851152`, actorGeneration `1`, worldGeneration `5`, `world=true`, `cell=true`, `square=true`, `model=true`, `modelAdded=true`, `activeModel=true`, square `(10837,10144,0)`. No second spawn request was sent.
+- `SolRuntimeStatus.txt` reports `body=false` because it reads the legacy `Sol.body`, not the supervisor-owned native actor; it must not be used to negate the supervisor's ACTIVE state.
+- Test build/JAR: `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`. Initial launch PID 13688, current process PID not re-observable from this shell. Production untouched.
+- Next: issue one read-only `NATIVE_SHELL_APPEARANCE` command, inspect gender/skin/hair/dress/socks/shoes values and errors, then seek visual confirmation in the currently running test world. Menu-return regression remains unverified until the next normal exit.
+
+# [APPEARANCE RUNTIME READ — BODY/HAIR PROVEN, OUTFIT UNRESOLVED] 2026-10-20 17:48 Europe/Berlin
+- Status: `[COMPLETED]` for runtime female/skin/hair values; `[FAILED]` for proving requested outfit through the initial descriptor diagnostic; visual interpretation `[IN PROGRESS]`.
+- Read-only command `appearance_read_20261020_1748|NATIVE_SHELL_APPEARANCE|` was consumed at 17:47:33.636. Runtime output: `female=true`, `descriptorFemale=true`, `skinIndex=0`, `hairModel=PonyTail`, hair RGB approximately `(0.78,0.08,0.10)`.
+- Same diagnostic returned `dress=nil`, `dressTint=nil,nil,nil`, `socks=nil`, `shoes=nil` from `body:getDescriptor():getWornItem(...)`. This is direct evidence that the queried descriptor does not expose the requested worn items; it does not yet establish whether the actor's rendered body/visual or inventory has clothing. Do not infer a model/appearance failure without inspecting the actor's worn-item source and user-visible scene.
+- No patch made after this result. Supervisor remains `ACTIVE` from spawn proof, test JAR SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; launch PID 13688 (live PID currently unenumerable). Production untouched.
+- Next: inspect the exact test Java appearance initialization and Build 42 actor/descriptor worn-item APIs; compare actor `getWornItems`/visual state and ask the user for visual appearance. Apply the smallest correction only after a source/runtime mismatch is proven. Menu-return regression remains pending.
+
+# [APPEARANCE VISUAL CONFIRMATION — OUTFIT PRESENT] 2026-10-20 17:49 Europe/Berlin
+- Status: `[COMPLETED]` for the requested outfit's in-scene visual presence. User explicitly reports: `الفستان الأحمر والحذاء والجوارب ظاهرة` on the newly spawned Sol.
+- Runtime read at 17:47:33 independently confirms `female=true`, `descriptorFemale=true`, `skinIndex=0`, `hairModel=PonyTail`, hair RGB approximately `(0.78,0.08,0.10)`; supervisor has active model and world/cell/square membership. Thus the requested female/red ponytail initialization and visible red dress/shoes/white socks are supported by combined runtime/user visual evidence. The exact rendered shade/style of hair was not separately described by the user.
+- Earlier `dress=nil / socks=nil / shoes=nil` from `body:getDescriptor():getWornItem(...)` is now classified as a diagnostic false negative for visible clothing. Installed Build 42 `IsoGameCharacter` exposes its own `getWornItem`; vanilla `Tutorial1.lua:216-230` and `SurvivorSwap.lua:65` set clothes directly on the actor. The precise descriptor-to-actor transfer/clearing behavior remains to be checked; no native appearance correction is justified from the nil descriptor read.
+- Next: update the test-only read-only diagnostic to query `body:getWornItem(...)`, then verify it after a safe Lua reload. Separately verify that a normal Exit to Main Menu saves and remains on the menu after the test auto-launch fix. No production changes; no second instance launched.
+
+# [APPEARANCE DIAGNOSTIC CORRECTED IN TEST SOURCE] 2026-10-20 17:50 Europe/Berlin
+- Status: `[COMPLETED]` for source-only diagnostic correction; `[IN PROGRESS]` for runtime read after Lua reload.
+- User visual proof: the red dress, shoes, and socks are visible on Sol. Prior `descriptor:getWornItem(...)` returned nil despite that visual result. Build 42 `IsoGameCharacter.getWornItem` exists, and vanilla clothing examples query/set actor wear state.
+- Changed only `08_RUNTIME_TEST/profile/Zomboid/mods/SolTest/common/media/lua/client/SolRuntimeTest.lua`: the read-only `NATIVE_SHELL_APPEARANCE` branch now queries `body:getWornItem` for `LONG_DRESS`, `SOCKS`, and `SHOES`. Actor creation and appearance initialization were not changed. New Lua SHA-256 `95D547C221E0193D580CAE7842951E7E02110684621277C5EDCE8A380EE8443D`.
+- Active runtime still has the previous Lua loaded; no runtime validation is claimed yet. Test JAR `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; initial launch PID 13688, current PID not reliably observable. No additional PZ process launched; production untouched.
+- Next: user exits normally to Main Menu; inspect save and auto-launch behavior. On a deliberate reload of the existing test save, run the corrected read-only appearance diagnostic and verify the same fixed look after recreation.
+
+# [MENU EXIT REVEALS TEST SUPERVISOR CLEANUP RETRY] 2026-10-20 17:51 Europe/Berlin
+- Status: `[REFERENCE GAP IDENTIFIED]` is inapplicable here; this is a direct test Runtime result. `[COMPLETED]` for observing save/exit; `[FAILED]` for supervisor cleanup completion; menu-stability regression `[IN PROGRESS]`.
+- Runtime at 17:50:38-39 logged `Saving worldgen params`, `Saving GlobalModData`, `removing all player data`, and `STATE: exit zombie.gameStates.IngameState` after the user's normal exit. This confirms the normal save/exit sequence ran, not that every player field was persisted.
+- At 17:51:00, `SolRuntimeSupervisor` changed `ACTIVE->SUSPENDED_ENV->REMOVING->CLEANUP_PENDING` on Lua environment/world cell change. The actor's reported membership was already `world=false,cell=false,square=false,model=false,modelAdded=false,activeModel=false,currentSquare=nil`, but `world-scheduler` cleanup threw `NullPointerException: Cannot invoke zombie.iso.IsoCell.isSafeToAdd() because cell is null`. Retry attempts 1-24 repeated the same failure by 17:51:28. This is a real test supervisor lifecycle cleanup defect; the exact scheduler-removal cause requires source analysis.
+- The repeated menu auto-launch trigger was removed earlier in test Lua, but menu staying visible still requires user confirmation and log observation. No second PZ instance or production change. Active JAR `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; original launch PID 13688, current PID not reliably enumerable.
+- Next: confirm menu remains visible; inspect exact `world-scheduler` removal call and guard it only if needed in a future test build after the current runtime ends. Do not patch the active JAR or claim cleanup regression passed.
+
+# [TEST MENU RETURN REGRESSION PASSED] 2026-10-20 17:52 Europe/Berlin
+- Status: `[COMPLETED]` for the test auto-launch loop regression. After choosing normal Exit to Main Menu, the user explicitly confirmed: `انا الان في القائمة الرئيسية ولم اعد للعالم بشكل تلقائي`.
+- Runtime proof: at 17:50:38-39 the game logged `Saving worldgen params`, `Saving GlobalModData`, and `STATE: exit zombie.gameStates.IngameState`. From exit line 3156 through the 17:51:54 log tail, there were zero `AUTOLAUNCH WINDOW ENTERED` / `OnMainMenuEnter hook reached` / `launchScenario` matches and zero subsequent `STATE: enter zombie.gameStates.IngameState` matches. The user's visual menu confirmation closes the observed loop.
+- Test-only source fix already in place: `SolAutoScenario.lua` `forceLaunch=false` and no `Events.OnMainMenuEnter.Add(solMenuLaunchStart)` registration in `SolForceMenuLaunch.lua`. No production change and no additional PZ process.
+- Separate unresolved issue: supervisor cleanup still retries `world-scheduler` removal with null cell while the actor has no world/cell/square/model membership. This did not prevent menu display; cleanup is `[FAILED]`, not folded into menu success. Last observed attempt 46 at 17:51:54.
+- Next: inspect scheduler-removal source and establish a minimal test-only correction for a future build. The actor-level appearance diagnostic source update awaits a deliberate reload of the existing test save; appearance across a second spawn remains unproven. Active JAR SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; initial launch PID 13688, current PID unavailable.
+
+# [CLEANUP RETRY STATIC CAUSE NARROWED] 2026-10-20 17:53 Europe/Berlin
+- Status: `[IN PROGRESS]` diagnosis; no source correction or new build.
+- Static proof: test source `SolRuntimeSupervisor.java:119-126` calls `onWorldCellChanged(liveCell)` after the live world cell changes; `:419-430` invokes `removeActorOnMainThread` when the actor still exists; `:345-346` unconditionally calls `target.removeFromWorld()` in the `world-scheduler` stage on every attempt. `:358-379` retains `CLEANUP_PENDING` whenever any stage throws, even when `noOwnedMembershipsRemain` is true, so `:122-125` retries after 1 second. Runtime matches this flow: after world cell became null, actor memberships were absent but the world-scheduler stage threw the same null-cell NPE repeatedly.
+- Root cause at the supervisor level: unconditional `removeFromWorld()` after the world cell is already unloaded and after the actor is absent causes a repeated exception and prevents retirement. Precise internal Build 42 call path inside `removeFromWorld()` remains to inspect before selecting a guard or cleanup timing change. This is separate from the now-passed menu-return fix and from appearance. Test JAR remains `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; initial PID 13688, no additional launch. Production untouched.
+- Next: inspect native `removeFromWorld`/scheduler behavior and decide the smallest test-only lifecycle correction before a future build; do not claim second appearance recreation until cleanup can retire the first actor.
+
+# [BUILD 42 REMOVEFROMWORLD BYTECODE PROOF] 2026-10-20 17:54 Europe/Berlin
+- Status: `[COMPLETED]` for native call-path diagnosis; correction and regression `[IN PROGRESS]`.
+- Exact installed artifact `C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/projectzomboid.jar`, inspected read-only with `javap -c -p -classpath ... zombie.iso.IsoMovingObject`, `zombie.characters.IsoGameCharacter`, and `zombie.characters.IsoPlayer`. `IsoPlayer.removeFromWorld()` delegates through `IsoLivingCharacter`/`IsoGameCharacter`; `IsoGameCharacter.removeFromWorld()` invokes `IsoMovingObject.removeFromWorld()`; the latter calls `getCell()` then immediately `IsoCell.isSafeToAdd()` with no null check (bytecode offsets 0-9), before it reaches `MovingObjectUpdateScheduler.removeObject()` (offsets 59-63).
+- Runtime message names that exact first dereference. At menu transition `target.getCell()` is null, so unconditional late `target.removeFromWorld()` can never reach scheduler removal. The actor already reports no owned memberships. A repeated generic retry cannot resolve this after the cell is gone; cleanup must use the pre-unload lifecycle or handle already-absent state explicitly. Do not assume scheduler absence solely from world membership.
+- Community/reference check before any build: official PZ API exposes `IsoMovingObject.removeFromWorld` and `IsoCell.isSafeToAdd`; no matching public Build 42 null-cell cleanup contract found in the initial GitHub/community search. The installed bytecode and live log are controlling evidence for this build. No patch or new build yet; production untouched. Test JAR SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; initial launch PID 13688, current PID unavailable.
+- Next: inspect scheduler `removeObject` access/ownership and test source cleanup timing; choose the narrowest correction, build only after research is recorded, then validate after game closure and PZ count zero.
+
+# [REFERENCE CHECK FOR TEST CLEANUP CORRECTION] 2026-10-20 17:55 Europe/Berlin
+- Status: `[COMPLETED]` for pre-build research; patch and regression still `[IN PROGRESS]`.
+- Primary installed Build 42 bytecode: `IsoMovingObject.removeFromWorld()` dereferences `getCell().isSafeToAdd()` before it calls `MovingObjectUpdateScheduler.instance.removeObject(this)`. `MovingObjectUpdateScheduler.removeObject` delegates to each bucket; bucket `removeObject` removes the object from its lists without dereferencing an `IsoCell`. These were inspected with `javap -c -p` against the installed `projectzomboid.jar`.
+- GitHub reference `LivingFellows` commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c4`: `SCBridge.java:2573-2580` unschedules the actor before conditional `if (actor.isExistInTheWorld()) actor.removeFromWorld()`; `SCNativeCompanion.java:677-686` directly removes from the captured bridge cell object list. This is reference source, not Sol runtime proof. Official PZ API documents `IsoMovingObject.removeFromWorld` and `IsoCell.isSafeToAdd` as public APIs; no null-cell guarantee is documented there.
+- Based on the installed bytecode and the live null-cell failure, the smallest planned test-only change is to call native `removeFromWorld()` only while the actor still has a cell and world membership; otherwise call `MovingObjectUpdateScheduler.instance.removeObject(target)` directly. Existing `cell-membership` and `square-membership` stages and `noOwnedMembershipsRemain` postconditions stay in place. This is a proposal until built and tested.
+- Build is not started while the current PZ process remains open. Test JAR SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`; initial PID 13688, live PID count cannot be reliably read from this shell. Production untouched.
+
+# [TEST SUPERVISOR CLEANUP GUARD APPLIED IN SOURCE] 2026-10-20 17:56 Europe/Berlin
+- Status: `[COMPLETED]` for minimal source change; build and Runtime regression `[IN PROGRESS]`.
+- Changed only `08_RUNTIME_TEST/SolNativePrototype/src/sol/bridge/SolRuntimeSupervisor.java`: in `removeActorOnMainThread` world-scheduler stage, call `target.removeFromWorld()` only when `target.getCell()!=null && target.isExistInTheWorld()`; otherwise remove the actor directly through `MovingObjectUpdateScheduler.instance.removeObject(target)`. Existing model, captured-cell, square, and postcondition stages remain. New source SHA-256 `0843405B7B4A67155A940C533113538BAED1FF8A79E9DA880760D714B50DC306`.
+- Rationale: installed Build 42 bytecode calls `getCell().isSafeToAdd()` before scheduler removal; the live menu transition had a null actor cell and endlessly failed there. Living Fellows commit `f0eaa49802b5b1c767adf175a57a7ad41fa676c4` also unschedules separately and guards its native world removal, but this Sol change is derived from local bytecode and live failure.
+- The active test JAR has not changed and the current PZ process remains at the main menu; no regression is claimed. Prior active JAR `build_appearance_stability_20261020_1722/SolNativeBridge.jar`, SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`. Original launch PID 13688, current process count unavailable; no extra launch. Production untouched.
+- Next: after normal game closure and verified PZ_COUNT=0, compile a new isolated test JAR, launch one test process, recreate Sol, verify actor-level clothing diagnostics and clean exit without pending retries. If process count cannot be verified, do not launch.
+
+# [TEST CLEANUP BUILD BLOCKED BY WRONG JAVAC VERSION] 2026-10-20 17:56 Europe/Berlin
+- Status: `[FAILED]` for the first isolated compile attempt; no JAR was produced or loaded.
+- New isolated directory `08_RUNTIME_TEST/SolNativePrototype/build_appearance_cleanup_20261020_1755` and args files were prepared without changing the live test JAR. Invoking PATH `javac` resolved to JDK 17, which rejects installed Project Zomboid class version 69.0 (`should be 61.0`), starting with `zombie.MainThread`; subsequent missing-symbol errors are cascading. This is a compiler selection/tooling error, not evidence against the source correction or Sol Runtime.
+- Runtime process was not relaunched; game remained at menu on old JAR. Production untouched. Original launch PID 13688. Existing JAR SHA-256 `A1205E1463A30621D3A76DF0B4DCB8D2B25504111094C56850210E73BAA99477`.
+- Next: locate the Java 25+ compiler used for prior Build 42 builds, rerun compilation in the same isolated target only, then hash the produced JAR. Do not launch until PZ_COUNT=0.
+
+## ARCHITECTURE PIVOT - LIVING FELLOWS CORE [IN PROGRESS]
+The previous custom Sol NPC body/runtime implementation is SUPERSEDED and archived outside the active project. The active mod is now named `Sol` with mod id `Sol`, derived from Living Fellows Companion 0.26.40 under MIT. Preserve proven companion actor, movement, traversal, combat, inventory, needs, persistence, vehicle and world-interaction mechanics. Remove unrelated population, households, factions, bandits, oddballs, base-life, production and multi-NPC systems after dependency reduction. Validate the reduced companion once as an integrated gameplay test; then connect the Sol AI bridge; then add Sol capabilities in batches.
+
+
+## Living Fellows reduction - official config gates - [IN PROGRESS]
+- Timestamp: 
+2026-10-20 20:33:24
+- Source basis: Living Fellows 0.26.40 source, SCConfig/SCSpawn/SCFactions.
+- Change: Added Sol single-companion runtime overrides inside SC.Config.refreshSandbox().
+- Enforced: productionEncounterEnabled=false; maxCompanions=1; factionEnabled=false; oddballsEnabled=false; banditFactionEnabled=false; diaryEnabled=false; intrusiveThoughtsEnabled=false.
+- Reason: Source confirms these systems expose official config gates; removing Bootstrap requires was rejected as unsafe because modules are intentionally loaded for later runtime contracts.
+- Problem encountered: Earlier Bootstrap pruning attempt was superseded and restored to verified baseline.
+- Static proof: PASS. SCConfig contains all seven overrides; SHA256=F71FFFE5089A51C636F92FE62D4286EA1340BA52C632EDB968D5BAB5C2B0E15B.
+- Runtime proof: PENDING.
+- Remaining: verify effective config in-game, then implement fixed female Sol spawn using source-supported SCSpawn/SCActor path; do not remove modules yet.
+
+## Fixed Sol spawn path - [IN PROGRESS]
+- Timestamp: 
+2026-10-20 20:41:18
+- Source basis: Living Fellows 0.26.40 SCSpawn.lua, SCActor.lua, SCCommands.lua, SCRuntime.lua.
+- Implemented SCSpawn.solPulse(): one recruited female companion with identity forename=Sol, surname empty, gender=female.
+- Spawn placement: reuses the exact 2..6 tile free-square policy used by SCRuntime.recoverySquare(), via GameplayUtil.position/gridSquare/isSquareFree.
+- Lifecycle: uses SC.Actor.checkBridge -> SC.Actor.beginSpawn -> existing pendingSpawn -> spawn.pollPending; no new Events hook and no custom actor provider.
+- Command-state basis: source confirms recruited=true defaults to order=follow and moveMode=copy in SCCommands.snapshotState().
+- Starter-weapon check: prepareNeutralStarterWeapon() returns unchanged for recruited=true, so Sol does not receive neutral-encounter starter weapon behavior.
+- Runtime integration: existing productionSpawnTask now calls SC.Spawn.solPulse instead of SC.Spawn.productionPulse; scheduler structure remains unchanged.
+- Bridge-edit problem: two earlier text-injection attempts corrupted Lua quotes; both were detected before runtime use and SCSpawn.lua was restored from SOL_FIXED_SPAWN_BACKUP_20261020_203600. Final insertion used Base64 text transport and printed correct Lua lines from disk.
+- Current hashes: SCSpawn.lua=694B002C301556BD6144EBACBB97FB4D922D8F7B0BBCD10E49A7776396A7086D; SCRuntime.lua=0F0D3A24596B898595F5C0D96B8616A41C092793F01D941FEBDE8EA662D1DED4.
+- Static proof: PASS for insertion/link structure and exact source-policy comparison.
+- Lua parser proof: NOT AVAILABLE because lua/luac is not installed locally.
+- Runtime proof: PENDING.
+- Next: stage/copy this build into the runtime test profile, launch only the test profile, inspect logs for syntax/bootstrap/spawn/provider errors, then validate Sol appears once and follows.
+
+## Runtime Test Environment Restoration - [COMPLETED]
+- Restored the preserved runtime-test profile data from the pre-Living-Fellows project backup.
+- Preserved the new test mods already staged under 08_RUNTIME_TEST\profile\Zomboid\mods.
+- Current staged mods: Sol from C:\Users\JAMAL\Desktop\Sol\01_WORK\Sol; ZombieBuddy copied from the original Steam Workshop installation.
+- Steam Workshop directories were not modified and contain no Sol-created backup artifacts.
+- latestSave.ini, debug-options.ini, and the prior Sandbox saves are present again.
+- Old Logs and old mods were intentionally excluded from restoration.
+- Evidence: PROFILE_RESTORE_ROBOCOPY_CODE=1; LATEST_SAVE_PRESENT=True; DEBUG_OPTIONS_PRESENT=True; SAVES_PRESENT=True; SOL_STILL_PRESENT=True; ZOMBIEBUDDY_STILL_PRESENT=True.
+- Static proof: PASS.
+- Runtime proof: PENDING.
+- Next: validate the recovered launch command/args against the current test tree, then launch Project Zomboid and verify Sol bootstrap/spawn/follow behavior.
+
+## Oddballs compatibility shim - [IN PROGRESS]
+- Runtime root cause proven: original SCOddballs.lua triggers Kahlua compiler local-variable limit (LexState.new_localvar Index 200).
+- Working file was byte-for-byte identical to Living Fellows 0.26.40 source before patch.
+- Because Sol forces oddballsEnabled=false, replaced only SCOddballs.lua with a small API-compatible no-op shim.
+- Original SCOddballs.lua preserved in project work folder: 
+C:\Users\JAMAL\Desktop\Sol\SCOddballs_original_20261020_212046.lua
+- Synced shim to local playable mod and isolated runtime-test copy.
+- Static proof: PASS (hash-synchronized copies).
+- Runtime proof: PENDING restart/reload.
+
+### Oddballs require namespace isolation - [IN PROGRESS]
+- Runtime collision confirmed: generic require SCOddballs can resolve to Workshop Living Fellows source.
+- SCBootstrap now requires unique Sol module SCOddballsSol.
+- SCOddballsSol.lua contains the disabled-feature compatibility shim.
+- Local playable mod and isolated runtime-test copy synchronized.
+- Static proof: PASS.
+- Runtime proof: PENDING full restart.
+
+### SCOddballsSol encoding fix - [IN PROGRESS]
+- Runtime exception changed to LexState.token2str Index 65022 at SCBootstrap line 47.
+- Root cause proven: SCOddballsSol.lua was UTF-8 with BOM (EF BB BF).
+- Rewrote the exact same shim content as UTF-8 without BOM in work, local playable, and isolated test copies.
+- Static proof: PASS.
+- Runtime proof: PENDING full restart.
+
+### Sol spawn runtime diagnostics - [IN PROGRESS]
+- Bootstrap/runtime startup is now Runtime PASS.
+- Sol is still not visible; spawn task runs every 5000 ms but previously discarded the return reason.
+- Added temporary change-only diagnostic logging around SC.Spawn.solPulse without changing spawn decisions.
+- Static proof: PASS.
+- Runtime proof: PENDING restart and log capture.
+
+### Dedicated Sol spawn scheduling - [IN PROGRESS]
+- Full spawn path reviewed before modification.
+- Current SC_WorldV1 contains no persisted companion identities; stale restore is excluded as blocker.
+- Bridge/runtime startup already Runtime PASS with actors enabled.
+- Sol spawn inherited background encounter scheduling under a 2 ms scheduler frame budget with no maxDelay guarantee.
+- Dedicated task renamed to sol-spawn and moved to high lane.
+- Existing 5000 ms cadence retained and maxDelayMs=5000 added.
+- Existing change-only spawn diagnostics retained.
+- Static proof: PASS; work/local/test synchronized.
+- Runtime proof: PENDING one integrated runtime test.
+
+### Executable Lua backup contamination - [COMPLETED]
+- Runtime stack proved stale SCBootstrap.lua was still executing from inside the Sol mod tree.
+- Project Zomboid recursively loads Lua files under media/lua, so backup folders inside that tree are executable, not inert.
+- Moved all SOL_*BACKUP* directories out of work/local/test Lua trees into C:\Users\JAMAL\Desktop\Sol\_INACTIVE_LUA_BACKUPS.
+- No backup was deleted.
+- Static proof: PASS after verifying no matching backup directories remain inside active Lua trees.
+- Runtime proof: PENDING one restart.
+
+### Fixed Sol spawn - [COMPLETED]
+- Sol now appears next to the player in the live game.
+- Runtime proof: PASS.
+- Root blocker was stale executable Lua backups inside media/lua, which caused old SCBootstrap code to load recursively and re-require SCOddballs.
+- After moving those backups outside the active Lua trees, Sol spawned successfully.
+- Dedicated sol-spawn scheduler remains active and statically verified.
+- Next: integrated behavior validation: Follow -> Go To -> Door -> Loot -> Combat -> Return -> Vehicle.
+
+### Sol live actor state - [IN PROGRESS]
+- User confirms Sol is visible beside the player and performs small live movements/animations.
+- This proves the spawned actor is active in-world, not a frozen visual shell.
+- Follow/pathing behavior is not yet proven.
+- Next runtime check: player moves 10-15 tiles away and observes whether Sol follows automatically.
+
+## SOL AI BRIDGE AND AWARENESS ARCHITECTURE - [IN PROGRESS]
+Goal:
+- Connect Sol to an external ChatGPT brain without exposing raw Lua execution.
+- Give Sol structured awareness of the player, herself, threats, world geometry, inventory, vehicles, map/navigation state, installed mods, and persistent memory.
+- Keep runtime lightweight: event-driven awareness plus low-frequency state snapshots instead of LLM calls every frame.
+
+### 1. Game-side Perception Layer - [PENDING]
+- Build a structured snapshot bus for player/Sol position, health, wounds, needs, equipped items, inventory, combat state, nearby zombies, doors/windows, rooms/buildings, containers, vehicles, obstacles, and current orders.
+- Track deltas/events so only meaningful changes are sent externally.
+- Add world/navigation descriptors: traversable tiles, entrances/exits, interior connectivity, road/drivable space, blocked paths, and route context.
+
+### 2. Bridge Transport Layer - [IN PROGRESS]
+- Define one stable message protocol between Project Zomboid and the external AI bridge.
+- Separate perception messages, conversation messages, tool requests, tool results, memory events, and errors.
+- Include protocol version, save/world identity, actor identity, request id, timestamps, and capability flags.
+Status 2026-10-22:
+- Game side: SOL_AI_FRAME_V1 mailbox (SCAIMailbox/SCAIRuntime) in place; live hello observed.
+- Brain side: 05_TOOLS/sol_mind v0.1 (deterministic ack, one inbox frame at a time with grace period, same-requestId resend, session reset, single instance on port 8768).
+- Proof: offline Lua 5.1 harness running the real 01_WORK Lua: 17/17 PASS. Project Zomboid runtime proof: PENDING.
+- Known protocol gap: the inbox has no read receipt. Proposal (mod change, NOT applied): game frames carry lastInboundSequence.
+Status 2026-10-23: Project Zomboid runtime PASS (2103 frames acked). Separate settings channel added beside the mailbox: SolSettings_Request.txt / SolSettings_State.txt (key=value, escaped; API keys never written back to game files).
+
+### 3. AI Tool Gateway - [IN PROGRESS]
+- Expose validated high-level tools only: follow, stop, go_to, return_to_player, open_door, close_door, loot, transfer_item, equip, unequip, attack, retreat, heal, enter_vehicle, exit_vehicle, drive_to, speak, and query_world.
+- No arbitrary Lua execution from the external model.
+- Validate preconditions and report structured success/failure back to the AI.
+Status 2026-10-22:
+- Implemented v1 set (12): follow, stay, regroup, retreat, go_to, check_room, open_door, close_door, board_vehicle, exit_vehicle, designate_target, avoid_target.
+- tool_result means accepted/rejected (command issued), NOT completed. Completion must be verified from perception (still missing).
+- Offline proof: follow and go_to accepted and executed exactly once; unsupported tool rejected with reason. Runtime proof: PENDING.
+
+### 4. Decision Loop - [PENDING]
+- Fast local autonomy handles immediate survival/movement/combat reflexes.
+- External AI handles goals, conversation, planning, prioritization, and multi-step decisions.
+- Wake external reasoning on significant events and use a controlled periodic heartbeat for context refresh.
+- The brain provider must be selectable by choice/availability: none | ollama | api | bridge, with automatic fallback. Honesty rules (no impossible actions, known recipe + real materials) are enforced game-side for every provider.
+- 2026-10-22: sol_mind v0.1 implements provider=none only (orders typed by the player); the others are reserved names.
+- 2026-10-23: provider layer (sol_mind/providers.py) implemented: key detection, model listing with free/paid/free-tier/not-for-chat labels, chat for Anthropic / OpenAI-compatible / Ollama, reasoning-model handling. Keys stored with Windows DPAPI. Selected: Groq openai/gpt-oss-120b. Chat loop wiring to the game is the next step.
+
+### 5. Persistent Memory - [PENDING]
+- Session memory: recent conversation, recent observations, active goals.
+- World memory: locations, safe places, containers, vehicles, hazards, people, tasks, discoveries.
+- Long-term Sol memory stored under the Sol persistent memory folder and keyed to save/world identity.
+- Maintain installed/enabled mod catalog and learned per-mod knowledge for adaptation.
+
+### 6. Conversation and Voice - [PENDING]
+- Text chat in Arabic and English.
+- Push-to-talk -> speech-to-text -> same AI bridge -> response -> in-game TTS in the detected/current language.
+- UI design supplied 2026-10-23 (design v5.2). The final UI hides all Living Fellows legacy panels; conversation and voice controls live in the Sol panel. Voice: Sol Mind records the microphone (game has no mic access), STT -> same brain -> text + female Arabic TTS played by Sol Mind; the chat keeps both sides as text.
+
+### 7. Navigation and Vehicle Intelligence - [PENDING]
+- Build route awareness from roads, traversable terrain, building connectivity, entrances/exits, and obstacles.
+- Vehicle planning must reason about drivable space, blocked roads, collision risk, slowing/stopping, rerouting, and safe destination approach.
+
+### 8. Validation Sequence - [IN PROGRESS]
+- Phase A: prove perception snapshots and bridge round-trip. [COMPLETED 2026-10-23: runtime round-trip, 2103 frames acked; live perception snapshot (seen) still to capture]
+- Phase B: prove one safe tool call end-to-end. [COMPLETED 2026-10-23: follow via mailbox, accepted and user-observed]
+- Phase C: prove multi-step command planning.
+- Phase D: add persistent memory and mod awareness.
+- Phase E: add text conversation. [IN PROGRESS: mind connection PASS (Groq gpt-oss-120b, Arabic reply); SolText + chat window next]
+- Phase F: add voice/STT/TTS. [NEXT AFTER E: female Arabic voice]
+- Phase G: add navigation/vehicle planning.
+- Phase H: replace legacy UI with final Arabic-first Sol UI. [IN PROGRESS: Sol panel + settings live; full LF UI inventory done; migration order in SOL UI]
+Companion mind roadmap (user requirements 2026-10-23):
+Status 2026-10-24 (user test, 19 problems): world scanner and per-world memory proven in game (Sol named opened cans, kcal, shut-off days, 504 rounds). Fixed in v0.6.0: brain had no coordinates / skills / body temperature (now in the situation), talked instead of using tools ('this is our home' -> clear intents are executed before the model speaks), markdown and tool names in replies (cleaned), item search matched 'Fashion Nails' for nails (whole-word / exact-type search), supplies list as text (now a coloured table built from data). Next: v0.6.1 'body' = game timed actions on Sol (give, eat, drink, fill water, board/exit vehicle, follow/stay, clean via LF base maintenance); v0.7.0 romance/marriage + check why all 911 learnable recipes read as known (cheat mode?); v0.8.0 map/GPS/driving and a one-person Sol expedition.
+- Diagnosis: the brain is blind - chat sends only the conversation. SCAIPerceptionAdapter already streams snapshots that nothing consumes.
+- N1 Situation awareness: before every reply Sol Mind adds a compact situation (Sol: health, wounds, hunger/thirst, weapon, ammo, supplies, order, activity; player: hunger, thirst, cold/heat, fatigue, wounds; nearby threats; inventory summary; time and weather). Proactive hints from fixed rules (cold -> dress warmly, hungry -> eat). Sol Mind keeps the latest snapshot in a file readable through the bridge.
+- N2 Home and places: 'This is our home' order (reuses LF camp core) + per-save place memory keyed by world id: water, seeds, fertilizer, feed, food (rice), well/tap, stove, storage categories (reuses LF base storage marks) and what Sol has seen.
+- 2026-10-24 v0.4.0 (world knowledge): SolWorldScan.lua (game) writes SolWorld_Snapshot.txt every 20 s and before each chat message: both characters (CharacterStat / MoodleType values, wounds, room, weapon, air temperature), every reachable inventory (player, Sol, containers within 18 tiles +-1 floor, all vehicle parts within 54 tiles) with food freshness/hunger/calories, fluids (clean/tainted litres), drainables, conditions; plants, animals, time, season, rain, water/power shut-off days. API names verified in PZ 42.21 Lua first; others guarded. Sol Mind world_knowledge.py: one memory per save, deleted only after that save folder was seen and then removed; food/water reports, needs from the game's own moodles/stats, hunger rate measured from snapshots; tools find_items / remember_place / recall_places / set_home / forget_place via OpenAI-compatible tool calling. Offline tests: scanner 13/13, knowledge 19/19. Runtime: PENDING.
+- N3 Actions from speech: the model calls validated gateway/base tools (follow, stay, go home, water plants, feed animals, cook, fetch) only when tools, materials and places exist; results reported honestly (accepted != completed).
+- 2026-10-24 v0.7.0 (actions): SolActions builds Sol's action list from the game itself: every button / choice / switch of Sol's Orders and Loadout pages that issues an LF command (LF command ids seen in SCCommands.lua: follow, stay, guard, regroup, retreat, cautious_follow, hold_fire, fire_at_will, bandage, barricade, board_vehicle, exit_vehicle, set_move_mode, set_combat_doctrine, set_follow_distance, set_hold_fire, set_scavenge, set_weapon_priority, set_work_mode, set_base_role ...) plus Sol actions (drive, read, attack nearest = LF designate_target). Executing calls the LF widget's own callback, else SC.Commands.issue. The brain gets the live list + a do_action tool; common Arabic verbs (follow / stay / sneak / run / board / exit / attack / hold fire / bandage / scavenge / read) run before the model speaks; the game returns LF's own reason when refused. Survivor know-how block (boil water, noise, power and fridges, generator outside, Knox, layers, barricades, seasons, corpses, skill books). Not yet: eat / drink / give items (game timed actions), cooking and cleaning as orders (LF chef / maintainer base roles need a camp). Offline: 14/14. Runtime: PENDING.
+- 2026-10-24 v0.7.1 (her own body): user rule: whatever Sol can do on her own, she must do when asked. Eat = the food in her bags that spoils first, drink = clean water only (tainted skipped), both with the game timed actions LF's needs system queues (SCNativeActions.lua: ISEatFoodAction:new(actor, item, 1), ISDrinkFromBottle:new(actor, item, uses)); hand-over to the player within 2 tiles (water / food / item name); bandage the player = LF Medical.applyPlayerBandage after playerBandagePreflight; replace her dirty bandage = LF Medical.replaceDirtyBandage after canReplaceDirtyBandage. Verbs: كلي، اشربي، أعطيني ماء/طعام، ضمّدي جرحي، غيّري الضماد. Offline: actions 22/22. Not yet: sleep / rest on request, self-treatment of her wounds on request (LF Medical.treat needs its runtime object).
+- 2026-10-24 v0.7.2 (fetch): user test: 'find a book and read it' -> Sol found the real book (Administration for Managers, living room) but could not fetch it and called it useless. Fetch = find the best matching item in containers within 18 tiles, walk there with LF's navigation (AI tool gateway go_to -> LF move_to), take it with the game's ISInventoryTransferAction:new(character, item, src, dest), come back (LF follow), optionally read it. Books: skill (SkillBook) > recipes (getLearnedRecipes) > fun (IsLiterature, not UNINTERESTING: lowers boredom / unhappiness); fun books get a Read button too. Offline: actions 28/28.
+- 2026-10-24 v0.7.2 (performance): user: the game fell to 8-10 FPS (from ~120). Found in Sol's own code: the chat window re-wrapped and re-shaped every message on every frame (68 ms per frame with 30 long messages in the test, now 1.4 ms: shaping/bidi/width and wraps are cached, layout only when messages change); Sol pages wrapped labels every frame and rebuilt the hidden LF page every 1.5 s (now wrapped once per refresh, refresh every 5 s); the action list rebuilt two hidden LF pages every 15 s even with all windows closed (now every 2 min and before each chat reply); world scan every 60 s instead of 20 s, ASCII fast path in its JSON; recipes 30 per tick, every 30 min; GPS / actions poll once a second, GPS state written only when it changes. SolPerf writes '[SolPerf] fps=.. | part ms/calls max ..' to console.txt every 15 s to find what is still heavy (Sol or other mods). Give: into the player's inventory, else the worn bag, never dropped; 'give me everything'; 'give back what I gave you' (items put in her bag while the player was near).
+- 2026-10-24 v0.7.3 (Sol Link): user: ChatGPT (monthly subscription) as Sol's mind, text and voice, through an independent bridge chosen in the game and kept until switched. OpenCode Zen free models refuse outside the OpenCode app (FreeTierError, proven with the real key) and Cloudflare 1010 blocks clients without a User-Agent; errors now keep the server's text. Sol Link = Sol Mind HTTP server on 127.0.0.1:8790 with its own DPAPI token + a generated Tampermonkey userscript (05_TOOLS/sol_link/Sol_Link.user.js) active only in the one ChatGPT chat the player marks; text only: no endpoint or code that runs anything, code blocks dropped, the command bridges (8765/8766) untouched; must run in a browser profile WITHOUT the command-bridge userscript (its autopilot executes code blocks). Voice = ChatGPT's own read-aloud button on Sol's reply. Messages carry persona (first and every 25), live situation, action list, pre-executed intents; ChatGPT's [فعل: id | option] tags run only when the id is in the live list. Saved source 'bridge' starts Sol Link with Sol Mind every time. Not yet: the player's voice (local Whisper in Sol Mind planned). Offline: link 17/17.
+- 2026-10-24 v0.7.4: first Sol Link test worked (message + live situation reached ChatGPT, home saved at 7013,8448) but 'go inside, it is cold' had no action, 'take us home' via Groq failed (sol_drive listed but not executable) and Groq hit 429 after repeated failing calls; the same message was sent 3 times and ChatGPT's reply never appeared in the game: the chat window ignored every state from Sol Mind while a newer local message was not yet taken (reply hidden). Fixed: those states are merged and shown, our pending message stays last. Added: walking actions (sol_go_inside = nearest walkable room square, the saved home when within 60 tiles; sol_goto x,y) via LF navigation; Sol Mind resolves home / remembered places / map marker for walking and driving in one place for intents, model tools and ChatGPT tags; a refused call is not repeated, 429 waits 6 s and retries once; Send is ignored while Sol answers and identical messages within 90 s are dropped; Firefox opens Sol's chat by itself (profile Sol, -no-remote, chat address learned from the userscript) when Sol Link is not connected and the Sol profile is not running; Sol calls the player Jamal. Offline: link 25/25, actions 36/36.
+- 2026-10-24 v0.7.5: in game: 'ادخلي للداخل' ran (going_inside livingroom) and ChatGPT answered, but Sol Mind got an EMPTY reply exactly 120 s later (twice): the userscript treated any button whose label contains 'Stop' as 'still generating' and never saw the end. Userscript 1.2: a reply is done when a NEW assistant message's text has not changed for 2.5 s and ChatGPT's own stop-button (data-testid) is gone; when nothing is found it sends a page report that Sol Mind logs. Reproduced and fixed against a simulated ChatGPT page (jsdom). Sol Link token replaced (the old one was pasted into a ChatGPT chat).
+- 2026-10-24 v0.7.6 (voice + map): Voice button works: press = listen, press again = send (30 s max). With the ChatGPT bridge as mind the ear is ChatGPT's own dictation (user: better than Groq): Sol Link 1.3 clicks ChatGPT's mic button, then its submit, takes the text from the composer, clears it and posts /heard; Sol Mind treats it as a typed message; the reply is read aloud by ChatGPT. Without the bridge: Sol Mind records the microphone (sounddevice) and Whisper (Groq whisper-large-v3-turbo, the stored Groq key); audio is never written to disk. GPS: refusal reasons in Arabic; the world map's right-click menu gets 'Sol: drive here' / 'Sol: walk here' (English: game menus use the game font). map_not_opened came from pressing 'map marker' before the map was ever opened. Offline: voice 11/11 + 5/5, dictation page test, gps 22/22. Runtime: PENDING.
+- 2026-10-24 v0.7.7 (driving with the player aboard): in game: Sol Link works (new token, messages + live situation reached ChatGPT, it used [فعل: sol_go_inside | home] and [فعل: regroup]); GPS refused 'someone who is not a companion is in this vehicle'. Living Fellows SCVehicle.preflightBoard (1152-1156) refuses the driver's seat while any non-companion is aboard (strangerAboard checks every seat), but only when boarding: SCDriving motionAllowed does not re-check. So Sol sits first (nearest car within 12 tiles), the GPS says 'board as passenger', and when the player is in her car she leaves by herself; if the player is already inside: 'get out a moment, I sit first, then get in' in Arabic. 'اركبي السيارة وقودي' / drive with no place = take the wheel and ask where (it searched a place named 'the car'). In game Sol sat in a back seat and never took the wheel: LF also refuses boarding an actor already in a vehicle (SCVehicle 1137-1140), so she now steps out (LF exit_vehicle) and takes the wheel when outside. Runtime check pending: the Java bridge might re-check passengers. Replies never reached the game: Sol Link's page report showed 0 role-marked messages and 0 articles in Firefox's ChatGPT page, so the userscript never saw any reply; userscript 1.4 finds replies in '.markdown' (and other fallbacks), runs only in the top frame (@noframes) and reports detailed selector counts if it still fails (reproduced on a simulated page). The chat window got its own microphone button next to Send (red while listening); the voice status asked to press a button that was only in the main Sol window.
+- 2026-10-24 v0.7.8: in game: userscript 1.4 installed; ChatGPT got the live situation and tagged [فعل: sol_drive | map marker], the map menu offered 'Sol: drive here', GPS showed the right Arabic refusal (player aboard) but ChatGPT then claimed 'I am behind the wheel' (tags run after its reply, so it never saw the result). Sol Mind now waits for the game's GPS answer (SolGPS_State ack) and adds the real outcome in Arabic under Sol's reply when the game refused or asks the player to board. When refused because the player is aboard, the GPS waits for the player to get out and then carries on by itself (she leaves her back seat, takes the wheel, asks the player to board, drives). Security note recorded: the user's main Firefox profile runs the ChatGPT command bridge (autopilot) next to Sol Link: recommended a separate Firefox profile 'Sol'.
+- N4 Skills and learning: Sol is a PZ character with perks (getPerkLevel/addXp used by LF SCBackground/SCDowntime); full skills screen like the player's; reading skill books to learn (LF downtime already applies XP multipliers).
+- 2026-10-24 v0.5.1 (skills and recipes): Skills tab in the Sol pages: the game's own perk list (PerkFactory.PerkList, mods included) by category, 10 boxes, level + XP on hover (Arabic names). SolSkills.lua judges every craft recipe for Sol with the game's own functions (ScriptManager getAllCraftRecipes, needToBeLearn, CraftRecipeManager.hasPlayerLearnedRecipe / hasPlayerRequiredSkill, getRequiredSkill getPerk/getLevel, getInputs/getPossibleInputItems), built a little per tick, written to SolRecipes_Snapshot.txt. Books/magazines in Sol's bag judged like ISInventoryPane/ISReadABook (useful / too hard / too easy / teaches / known); 'Read' queues the game's ISReadABook on Sol (pages, XP multiplier, learned recipes by the game). Sol Mind can_make tool: verdict not_learned / skill_too_low / missing_items / can_make with reasons. Offline: skills engine 12/12, pages 25/25. Runtime: PENDING (incl. whether LF lets the timed action run on Sol).
+- N5 Mod knowledge: 'Update mod knowledge' button in Sol settings; Sol Mind reads installed mods (mod.info, scripts: items, recipes, build requirements) into a per-mod catalog; answers 'how do we install X' with the mod's real requirements checked against inventory. Placement reasoning (e.g. solar panels behind the house) comes last: needs house geometry.
+- N6 Map and driving: pick a point on the world map + speed (fast / normal / slow); Sol walks or drives there (reuses LF expedition car driving, parking areas, SCNavigation).
+- 2026-10-24 v0.7.0 (GPS): SolGPS on LF's real driving (SCDriving.lua: native bridge presses pedals and wheel, follows SCExpeditionRoute street routes, slides round wrecks, stops for blocked lanes, re-plans up to 3x, max 30 km/h): Sol takes the wheel (SC.Driving.takeWheel) and drives (SC.Driving.drive) to the newest world-map symbol (ISWorldMap_instance.mapAPI:getSymbolsAPI, getWorldX/Y), home or a remembered place; speeds slow 10 / normal 20 / fast 30 km/h; Sol-styled GPS panel while in a car (destination, distance, km/h, phase, fuel bar, speed / marker / drive / stop buttons); chat: 'take us home', 'drive to the marker slowly', 'stop'. If nothing ticks SC.Driving while Sol drives, SolGPS ticks it. Not yet: turn-by-turn hints when the player drives. Offline: 18/18. Runtime: PENDING.
+- N7 Voice: push-to-talk STT (Groq whisper) + female Arabic TTS; chat keeps both sides as text.
+- Order: v0.3.3 (UI fixes) -> N1 -> N2 -> N3 -> N4 -> N5 -> N6 -> N7. Each phase: offline tests first, then in-game proof with the user.
+
+Runtime rule:
+- Do not modify the active local game mod while Project Zomboid is running. Work changes remain in the project copy until the game is closed and an intentional sync/test step is performed.
+
+### Existing LF capability reuse analysis - [IN PROGRESS]
+- SCNavigation is mature and already covers bounded A*, native-path fallback, doors, windows, fences, stairs, crowd yielding, stealth/threat-aware routing, stuck recovery, interaction targets, and retreat planning.
+- SCDriving already wraps native road routing, lane scanning, route following, turn-around, obstacle braking, and ActionSupervisor ownership.
+- Therefore Sol AI should not implement new movement/vehicle mechanics; it should call validated high-level tools that delegate into these proven systems.
+- Next source focus: Perception/Senses snapshot schema, Commands semantics, ActionSupervisor ownership/cancellation, and Java bridge callable surface.
+
+### Sol AI protocol specification - [COMPLETED]
+- Created SOL_AI_BRIDGE_PROTOCOL.md.
+- Selected replaceable mailbox/JSONL-style IPC as initial production transport because file IPC was proven in the old Sol harness and current LF exposes no HTTP/socket layer.
+- Existing LF Senses/Commands/ActionSupervisor/Navigation/Driving remain the authoritative execution stack.
+- Defined normalized perception schema, message envelope, validated tool gateway, memory layers, decision cadence, failure behavior, and validation phases.
+- Active game mod untouched.
+
+### Normalized Sol perception adapter - [IN PROGRESS]
+- Added minimal work-copy SCAIPerceptionAdapter.lua.
+- Reads cached SCSenses only; no independent world scan or external AI call.
+- Static structure/BOM validation: PASS.
+- Bootstrap/runtime integration still pending.
+- Active local game mod untouched.
+
+### Sol AI Tool Gateway v1 - [IN PROGRESS]
+- Added work-copy-only SCAIToolGateway.lua.
+- Initial whitelist: follow, stay, regroup, retreat, go_to.
+- go_to accepts only validated numeric x/y/z and delegates to SC.Commands.issue -> move_to; U.loadedSquare source confirms coordinate-table resolution.
+- No raw Lua/Java game objects are accepted by the external tool surface.
+- Door/vehicle/zombie tools remain pending until an internal target resolver is designed and source-validated.
+- Request ids, unsupported tools, coordinate bounds and command failures return structured receipts.
+- Static hash/BOM proof PASS; module intentionally not required by bootstrap yet.
+- Active local game mod untouched.
+
+### AI module namespace alignment - [COMPLETED]
+- Source review confirmed Living Fellows modules bind through global SurvivorCompanion and local SC = SurvivorCompanion.
+- Patched SCAIPerceptionAdapter.lua and SCAIToolGateway.lua in work copy to use the real SurvivorCompanion namespace.
+- Both modules remain unrequired by bootstrap and runtime-unproven.
+- UTF-8 BOM checks PASS.
+- Active local game mod untouched.
+
+### Sol AI Target Resolver v1 - [IN PROGRESS]
+- Added work-copy-only SCAITargetResolver.lua.
+- World objects reuse SC.BaseLife.describeObject/resolveObject and persistent object:* identities.
+- Vehicles resolve by persistent SQL id through SC.Vehicle.loadedBySqlId.
+- Zombies resolve by bounded current-session U.idOf lookup over getZombieList; no persistence claim across restarts.
+- Raw game objects remain internal and are never accepted directly from the external AI protocol.
+- Static SHA/BOM/namespace checks PASS; bootstrap integration and runtime proof pending.
+- Active local game mod untouched.
+
+### Sol AI Tool Gateway resolved-target expansion - [COMPLETED]
+- Work-copy gateway exposes follow, stay, regroup, retreat, go_to, check_room, open_door, close_door, board_vehicle, exit_vehicle, designate_target, avoid_target.
+- Door/vehicle/zombie references are resolved internally through SCAITargetResolver.
+- No raw Lua/Java object is accepted from the external AI surface.
+- Static content/BOM verification PASS.
+- Bootstrap/runtime integration pending; active local game mod untouched.
+
+### AI Tool Gateway quote repair - [COMPLETED]
+- Repaired G.supported() and G.execute dispatch using Base64-protected Lua blocks.
+- Restored literal quoted tool names, argument names, type names, command names, and rejection reasons.
+- Static block equality/BOM verification PASS.
+- Active local game mod untouched; runtime proof pending.
+
+### AI perception resolvable references - [COMPLETED]
+- Visible zombie threat rows now export session-scoped zombieId using SC.GameplayUtil.idOf(actor), matching SCAITargetResolver.resolveZombie.
+- Heard threat rows intentionally remain without zombieId because SCSenses auditory records deliberately contain no zombie actor/exact square.
+- Sol/player current vehicle now exports persistent sqlId plus script/seat when available.
+- Added source-backed threat state fields: obstructed, fenced, breaching, targeting, attacking, posture.
+- No speculative door/object discovery added because Senses exits do not expose a proven persistent object reference in the inspected path.
+- Static exact-block/BOM verification PASS; runtime integration pending; active local game mod untouched.
+
+### Sol AI mailbox duplicate-key collision fix - [COMPLETED]
+- Replaced inboundKey() identity concatenation with per-field hex encoding before delimiter join.
+- Prevents false duplicate suppression when sessionId, sequence, requestId, or type contains delimiter characters.
+- Exact line-block and BOM verification PASS.
+- Runtime integration remains pending; active local game mod untouched.
+
+### AI transport ACK contract - [COMPLETED]
+- Resolved protocol inconsistency: validation required ping/ack but ack was not defined.
+- Added Brain -> Game ack message with payload.ackSequence matching the exact Game -> Brain envelope sequence.
+- Single-flight mailbox semantics documented: one unacknowledged outbound frame, coalesced noncritical perception, bounded critical in-memory queue.
+- Static documentation proof PASS; runtime proof pending.
+
+### Sol AI runtime orchestrator - [COMPLETED]
+- Added work-copy SCAIRuntime.lua; bootstrap/live mod not touched.
+- Source-proven world identity: getCurrentSaveName() with getWorld():getWorld() fallback.
+- Single-flight outbound delivery with exact ackSequence release.
+- Critical queue bounded 32; request cache bounded 128; perception coalesced.
+- Poll 250 ms; perception 750 ms; heartbeat 5000 ms.
+- tool_request -> SCAIToolGateway; say -> SC.GameplayUtil.say.
+- Stale session/world frames rejected; memory operations explicitly unimplemented.
+- Static SHA/content/BOM verification PASS; runtime proof pending.
+
+### AI runtime critical queue safety - [COMPLETED]
+- Removed destructive drop-oldest behavior from SCAIRuntime critical queue.
+- Periodic heartbeat messages now coalesce instead of accumulating.
+- If the bounded queue is full, an existing heartbeat may be discarded to make room; real critical messages are never evicted by queue pressure.
+- If no heartbeat is disposable, enqueue returns critical_queue_full instead of silently deleting an older critical message.
+- Static verification PASS; runtime proof pending; live mod untouched.
+
+### AI request idempotency binding - [COMPLETED]
+- requestId is now bound to a deterministic serialized tool-request signature.
+- Exact replay of the same requestId/tool/arguments returns the cached result without re-executing.
+- Reuse of a requestId with different tool or arguments returns request_id_conflict and does not execute the conflicting command.
+- Signature generation reuses the deterministic bounded SCAIMailbox encoder.
+- Static verification PASS; runtime proof pending; live mod untouched.
+
+### SCAIRuntime stale tool-tail cleanup - [COMPLETED]
+- Root cause of prior failed verification was PowerShell quote mangling in the verification literal, not hidden source characters.
+- Confirmed stale lines 155-156 using Base64-protected exact text and prevalidated function boundaries.
+- Removed only the obsolete remember(id,result)/tool_result line and its extra end.
+- tool() now ends exactly once before inbound().
+- Static boundary/SHA/BOM verification PASS; active mod untouched; runtime proof pending.
+
+### Tool-result backpressure safety - [COMPLETED]
+- Added one-slot deferred inbound tool request in SCAIRuntime.
+- A new tool request is not executed unless the critical queue has guaranteed receipt capacity (free slot or disposable heartbeat).
+- While a tool is deferred, inbox polling pauses so the already-consumed mailbox request cannot be lost through duplicate suppression.
+- Deferred tool executes on a later poll tick only after receipt capacity becomes available.
+- start/stop reset deferred state; health exposes deferredTool.
+- Static verification PASS; runtime proof pending; active mod untouched.
+
+### SCAIRuntime tail repair after backpressure patch - [COMPLETED]
+- Final static review proved the earlier indexed backpressure edit displaced start/tick/health code into invalid locations.
+- Preserved the corrupted artifact as a safe project-root backup outside all active Lua trees.
+- Rebuilt the complete poll/perceive/start/stop/tick/health tail as one atomic Base64-protected block.
+- Retained deferred-tool backpressure semantics and deferredTool health visibility.
+- Verified exactly one start/stop/tick/health/poll/perceive definition, no BOM, and coherent function boundaries.
+- Static structural proof PASS; Lua parser unavailable on host; runtime proof pending; active mod untouched.
+
+### AI bootstrap module integration - [COMPLETED]
+- Added SCAIMailbox, SCAITargetResolver, SCAIToolGateway, SCAIPerceptionAdapter and SCAIRuntime immediately after SCCommands using prevalidated original indices.
+- Added AI module names to requiredModules and transport/gateway/perception/runtime entry points to requiredFunctions.
+- Insertions were applied bottom-up to preserve original line-index correctness.
+- Static count/SHA/BOM verification PASS; SCRuntime and active mod untouched; runtime proof pending.
+
+### AI lifecycle boundary correction - [COMPLETED]
+- Preserved the valid sol-ai scheduler task.
+- Moved AIRuntime.start out of the restore-failure branch to immediately after running=true, with persistence/startup commit already complete.
+- Moved AIRuntime.stop out of the reset-failure branch to the successful reset commit path, after the failure return and before generation/reset-state publication.
+- Exactly one AI start, stop and scheduler task remain.
+- Static boundary/SHA/BOM verification PASS; active mod untouched; runtime proof pending.
+
+### AI protocol cadence/toolset alignment - [COMPLETED]
+- Updated decision cadence to the actual 100 ms scheduler / 250 ms poll / 750 ms perception / 5000 ms heartbeat behavior.
+- Replaced aspirational tools with the 12 currently implemented gateway tools.
+- Documented request cache/idempotency/conflict and deferred-tool backpressure semantics.
+- Lua and active mod untouched; runtime proof still pending.
+
+### AI protocol safety/proof alignment - [COMPLETED]
+- Safety section now documents actual execution ownership, request replay protection, mailbox duplicate suppression, single-flight retry behavior, and local-body survival on AI failure.
+- Current proof status now distinguishes Runtime PASS, Source/Static PASS, and integrated AI Runtime PENDING accurately.
+- Protocol document is now aligned to the implemented work-copy bridge semantics; Lua and active mod untouched.
+
+### SCAIRuntime static hardening - [COMPLETED]
+- Fail-closed world identity; exact-one living Sol actor; inbound schema/sequence validation; truthful ping queue result; pcall isolation for tool discovery and mailbox health.
+- Work copy Static PASS; runtime proof pending. Active/test copies untouched while game is running.
+
+### AI protocol post-hardening alignment - [COMPLETED]
+- Protocol documentation now matches the hardened runtime: schema=1 and numeric sequence validation, fail-closed world identity, and exact-one living Sol actor resolution.
+- Static documentation alignment PASS; integrated runtime proof remains pending. Active/test copies untouched.
+
+### AI build sync for integrated runtime test - [COMPLETED]
+- Project Zomboid confirmed closed before writes.
+- SCOddballs.lua BOM removed using the byte-identical BOM-free SCOddballsSol shim.
+- AI runtime/bootstrap/mailbox/resolver/gateway/perception plus Oddballs shims synced to test profile and local live Sol mod.
+- SHA equality verified work=test=live for every synced file; no backup directories present under active Lua trees.
+- Runtime proof remains pending until clean game restart and integrated test.
+
+## WORLDCRAFT INTELLIGENCE - [PENDING]
+Goal:
+- Sol must understand and reason about Project Zomboid world systems as an experienced player, not as a macro executor.
+- Knowledge must be grounded in the actual game/mod source and runtime state before implementation; no guessed gameplay rules.
+
+Required domains:
+- Farming: crops, seeds, soil/water state, fertilizer, disease, growth stages, season/weather constraints, watering/fertilizing/harvest timing, missing supplies.
+- Animal care: species-specific food/water needs, shelter, health, production, timing of care, missing feed/resources.
+- Cooking/food preparation: recipes, ingredients, substitutions supported by the game, tools, heat/cooking state, preservation, refrigeration/freezing, spoilage risk, meal planning from available stock.
+- Building/maintenance: recipes/build requirements, tools, materials, skills, missing components, safe task ordering.
+- Inventory/storage organization: semantic placement by purpose and perishability, e.g. seeds/farming supplies near farm, mechanic tools in garage, canned food on kitchen shelves, perishables in refrigerator, meat in freezer.
+- Resource planning: compare task requirements against owned inventory and nearby storage, identify shortages, propose acquisition priorities.
+- Autonomous housekeeping: organize containers, move items to appropriate storage, maintain useful stock locations, avoid nonsensical storage choices.
+- Long-horizon planning: reason about future needs (food spoilage, crop cycles, animal feed, fuel/material reserves) and warn the player before shortages become urgent.
+
+Architecture requirements:
+- Build a normalized worldcraft knowledge layer from Vanilla Build 42.21 systems plus enabled mod data.
+- Keep source-derived rules separate from runtime observations and long-term learned memory.
+- Sol should be able to explain WHY it recommends an action and what exact resources are missing.
+- External AI plans multi-step goals; Living Fellows / game-native systems execute low-level actions.
+- Mod-aware knowledge must adapt when recipes/items/systems are added or changed by enabled mods.
+
+## STEAM MOD AWARENESS CATALOG - [PENDING]
+Goal:
+- Sol must maintain a non-cheating awareness catalog of all locally downloaded Project Zomboid Steam Workshop mods, not only currently enabled mods.
+- Catalog awareness is NOT character learning. Discovering a mod must never grant recipes, manuals, skills, traits, research, or gameplay unlocks to Sol's character.
+- Track separately: downloaded/installed, globally enabled, enabled in current save/server, version/dependencies, and character-unlocked permissions.
+- Future Sol UI must contain a dedicated Mods section with an Update Mod Database action.
+- Update Mod Database rescans the local Steam Workshop Project Zomboid content so newly downloaded, removed, or updated mods become known to Sol.
+- Refresh should use Workshop ID, mod ID/name, local path/version, dependencies, metadata, descriptions/readmes/config/script definitions, timestamps/hashes where useful, and avoid unnecessary deep re-analysis of unchanged mods.
+- Deep Lua/Java/source analysis is used only when exact capability behavior or a gameplay gate requires proof.
+- Catalog refresh is read-only against Steam Workshop content and must never modify Workshop mod files.
+- Sol may use catalog awareness to understand that a mod/capability exists and to plan legitimate acquisition, but execution permission remains controlled by actual game/mod/save state.
+Status:
+- Requirement accepted and architecture boundary defined.
+- Implementation, Mods UI, database format, scanner, and runtime validation remain pending.
+Proof:
+- Design requirement only; no runtime proof yet.
+
+## SOL APPEARANCE / BODY / CLOTHING / VOICE INTEGRATION - [PENDING]
+Goal:
+- Give the fixed companion Sol the VSGirlBody [Extension] appearance/body, the VSGirlBody Extension Clothing Compatibility behavior needed for that body, and the Grace Ashcroft voice identity.
+- 2026-10-24 SolDress 0.1.0: user: Sol must never spawn naked; vanilla clothes are fine. Cause: SCSpawn.lua:823 Sol identity has no outfit and a restored Sol spawns bare (SCActor.lua:1246). SolDress checks every new Sol actor; with zero worn items she gets one plain vanilla set (first existing item per slot), equipped like LF extras (AddItem -> getBodyLocation -> setWornItem -> resetModelNextFrame). Anything she already wears is left untouched. Offline 6/6. Runtime: PENDING.
+- Final user experience should not require enabling these as separate mods if redistribution/technical constraints legally permit embedding; scope changes to Sol only and avoid globally replacing other female characters.
+
+Source proof (Static, 2026-10-21):
+- VSGirlBodyExtension 1.19.23 (Workshop 3820897273) targets Build 42.21.x and requires ZombieBuddy.
+- Its Java PlayerBodyModels.controlled(IsoGameCharacter) only accepts a local IsoPlayer and explicitly rejects isNpc(), remote, dead, zombie, and animal characters. PlayerChoice.created() also rejects NPCs. Therefore the stock extension cannot be directly switched on for the Living Fellows Sol NPC; an NPC-specific integration path must be proven before implementation.
+- AppearanceProfiles.renderable() can render controlled local players or a remote profile, but AppearanceProfiles.remote() is IsoPlayer-only. This does not yet prove NPC support.
+- VSGirlBodyExtensionClothingCompatibility 1.1.2 (Workshop 3820917070) requires VSGirlBodyExtension and contains its own Java/Lua/server recipe/loot compatibility layer. Exact minimum Sol-only subset is not yet frozen.
+- Grace Ashcroft Voice (Workshop 3820444534, id VoiceGraceAshcroft) registers voice style GraceAshcroft with prefix VoiceGraceAshcroft and voiceType=1, plus Player_Sound_GraceAshcroft.txt and OGG assets. Exact per-NPC assignment hook still needs source proof.
+- No license/readme/permission evidence was found in the installed roots during the focused scan. Redistribution permission is therefore NOT proven. Do not bundle/copy third-party assets into distributable Sol until permission/license is established; if permission is unavailable, use a dependency/adapter architecture instead.
+
+Implementation constraints:
+- Research exact Living Fellows/Build 42 NPC visual-model and voice-style hooks before any active Lua or asset changes.
+- Preserve Sol-only scope where technically possible.
+- Do not patch Workshop content.
+- Do not restart/test the game until the integrated body/clothing/voice path is source-proven and ready for one meaningful runtime test.
+- Status remains PENDING; current evidence is Static only.
+
+## VSGirl dedupe + Sol world runtime validation - [IN PROGRESS]
+Updated: 2026-10-22 06:44:47
+- Static: PASS. Removed 4,497 byte-identical VSGirl files from both LIVE and WORK copies of Sol; zero exact same-path/hash VSGirl duplicates remain in Sol. Four same-path files with different hashes were intentionally retained.
+- Runtime boot/main menu: PASS. Project Zomboid remained alive and responsive; SolCombined.jar won the localplayerbody Java package; SurvivorCompanionBridge initialized; no HumanVisual.addClothingItem / IndexOutOfBounds / IsoFallingClothing / physics-object spam during boot.
+- Runtime world load: PASS. MainScreenState and LoadingQueueState exited, GameLoadingState completed, world initialized, and gameplay frames advanced normally.
+- Runtime Living Fellows: PASS. SurvivorCompanion runtime started release=0.26.40 protocol=42.21-isocompanion-21 with actors enabled.
+- Runtime Sol spawn: PASS. First pulse reported spawn_pending, then finalizeSpawn completed and [SurvivorCompanion][sol] companion spawned. Later pulse returned sol_already_exists, confirming the single-Sol guard.
+- Runtime Grace voice: PASS. Log confirmed [Sol] Grace Ashcroft voice bound during finalizeSpawn.
+- Runtime VSGirl/Sol adapter path: PASS at initialization/render-hook level. SolNPCAdapter patch classes were discovered and LocalPlayerBodyVSGirl reported Private two-sided surface enabled immediately around Sol spawn.
+- Critical regression check: PASS for this session. No post-world IndexOutOfBounds, HumanVisual.addClothingItem, dressInOutfit/dressInNamedOutfit, IsoFallingClothing, or Too many physics objects errors were recorded.
+- Unrelated current errors: Recipe Piano missing UiConfigScript fallback; mannequin-zone metadata warning; suspicious Nav zone rejected; duplicate RoomDef.metaID. These are not currently linked to Sol/VSGirl.
+- Remaining: visually confirm Sol model is actually visible in-world, then validate follow/movement and vehicle rendering. Do not promote this build to 02_STABLE until those runtime checks pass.
+- Architecture note: current dedupe is transitional. SolCombined owns localplayerbody Java while external VSGirl supplies removed assets. Final standalone Sol still requires a single coherent ownership model rather than permanent external/internal split.
+
+### 
+2026-10-22 07:51:38
+ Europe/Berlin - Post-dedupe movement runtime proof
+- Status: [COMPLETED - MOVEMENT/NAVIGATION RUNTIME PASS].
+- Runtime evidence: Sol actor `sc-1.792644241642E9-1-224214` changed position from `5737.500,5257.438,0` at 06:44:31 to `5744.262,5236.501,0` at 06:48:00 and later `5741.061,5236.151,0` at 06:49:50.
+- Native FSM evidence includes `PlayerMovementState`, `ClimbOverFenceState` with `Bob_VaultOver_Start`, and `PlayerStrafeState`; this proves real locomotion/path interaction rather than animation-only activity.
+- Critical regression scan after Sol spawn remains clean: zero `IndexOutOfBounds`, `HumanVisual.addClothingItem`, `dressInOutfit`, `IsoFallingClothing`, `Too many physics objects`, or `NullPointerException`.
+- AI mailbox Follow command is NOT yet runtime-proven. A valid-looking `follow` request was written but no matching `tool_result` appeared in Outbox; mailbox/AI runtime consumption remains under diagnosis.
+- Stable promotion remains false until current-build visual appearance plus mailbox Follow and vehicle checks are proven.
+
+- [FIXED / RUNTIME RELOAD PENDING] Restored SCAIToolGateway.lua from pre-cursor backup after go_to_cursor patch inserted literal backticks and caused Lua syntax error at line 15, preventing SurvivorCompanion bootstrap and Sol spawn. Cursor feature rolled back until reapplied safely.
+
+
+SOL_PLAN_GOVERNANCE_V1
+MASTER PLAN GOVERNANCE - ACTIVE
+SOL_MASTER_PLAN.md in DOCS is the single authoritative plan. Never create or replace it with another plan. Add new requirements to this same file. Existing requirements remain unless explicitly cancelled. Update this plan after every important implementation, failure, fix, test, architectural decision, or runtime result. Track COMPLETED / IN PROGRESS / PENDING and distinguish STATIC or HARNESS validation from real PROJECT ZOMBOID RUNTIME proof. Backups are backups only, never alternate plans.
+
+
+SOL_INGAME_DIALOGUE_UI_V1
+IN-GAME SOL DIALOGUE UI - PENDING
+Add an in-game conversation window where the player types directly to Sol. Messages must use the existing Sol Mind/mailbox/AI pipeline. Sol reply display must be selectable: ABOVE HEAD ONLY, DIALOGUE WINDOW ONLY, or BOTH. Keep Arabic and English text chat. PowerShell remains debug-only. Future voice/PTT/TTS must not replace text chat. Runtime proof requires real in-game send/receive, all three display modes, and multi-turn session continuity.
+
+
+SOL_UI_CLEANUI_REFERENCE_V1
+UI IMPLEMENTATION REFERENCE - CLEANUI STUDY - COMPLETED
+CleanUI source was studied before Sol UI implementation. Sol UI must preserve Vanilla B42 behavior and item icons while skinning the real ISUI classes. Prefer minimal skin/adapter hooks over full replacements; use full class replacement only where required. Contextual windows such as Vehicle Mechanics remain controlled by Vanilla events and are only reskinned when opened. Hotbar uses real Vanilla items and may add Sol overlays for real condition/ammo/state data. Keep compatibility patches isolated, build-aware, and client-side. HTML remains a visual blueprint only, not the runtime UI. Avoid adding NeatUI as a dependency unless a concrete requirement justifies it. Maintain Vanilla fallback during development where practical. Validation remains PENDING until Project Zomboid Runtime.
+
+## Runtime Safety Update - Sol duplicate restore gate
+Status: In Progress
+
+- Problem: a saved Sol could still be pending persistence restoration while the production Sol spawn task ran, creating a second Sol.
+- Root cause: SCRuntime.solSpawnTask() did not gate on SCPersistence.restoreStatus() / pendingCount().
+- Fix: added SOL_RESTORE_GATE in SCRuntime.lua. Production Sol spawn now returns until restore is committed and pendingCount() is zero.
+- Static proof: PASS. WORK and LIVE match. Backup: C:\Users\JAMAL\Desktop\Sol\03_BACKUPS\sol_restore_gate_20261024_162434
+- Runtime proof: PENDING.
+- Existing duplicate cleanup: PENDING. No companion has been deleted or modified yet.
+- Driving passenger fix in SCDriving.lua remains Static PASS / Runtime PENDING.
+- Timestamp: 2026-10-24 16:24
+
+## Persistence Identity Safety - 2026-10-24
+Status: In Progress
+
+- Root cause STATIC CONFIRMED: SCSpawn.solPulse() only guarded against pendingSpawn plus live Registry actors / stored vehicle actors. It did not recognize a saved Sol that had committed persistence state but had not yet materialized into Registry.
+- Failure observed at runtime on 2026-10-24: production Sol spawned while the previously saved Sol still existed outside the active Registry lifecycle, producing two visible Sol characters.
+- Current mitigation: SCRuntime SOL_RESTORE_GATE blocks production Sol spawn until restoreStatus() is committed and persistence.pendingCount() is zero.
+- Fail-closed property STATIC CONFIRMED: quarantined restore entries remain inside the pending table; pendingCount() therefore remains above zero and prevents a replacement Sol from spawning after restore exhaustion.
+- Required invariant: an existing saved Sol must never be silently replaced by a fresh Sol because restoration is delayed, unavailable, failed, or quarantined.
+- User recovery action: the old orphaned Sol was killed manually in-game by the user; her equipment was transferred manually to the newly spawned Sol. No automated duplicate cleanup was performed.
+- Canonical character from this point: the surviving/new Sol is the character whose progression and state must persist across future sessions.
+- Runtime proof of the restore gate: PENDING.
+- Driving work remains FROZEN until persistence identity/runtime continuity is proven.
+- Vehicle visual deformation is tracked separately. Sol code audit found no direct vehicle model/seat-matrix transform edits. Runtime logs show external Viewpoint/ZombieBuddy patches on viewpoint.models.Characters.seatMatrix and Characters.vehicles; causal link remains UNPROVEN.
+
+
+## Offline Repair Audit - v0.7.9 - 2026-10-24
+Status: Static PASS / Runtime PENDING
+
+This section supersedes the earlier claim that the duplicate-Sol root cause was fully STATIC CONFIRMED. The observed duplicate is real, but the old runtime log does not prove that the saved Sol was inside the persistence pending queue at the moment production spawning began. The repair therefore addresses both persistence gating and stale native bridge ownership without overstating causality.
+
+- Driving blocker: RUNTIME CONFIRMED in the captured log. Native drive acquisition refused with `a player is in this vehicle` after Sol had boarded. Repair arms native drive ownership while the player is outside, then promotes that same prepared lease to route-following after the player boards. No second native driveStart occurs.
+- Driver-seat transition: the direct `switchSeat(..., 0)` hotfix was removed. Driver boarding again uses SCVehicle's verified transaction / verification / rollback path. If Sol is already a passenger, GPS asks her to exit before verified driver boarding.
+- Persistence identity safety: production Sol spawning now fails closed inside SCSpawn itself while a saved recruited companion is pending or quarantined. Faction-only pending records do not block production Sol.
+- Startup native cleanup: when the native actor provider is ready, bridge-owned stale companion shells are purged before authoritative persistence restoration. Saved companions are then rebuilt from persistence as designed.
+- Identity continuity remains intact statically: saved registry id is passed through restore profile and registry registration; skills, XP, inventory, personality/memories, trust and bond are persisted/restored by existing code.
+- Sol Mind truthfulness: take-wheel/drive messages now require a matching GPS acknowledgement. Missing acknowledgement reports `gps_unconfirmed`; waiting states are reported as waiting instead of fabricated success.
+- Temporary identity logger removed. The previous broad SCRuntime pendingCount gate was removed in favor of the targeted authoritative SCSpawn persistence gate.
+- Vehicle deformation: no direct Sol vehicle model/seat-matrix mutation was found. The captured log contains missing external vehicle templates before Sol runtime and Viewpoint/ZombieBuddy patches on `Characters.seatMatrix` / `Characters.vehicles`; causal attribution remains UNPROVEN. Removing Sol's direct switchSeat path reduces one avoidable render/seat transition risk.
+
+Static validation performed offline:
+- All repaired Lua files parsed successfully with Lua 5.4 syntax loader.
+- Sol Mind `chat_service.py` passed Python bytecode compilation.
+- Driving harness proved prepare -> passenger boards -> promote route uses exactly one native driveStart and keeps the local passenger aboard.
+- Driving harness proved acquisition fails before native driveStart when the local player is already aboard.
+- Sol Mind outcome harness proved no-ACK = unconfirmed failure, player_aboard = failure, board_passenger = confirmed waiting, await_destination = confirmed ready, driving = confirmed success.
+
+Runtime proof after installation: PENDING. First boot must show one canonical Sol; subsequent driving test must not repeat `a player is in this vehicle`.
+
+
+## Sol Link v1.5.2 + Vehicle Enumeration - 2026-10-25
+Marker: SOL_LINK_V152_VEHICLE_SET_20261025
+Status: In Progress
+- Sol Link: COMPLETED / RUNTIME PASS. Game -> Sol Mind -> ChatGPT -> reply -> Project Zomboid UI was proven after v1.5.2 DOM selector repair and page reload.
+- Vehicle scan/GPS: STATIC PASS / RUNTIME PENDING.
+- Root cause: SolGPS.nearestCar() and SCAIPerceptionAdapter.nearbyVehicles() treated Build 42.21 IsoCell.getVehicles() like an indexed list/plain array, while live runtime can expose a Java Set.
+- Fix: both now use SC.Vehicle.loadedVehicles(), the existing Set-safe vehicle enumerator. No KI5 whitelist or script-name special case added.
+- SolGPS.lua SHA256: CE73E00CD6A155757B9626B156063648A2029432F2979F0878C894A7338B5B32
+- SCAIPerceptionAdapter.lua SHA256: D5D04082F6336B559F8F9C2775BA253CF61D7268F41F39E31CCE0BC76D26033F
+- Next runtime proof: confirm KI5 appears in perception instead of [السيارة] failed, then test take-wheel and drive-to-map-marker.
+
+- Lua syntax gate: PASS, 412 files, 0 errors. Remaining warnings are pre-existing SCNavigation.lua literal-backtick-escape warnings outside this patch.
+
+## Passenger driving prepared-lease fix — 2026-10-25 02:44:28
+Status: In Progress
+Proof: Static PASS; Runtime pending.
+
+Problem:
+Runtime driving ended as result=interrupted, phase=released, reason=player_aboard after the local player boarded Sol's vehicle.
+
+Cause:
+SCDriving.isDriving() cancelled an already-prepared native drive lease whenever the local player boarded as passenger. This contradicted the intended flow where Sol acquires driveStart while the player is outside, then the player boards after ownership is prepared.
+
+Fix:
+Removed only the post-acquisition playerAboard(job.vehicle) cancellation from Driving.isDriving().
+Pre-acquisition player_aboard gates remain intact in Driving.begin/start/direct drive.
+Driver-seat loss still fails closed through left_driver_seat.
+
+Static proof:
+- Work/live SCDriving.lua hashes match.
+- Lua checker passed.
+- Acquisition safety gates verified present.
+- Old runtime passenger cancellation verified absent.
+
+Runtime proof:
+Pending.
+## Passenger-drive lease fix — Static verification corrected — 2026-10-25 02:45:17
+Status: In Progress
+Proof: Static PASS; Runtime pending.
+
+Verified:
+- Real Lua checker executed against both Work and Live roots.
+- SUMMARY files=434 errors=0 warnings=2.
+- Both warnings are the pre-existing SCNavigation.lua literal-backtick-escape warning.
+- SCDriving.lua Work/Live SHA256:
+  6AA5813DDC346E0F5661725768D36AE46E57FFE162D603ACCC840B2826A58880
+- Pre-acquisition player_aboard safety gates remain present.
+- Post-acquisition player_aboard cancellation in Driving.isDriving() is absent.
+
+Static result:
+PASS.
+
+Runtime test still required:
+Sol must acquire driver seat/native drive ownership while player is outside, then player boards as passenger, and the prepared driving job must remain active instead of becoming interrupted/released/player_aboard.
+
+## iPhone custom API settings and stuck chat UI - 2026-10-25
+Marker: IPHONE_CUSTOM_API_CHAT_TIMEOUT_20261025
+Status: IN PROGRESS. Static inspection completed; Project Zomboid runtime proof PENDING.
+
+Observed: The iPhone Qwen3-4B endpoint at https://<phone address>:11434/v1 answered a direct chat request and a Sol Mind provider-layer test. The in-game settings list omitted Custom URL, cleared the base URL on API save/test, and crowded status/detail lines. Chat kept Send and Enter blocked indefinitely when SolChat_State remained status=thinking. A local/Ollama choice is not the iPhone OpenAI-compatible endpoint.
+
+Changes: SolSettings.lua now offers Custom URL (iPhone) in the API provider list, an explicit URL entry, and sends the chosen base on fetch/paste/save/test. The custom provider shows three scrollable model rows; other providers keep five. The state/status footer uses a single line, and settings discovery allows 30 seconds. SolChat.lua caps a thinking request at 120 seconds, unlocks the composer on timeout, ignores the old thinking state, and still accepts a late final reply. Source and installed Lua copies are synchronized. No stored token, local config, Python provider, or certificate is changed in this patch.
+
+Static validation: source and installed copies compared byte-for-byte; reviewed request fields, model list coordinates, timeouts, and stale-state transitions. No game runtime test is claimed.
+
+Runtime proof pending: with game closed, install both Lua files; start game and Sol Mind; choose API > Custom URL (iPhone), verify URL, fetch qwen3-4b-2507, save and test; send text; simulate stalled thinking and confirm Send is available after 120 seconds. If the backend thread itself remains blocked, restarting game/Sol Mind may still be required; UI timeout alone does not cancel a network request.
+
+## 2026-10-29 — AOT persistence correction and route-drive safety repair
+Status: Static and harness PASS for the focused repair; PZ runtime gameplay PENDING; LIVE promotion withheld.
+
+- AOT persistence preflight found `options.ini` had no `aotCache` key, so installed PZOpt defaults it to true. Used the official `UserOptions.set("aotCache", false)` path and `AotCache.resetLauncher(gameDir)` API, then verified the setting and launcher arguments. No manual JSON editing. Baselines and helper source are retained under `08_RUNTIME_TEST/aot_persistence_preflight`.
+- CORRECTION: a proposed “change setting then launch” route was unsafe because the launcher carried `-XX:AOTCacheOutput` (RECORD); `AotCache.onGameExit` can terminate the JVM. The route was replaced by the official setter/reset API before launch. This does not establish AOT as the crash root cause.
+- One PZ JVM was started from the Steam installation against isolated profile `07_TEST/RUNTIME_TEST/profile`, with `-Dpzopt.aotCache=false`; `jcmd` showed G1GC and no AOT runtime/cache arguments. The process reached the main menu, but no world was entered. The Windows UI-control approval timed out. Therefore Sol loading, gameplay, and the original AOT/Shenandoah failure remain unverified. Startup logs also report missing main/dialogue font image assets; causal relevance is unknown.
+- Fixed `01_WORK/Sol/42/media/lua/client/SCDriving.lua`: refuse fresh native drive acquisition if the local player is already in the vehicle, before creating the lease. Existing prepared leases remain promotable after the player boards. Focused behavior contract B6/B7 PASS; test-profile copy now matches WORK (SHA256 `F60DD287D2B5403ECF44F5CF57D5346FFEE0F69B36B352C6A807BE3A6FA6FA5E`). Original WORK and test-profile files are backed up in `03_BACKUPS` and `08_RUNTIME_TEST`.
+- Fixed the offline verification path: bounded a queued-state loop and made the Python harness UTF-8 safe on Windows. Sol Mind harness T1–T8 and goal/rescue contracts G1–G21 PASS. Lua 5.1 gate: 235 files, 0 errors, 1 pre-existing SCNavigation literal-backtick warning.
+- Full behavior lab is not release PASS: changed-behavior parity reports WORK/LIVE differences in SolGPS.lua, SCAIToolGateway.lua, and SCDriving.lua. This reflects WORK ahead of LIVE; LIVE and STABLE were not changed. Runtime-only vehicle boarding, route driving, and solo rescue remain pending.
+- Next: when UI control is available, enter a test world and validate one canonical Sol, nearby vehicle perception, driver acquisition, passenger transition, route drive, and rescue/home extraction. Investigate missing font assets separately. Do not promote WORK to LIVE until runtime evidence passes.
+## 2026-10-29 — Release baseline created; verification tooling repair
+Status: BASELINE SNAPSHOT VERIFIED; release/runtime acceptance PENDING.
+
+- Created `01_WORK/RELEASE/SOL_2026-10-29_BASELINE/Sol` as the first release-work snapshot copied from `01_WORK/Sol` (1,148 files). Every payload file matched source WORK by SHA-256; generated `MANIFEST_SHA256.txt` and independently verified all 1,148 entries.
+- The snapshot contains the verified `SCDriving.lua` local-player-aboard acquisition guard. Release payload gates: Lua 5.1 235 files / 0 errors / 1 existing warning; B1-B7 PASS; Sol Mind T1-T8 PASS; rescue planner G1-G21 PASS. It is explicitly a development baseline, not runtime-approved or ready for public/LIVE release.
+- Full release gate remains FAIL because WORK/LIVE parity differs in SolGPS.lua, SCAIToolGateway.lua, and SCDriving.lua. Runtime gates remain pending; no changes were made to STABLE or LIVE.
+- Additional tool-only repair: `05_TOOLS/sol_behavior_lab/tests/test_goal_engine.py` now configures UTF-8 output so Arabic diagnostics work when run directly on Windows. Verified standalone G1-G21 PASS and full behavior lab again. The behavior lab overall remains FAIL only at WORK/LIVE parity and runtime-only gates. Since this change is outside the mod payload, no new mod payload snapshot was needed; recorded in `RELEASE_TRACKING.md`.
+- Continue feature repairs in WORK, back up each source change, record exact verification here and in the engineering log, then create a new dated release snapshot only after the relevant gate passes. Never promote to STABLE/LIVE without runtime proof.
+- Backup note: reconstructed the pre-UTF-8 test script by removing only the newly added stream-reconfigure block; its SHA-256 `E0B05255B2644159D61D00C8724846566C7BD5839F408F3343BC7A77880463EB` matches the pre-edit hash captured before modification. Backup: `03_BACKUPS/sol_goal_engine_harness_utf8_20261029/test_goal_engine.py.before_utf8_fix`.
+## 2026-10-29 — User-confirmed connectivity PASS; behavior execution becomes priority
+Status: Connectivity across all configured channels USER-CONFIRMED PASS. Command execution smoothness IN PROGRESS; integrated behavioral diagnosis pending.
+
+- User confirmed all in-game communications were completed and work: Sol Link/ChatGPT bridge, phone connection, provider API connection, and local model. Treat these as runtime passes based on direct user confirmation; do not repeat connection setup/tests absent a regression.
+- User clarified the remaining fault is Sol's behavior: orders/actions are not executed smoothly/consistently, and the concern is Sol's execution layer relative to Living Fellows (LF), not connectivity. Keep LF's proven command/action mechanisms as the baseline and isolate Sol-specific intent/planning/dispatch/acknowledgement behavior.
+- First-principles trace for the next repair: player request -> deterministic intent / model tool -> selected action and arguments -> SolActions or SCAIToolGateway -> LF `SC.Commands.issue` / LF timed action -> accepted/started state -> observed completion or explicit failure -> truthful response. Capture request id, action, reason, state transition, and world evidence for each failing order.
+- Existing plan already records an important gap: `tool_result` currently means command accepted/rejected, not completed; completion must be verified from perception. This is the leading investigation target, not yet a proven sole root cause. A queued action may be mistaken for completion, or a valid command may be dispatched without the expected follow-up state.
+- Diagnostic order: compare a specific failing order through (1) direct LF UI, (2) Sol deterministic speech intent, and (3) Sol model `do_action`; classify whether LF itself fails, Sol intent mapping is wrong, command dispatch/preconditions reject it, or completion/response reconciliation is missing. Fix one proven boundary at a time; do not rewrite LF internals as a workaround.
+- Release rule: no mod payload source changed for this connectivity update, so the 2026-10-29 release baseline remains unchanged. Record confirmed runtime channel evidence and the new behavior priority in `01_WORK/RELEASE/SOL_2026-10-29_BASELINE/RELEASE_TRACKING.md`. Create a new dated payload snapshot after a behavior repair passes its applicable offline and runtime validation.
+## 2026-10-29 — Static authority trace for orders received by Sol Mind
+Status: Architecture trace complete; two high-confidence static behavior hazards found; exact runtime blocker for a user order not yet proven. No product source changed.
+
+### Authority and execution path
+- For chat/provider orders, `05_TOOLS/sol_mind/chat_service.py` decides the input route: deterministic Arabic intent rules run first; API/local model receives `do_action`; the ChatGPT bridge receives a tagged-action request. `resolve_and_run()` sends the resulting action through `SolAct_Request.txt` to game-side `SolActions.lua`.
+- `SolActions.runAction()` is an adapter, not the order authority: it either calls the same LF UI callback / `SolPages.issueLF()` or dispatches direct LF commands through `SC.Commands.issue()`.
+- A separate structured mailbox path exists: `SCAIRuntime.lua` receives `tool_request` -> `SCAIToolGateway.execute()` validates/maps tools -> ordinary commands call `SC.Commands.issue()`. The chat-provider path and native AI mailbox path are distinct entry points; do not confuse their receipts/logs.
+- `SCCommands.issue()` / `issueOne()` is the authoritative admission and state-change boundary for Living Fellows ordinary orders. It resolves the actor, checks membership/recruitment and remote/leader restrictions, requires a registered handler, handles drive preemption, runs the handler in a protected subsystem, rolls state back on refusal/error, and returns an accepted/rejected reason. For `follow`, the handler changes order state; acceptance alone does not prove that Sol has begun moving or completed following.
+- `SCActionSupervisor` is the active-action arbiter, not the AI decision-maker. It holds per-actor ownership, applies priority and cancellation/preemption rules, dispatches urgent work, and `movementPermission()` can veto movement with `action_owned:<owner>:<action>:<phase>`. Navigation/locomotion and specialized LF actions perform the physical execution after order admission.
+
+### Static behavior hazards
+- Prompt conflict: `chat_service.py` SYSTEM_BASE still says movement orders such as follow/stay are currently issued from the Sol UI button. At the same time, the provider is given a `do_action` tool and a live action catalog. The deterministic regex handles only known phrasings; for unmatched natural-language variants, the stale system instruction can steer the model away from issuing a movement tool. This is a high-confidence source-level conflict, not proof that it caused a specific observed runtime failure.
+- False completion framing: `_pre_intents()` dispatch results are presented to the provider as “Already done”; the bridge receives “[executed before your reply]”. Yet SolActions receipts only report request `ack`, `ok`, and a reason such as `pressed`, `issued`, or `started`; these do not confirm final world state. The existing plan already states `tool_result` means accepted/rejected, not completed. This can cause premature claims and make order retry/recovery unclear.
+- No source change was made during this study. Next controlled repair: remove the stale “movement only by UI” instruction and replace it with an accurate tool-use rule, while distinguishing dispatched/accepted/running/completed/rejected results. Before implementation, add focused tests for both API/local and Sol Link prompt/receipt behavior; then validate a user-selected order in-game when an accessible world session is available.
+- Runtime attribution remains open: a concrete failed request must be traced across input wording -> chosen deterministic/model action -> request ID -> SolActions/gateway receipt -> SCCommands reason/order state -> ActionSupervisor owner/phase -> observed movement/result. Only then can we say which gate blocked it.
+
+## 2026-10-29 — Sol Mind active-profile mailbox routing
+Status: mailbox routing FIXED and runtime-confirmed on the active game profile; fresh-key API chat validation PENDING.
+
+- Root cause: `sol_mind.py` defaulted to `%USERPROFILE%\\Zomboid\\Lua`, while the open game was launched with an args file setting a separate `-Duser.home`. The game wrote settings/chat/AI frames into that profile's `Zomboid\\Lua`; Sol Mind watched the default profile instead. The automatic service also launched Sol Mind without a profile-specific mailbox.
+- Added `05_TOOLS/sol_mind/runtime_profile.py` to identify the running Project Zomboid Java process, read its `@args` file, and resolve the active `-Duser.home` mailbox. Manual startup now auto-selects that mailbox; the service passes the resolved path explicitly and restarts when the active mailbox changes. No test-profile path is hard-coded.
+- Restarted the service and active Sol Mind. Runtime log now reports `...\\07_TEST\\RUNTIME_TEST\\profile\\Zomboid\\Lua`; the current game's hello/tools frame was read, and `SolSettings_State.txt` there reports `active=api:custom/qwen3-4b-2507` with a matching acknowledgement. This confirms the mailbox path and saved configuration reached the active session; it does not prove a fresh provider response or gameplay action.
+- Two in-game settings tests immediately after restart returned `unreachable` (one connection refusal, one timeout). A later TCP-only check to `<phone address>:11434` succeeded. No authenticated request was repeated after the API key exposure; the player-facing inventory reply was the deterministic template, not model proof. Evidence: `07_TEST/RUNTIME_TEST/runtime-evidence/20261029_mind_mailbox_routing/summary.md`.
+- Corrected interpretation: `provider=none` in the legacy runner startup line comes from its separate `sol_mind.json` switch. `chat_service.py` reads the active API configuration from `%LOCALAPPDATA%\\SolMind\\config.json`; the saved state reports the custom provider/model and DPAPI-protected key.
+- Created `01_WORK/RELEASE/SOL_2026-10-29_MAILBOX_ROUTING` as a new candidate. It carries the unchanged mod payload plus 16 Sol Mind modules, including the new resolver; manifest contains 1,164 payload hashes. The earlier release snapshot remains unchanged.
+- Security/validation note: the API key was pasted into chat. Rotate it before any further API test. Do not claim end-to-end API chat or gameplay-command success until a fresh key is installed and a command receipt is observed in the active game session.
+## 2026-10-29 — Sol-owned action layer repair and static release candidate
+Status: Sol Mind behavior contract STATIC/HARNESS PASS; post-change in-game validation PENDING.
+
+- CORRECTION: the prior architecture note said no specific runtime order trace was available. The engineering log already contains a full 2026-10-25 runtime pass for `sol_cook egg` (Sol Link selected the custom plan; console reported `done:cook:all_steps_done`; cooked egg was removed before burning and the oven switched off). The user has now independently reconfirmed the same compound behavior. This proves the custom `SolPlanner` layer works in-game for that scenario; it does not prove the newer chat prompt patch has been runtime-tested.
+- Design constraint clarified by the user: Sol is the high-level decision/planning layer above Living Fellows. Sol owns interpreting requests and compound plans; LF is reused as the lower-level implementation for navigation, timed actions, and standard commands. Do not replace LF behavior or let an obsolete LF-oriented prompt constrain Sol.
+- Fixed `05_TOOLS/sol_mind/chat_service.py`: removed the stale instruction that movement orders are UI-button-only; explicitly defined Sol as the high-level action planner; clarified that accepted/started results are not completion; refined the preprocessed-action context; updated Sol Link's action-tag timing; append the actual game receipt after bridge actions; and only accept explicit completion results (including `done:*` or arrived/arrived) as completion evidence. Accepted vehicle transitions retain their actionable Arabic guidance.
+- Added behavior tests BHV1-BHV11 for layer ownership, stale prompt removal, started-vs-completed, mixed outcomes, rejection, missing acknowledgement, bridge timing, and passenger-transition guidance. All 11 PASS. Python compile PASS. Existing G1-G21 goal/rescue tests PASS. Full behavior lab's source contracts, Lua 5.1 syntax (235 files/0 errors/1 existing warning), B1-B7, T1-T8, G1-G21 pass; overall release gate remains FAIL solely for WORK/LIVE parity in SolGPS.lua, SCAIToolGateway.lua, SCDriving.lua, with vehicle runtime gates still pending.
+- No LF or Lua mod source was changed. `SCCommands.issue()` remains the ordinary LF command admission boundary and `SCActionSupervisor` remains the movement/action conflict arbiter; this patch changes Sol Mind's authority instructions and result reporting only.
+- Created `01_WORK/RELEASE/SOL_2026-10-29_ACTION_LAYER_STATIC` with the 1,148-file Sol mod payload plus 15 Sol Mind runtime Python source files. Manifest has 1,163 entries; the mod tree matches WORK. No API keys, settings, certificates, or logs are included. Only `Sol/` is dropped into the PZ mods directory; deploy SolMind source through its existing installation. This is a static candidate, not runtime-approved.
+- Runtime validation of the updated prompts and action-result notes remains pending. The previously confirmed connectivity across bridge, phone, API, and local model is recorded as user-confirmed PASS; do not repeat connection setup. Test order after deployment should compare one ordinary movement order through deterministic speech, API/local `do_action`, and Sol Link tag; confirm the order state and movement, then test an explicit refusal and confirm Sol reports it honestly. Preserve the already runtime-proven `sol_cook` compound path.
+## 2026-10-29 — Architecture correction, verified compound plan, and action-layer fix
+Status: Sol compound cooking is user-confirmed runtime PASS; Sol Mind prompt/receipt fix is STATIC/HARNESS PASS; post-fix world validation PENDING.
+
+- CORRECTION: an earlier note said no exact runtime order evidence was available. `SOL_ENGINEERING_LOG.md` already records the 2026-10-25 `sol_cook egg` runtime pass: the custom Sol Link plan reached `done:cook:all_steps_done`, moved the cooked egg to Sol's bag before burning, and switched the oven off. The user reconfirmed the full sequence. Preserve this as evidence that Sol's own compound planner works; do not attribute this successful behavior to LF alone.
+- Applied the Sol-owned layer correction in `05_TOOLS/sol_mind/chat_service.py`: removed UI-only movement instruction, clarified Sol plans/orders through its own action layer, distinguished accepted/started from completed, added honest outcome notes after Sol Link tags and goals, and preserved actionable Arabic messages for vehicle wait states. LF command/navigation/timed-action internals and mod files were not changed.
+- BHV1-BHV11 PASS on both source and release-candidate Sol Mind; Python compile PASS. Full behavior lab source contracts, Lua 5.1, B1-B7, T1-T8, G1-G21 PASS. Overall gate remains FAIL only for existing WORK/LIVE parity changes in SolGPS.lua, SCAIToolGateway.lua, SCDriving.lua; vehicle runtime gates are still pending.
+- New candidate `01_WORK/RELEASE/SOL_2026-10-29_ACTION_LAYER_STATIC`: 1,148 mod files + 15 Sol Mind runtime source modules, manifest 1,163 files. Mod SHA parity with WORK is exact; candidate Sol Mind chat_service SHA256 is `B23429DAA5F364503A03ACED25B7DAF6F4E45764766888037BB932E68CBD5138`. No credentials/configuration/certificates/logs/cache included.
+- Latest process check: no Project Zomboid JVM is currently running. No in-game test has been performed after this prompt/receipt patch; previous UI-control approval timed out. Do not claim the new prompts improved live model behavior until verified in-game through deterministic speech, API/local action selection, and Sol Link action tags.
+## 2026-10-29 — LF work ownership as a possible Sol order blocker
+Status: Static control-flow finding; no request-specific runtime proof yet. No source behavior changed in this investigation.
+
+- `SCCommands.issueOne()` is a synchronous admission path. For an accepted ordinary command, handlers such as `follow` call `setOrder()`. `markCommand()` then invokes `SC.Decision.cancelWork(actor, "new_command")`; `SC.Decision.cancelWork()` in turn asks `SC.NativeActions.cancelWork()` and returns failure if the native work cannot be cancelled. Thus the normal accepted LF order path is designed to stop prior decision-owned work, rather than silently leave it running.
+- Sol's `SolActions` direct LF commands call `SolPages.issueLF()`, which checks LF command availability and calls the same `SC.Commands.issue()` boundary. Its `SolAct_State.txt` receipt records request ack, boolean acceptance, and reason; `[SolActions]` logs the action and result. These prove dispatch/admission only, not movement or completion.
+- `SCActionSupervisor` separately owns active physical actions. `SC.Navigation.request()` calls `movementPermission()` before mutating navigation state; if another active supervisor/native action owns the actor, the request returns its owner/action/phase reason. Locomotion rechecks at dispatch and emits a rejection/queues urgent movement. `SCActionSupervisor.snapshot()` and bounded history expose current owner and past transitions. This is a credible blocker boundary when physical work is still owned after a command request.
+- Important distinction: `follow` only sets the order to follow and cancels decision work; it does not synchronously request a path. `move_to` does call Navigation immediately and can return a supervisor rejection. Therefore `ack=true`/`ok=true` for follow is accepted order state, not proof that a companion moved. A navigation rejection may occur later, after the Sol action receipt has already reported success.
+- Conclusion: code does not support the broad claim that LF ordinary work always prevents Sol orders; normal `SC.Commands.issue()` cancellation is explicitly designed to interrupt it. A narrower, plausible issue is delayed movement/specialized native action ownership, especially where acceptance and later movement dispatch are separately reported. We have no current console event trace demonstrating that this caused one of the user's missed commands. Game process was not running during this inspection and existing console tail had no matching SolActions/ActionSupervisor rejection evidence.
+- Next diagnostic implementation should correlate one request ID through `SolActions` request/ack, `SC.Commands.issue` result, `Decision.cancelWork` result, supervisor snapshot/history before and after, Navigation/Locomotion rejection reason, and position/order observation. If receipt says accepted but movement is rejected, report that transition and owner explicitly; do not label it completed. Compare one identical action from LF UI and Sol Mind under the same pre-existing LF activity. Only change cancellation/arbitration logic after a captured trace identifies the owner and phase.
+- Release status: investigation-only, so the static action-layer candidate payload remains unchanged. Runtime attribution and post-change gameplay validation remain pending.
+## 2026-10-29 — In-game SOL/LF command arbitration test (runtime evidence)
+
+Status: TEST IN PROGRESS / cause UNCONFIRMED. One isolated Project Zomboid instance is running from `07_TEST/RUNTIME_TEST/profile`; the live mod installation is untouched.
+
+- User clarified Sol is visible in the current scene. Confirmed visually in the game window: SOL portrait/name UI is visible and Sol's actor is physically present in the loaded room. Runtime log confirms `SolOrders`, `SolActions`, `SolPlanner`, and `SolUI` loaded, so SOL Lua mod is active in this session.
+- The test profile's current actions snapshot has `set_scavenge=true`; screenshot showed Sol seated and doing a local activity. This proves autonomous scavenging is enabled and present as context, but not that it blocked any particular order.
+- Two right-click/context actions for `move_to` reached the `[SolDrive] LF command move_to` wrapper. Current debug logging only records command entry plus `Driving.stop(player_order) -> true no_drive`; it does not record the return from `SC.Commands.issue`, the LF command reason, the active `ActionSupervisor.snapshot`, a navigation permission result, or a position delta tied to that request. The actor position remains around x=10766.6,y=10271.5 in the latest world snapshot. Thus these attempts do not prove command acceptance or movement.
+- Directly writing a `tool_request` into the isolated AI inbox did not advance the outbox from its existing `hello` in-flight message. The user service's game-process detector tracks a process name incompatible with this direct Java launch and had already stopped its headless brain. Treat this as a test-harness/bridge failure, not a game-command rejection.
+- Static source shows `SC.Commands.handleMoveTo()` calls `SC.Navigation.request()` before `markCommand()` invokes `SC.Decision.cancelWork()`. Navigation checks `ActionSupervisor.movementPermission()` first and can return `action_owned:<owner>:<action>:<phase>`. This is a credible race/ordering seam for an already-owned action, but no runtime trace captured that rejection; do not state it is the root cause or apply a source change yet.
+- Next: capture one command end-to-end with request ID, `SC.Commands.issue` accepted/reason, `Decision.cancelWork` outcome, supervisor snapshot before/after, Navigation/Locomotion permission/result, and actor position/order change. Prefer the actual Sol action catalog/bridge path with a functioning test-profile brain; alternatively instrument a test-only build and restart only after the current game exits normally. Keep the release candidate unchanged until the failure is reproduced and the repair passes runtime verification.
+## 2026-10-29 — User correction: inspect the existing Sol zone system before choosing farm scope
+
+Status: GAME UI VERIFIED; saved-zone inventory PARTIAL; crop census shows none in the nearby scan. No source or release change.
+
+- User-provided screenshots show the in-world `Sol > Base Life` menu, `Show base plan`, and `Start zone` categories including farm, work, and other zone types. This corrects the prior assumption that there was no available zone-selection foundation; it already exists in SOL.
+- Inspected the currently open test scene. The base-plan overlay renders a camp boundary. The game UI also visibly reports the main player as Invisible and God Mode in the current test session; no change to those settings was made.
+- The current `SolWorld_Snapshot.txt` reports zero plant objects in its configured scan window (radius 15 around player at x=10770.5,y=10271.5,z=0). This only says there are no plants in the nearby scan; it does not establish that every saved farm zone is empty or absent.
+- `SCBaseLife.visualRows()` is the existing read model for saved zone rows, but no runtime dump of its `zoneRows` has been captured yet. The active base boundary overlay is not evidence that a dedicated farm zone is already registered. Next inspection should read the saved zone list from SOL's in-game Base Life state, then scope a crop census over all registered farm zones and expose the same zone state to the new compound garden report.
+- Preserve the requested consent gate: `care for the crops` must report planted/empty plots, actual crop needs, seed inventory, tools/preconditions, and season-aware recommendation; it may stage work only after an explicit player approval. No planting, harvesting, watering, or other farm mutation may occur during the initial inspection/report phase.
+
+## 2026-10-29 — Explicit “Move Here” order arbitration repair
+Status: WORK + isolated test-profile source updated; Lua 5.1 syntax PASS; in-game movement acceptance/reach test PENDING.
+
+- Traced the context-menu action to `SCUIContext.lua` -> `SC.Commands.issue(..., "move_to", squarePayload)` -> `SCCommands.handleMoveTo()` -> `SC.Navigation.request()` and persisted `state.order="move_to"` / `tacticalTarget`. The clicked square is passed as the destination; the diagnosed selection issue was that `SCDecision.evaluate()` assigned this explicit player order score 56, allowing higher-scored routine logistics/autonomy to take over before arrival.
+- Changed the `move_to` tactical candidate score to 95 while leaving other tactical order scores unchanged. The selector explicitly chooses an emergency candidate before a non-emergency request. In `doTactical`, retained the recognized `ordered_move` action identity and assigned ordinary explicit movement traffic priority 60 (expedition combat travel remains 90), so move-to outranks routine/default traffic while combat priority 80 and emergencies retain precedence.
+- An intermediate `player_move` action label was rejected during review and reverted: navigation ownership/native movement code recognizes `ordered_move`, so changing that action identity could break the existing execution contract.
+- Copied the final WORK file into the isolated test profile. WORK/test-profile SHA-256 match; targeted Lua 5.1 syntax check and `git diff --check` pass. Existing test-profile backup remains at `07_TEST/RUNTIME_TEST/runtime-evidence/20261029_move_here_fix/SCDecision.lua.before`.
+- Launched the test profile and entered its saved world. Screenshot confirms Sol's portrait/actor and the UI reports Invisible and God Mode. The first-entry Survival Guide covers the view and did not close through repeated coordinate/keyboard attempts; consequently no `Move Here` action was issued and no arrival claim is made. The fix remains unverified in live gameplay; do not promote it to a release snapshot until the context-menu command demonstrably routes to and reaches the exact clicked square.
+
+## 2026-10-29 — CORRECTION: player Move Here is an unconditional immediate order
+Status: Source updated; targeted Lua 5.1 syntax PASS; in-game movement test PENDING.
+
+- Rejected the prior rule that allowed combat/emergency candidates to outrank `move_to`. The user's explicit direction is that when Sol is in danger, Move Here may be the escape command and must not be vetoed by Sol's autonomous combat or survival selection.
+- `move_to` now creates a distinct `tactical:player_move` emergency candidate with score 1000. `selectWithHysteresis()` selects that candidate before safety, combat, or routine candidates. The accepted move request uses `urgent`, `emergency`, and `survivalCritical` flags plus traffic priority 100, allowing it through the ActionSupervisor/navigation urgent path; it retains action identity `ordered_move` and the exact stored `tacticalTarget`.
+- Starting a player move interrupts Sol's autonomy. Existing command admission still rejects an invalid/unloaded/blocked destination or an unavailable navigation subsystem; once accepted, the explicit route wins arbitration and is renewed toward the selected square. This is strict arbitration priority, not a claim that inaccessible geometry can be traversed.
+- Targeted Lua 5.1 syntax and `git diff --check` pass. No live gameplay acceptance/reach evidence was collected in this side conversation; keep release promotion gated on that test.
+
+## 2026-10-29 — Separate passenger boarding, driver-seat preparation, and GPS driving
+Status: WORK and isolated test profile updated; Lua 5.1 syntax PASS; live vehicle/route behavior PENDING; no release snapshot promoted.
+
+- Reworked the Sol context-menu meanings in `SolOrders.lua`: `اركبي السيارة` now requests passenger seat 1 explicitly through `SC.Vehicle.preflightBoard`, `boardingSquares`, and `board`, so Sol walks to that door and refuses when the front passenger seat is unavailable instead of silently choosing a rear seat. If the exact-seat API is missing, it reports the limitation rather than falling back to an unspecified Living Fellows seat.
+- Renamed the old `خذي المقود` item to `سوقي السيارة`; it uses the existing verified `SolGPS.gpsTakeWheel` / `SC.Vehicle.boardDriver` path and prepares Sol at the driver seat without selecting a destination or starting a route.
+- Removed the ambiguous `سوقي لهون` command from the Sol context menu and the GPS-map right-click menu. A map point is now a destination selection; the GPS panel's `سوقي` button starts the route and reports `no_destination` when no point is selected. This panel action no longer doubles as take-wheel and no longer forces solo mode. The saved-home menu entry now stages home on GPS and asks the player to start from the GPS panel; Sol Mind's separate `goHome` action remains available.
+- Incremented diagnostic module versions to SolOrders 0.9.1 and SolGPS 0.5.1. WORK and isolated test-profile copies match exactly: SolOrders SHA256 `0AAAD6B9241F23D2E769A3763DA949FE654400B7FE58DEF59B25596E5ED95077`; SolGPS SHA256 `56C4BCD8997B21B80A8E86EE521589ACC2439FAFA94724687738153B894E4E37`. Both files pass targeted Lua 5.1 syntax; `git diff --check` passes.
+- Backups: Git-baseline copies under `03_BACKUPS/20261029_sol_vehicle_menu_before`; the prior isolated-profile copies are under `07_TEST/RUNTIME_TEST/runtime-evidence/20261029_vehicle_menu_repair`. The running game had already loaded its old Lua files before these copies were updated; restarting/reloading the test profile is required for gameplay validation. The user took UI control while the startup guide was blocking the world, so no vehicle command was issued. Driver seat acquisition, seat-1 boarding, GPS route start, and route completion remain unverified in this runtime. Keep WORK isolated and do not refresh the release payload until those behaviors pass in-game.
+
+## 2026-10-29 — CORRECTION: nearest-car and clicked-car boarding commands
+Status: WORK and isolated test profile updated; in-game interaction test PENDING; release payload unchanged.
+
+- User clarified the intended interaction: the general `اركبي السيارة` command should board a nearby car even when the player is on foot. When right-clicking a particular vehicle, offer a distinct `اركبِي هي السيارة` command that targets that exact clicked vehicle.
+- Reversed the temporary player-already-in-car restriction in the Sol-owned menu/chat action, SolActions, and central LF vehicle command admission. The general command prefers the player's current car when seated, otherwise it selects the nearest loaded vehicle within 8 tiles. The specific context option carries `Context.vehicleAtClick()`'s exact picked vehicle through `SCUIContext` into `SolOrders.addMenu()` and `O.board(vehicle)`.
+- Both paths preserve explicit front passenger seat 1; the selected-car option only appears when the right-click target resolves to a vehicle. No driver seat or route action is initiated.
+- Updated SolOrders to v0.9.3. Copied SolOrders, SCUIContext, SolActions, and SCCommands into the isolated test profile after preserving the prior profile copies under `07_TEST/RUNTIME_TEST/runtime-evidence/20261029_sol_nearby_target_board/before/`. WORK/test-profile hashes match. CORRECTION: later CUA inventory showed Project Zomboid was already running as `java.exe` in an active world; the earlier process query only checked `ProjectZomboid64`/`javaw` and missed it. I used the pause control to stop world time; no Sol order or restart was issued. CUA then reported user input in the game window, so I stopped further UI control. The live process has its previously loaded Lua code; reload/restart is required before runtime testing.
+- Static Lua 5.1 syntax passes for all four changed Lua files; WORK/test-profile hashes match. Pending gameplay checks: right-click a car and confirm the separate selected-car item exists; use the general item near two cars and confirm the nearer one is selected; use the targeted item and confirm Sol approaches/boards the clicked one. The currently running JVM has old Lua already loaded; world time was paused and no Sol order was issued. I stopped UI control after CUA detected user input. Keep the release snapshot unchanged until those checks pass after a safe reload.
+
+## 2026-10-29 — Inventory summary only in the supplies table
+Status: source fix applied and loaded by the active Sol Mind process; in-game visual confirmation pending.
+
+- Root cause: the deterministic supplies intent produced a detailed narrative via `sol_templates.supplies_text` and also attached the supplies table, duplicating the same inventory counts and warnings in the chat bubble and table.
+- Updated `05_TOOLS/sol_mind/chat_service.py`: supplies intent now sends only `عرضت لك تفاصيل المخزن في الجدول.` as its chat bubble; the table remains the sole detailed inventory report.
+- Updated the active Sol Mind process through the service restart. It is still attached to the dynamically detected active game mailbox. No game restart is required for this Python-side change.
+- Created `01_WORK/RELEASE/SOL_2026-10-29_SUPPLIES_TABLE_REPLY` carrying the updated Sol Mind source and refreshed 1,164-file manifest. Visual confirmation of the new reply remains pending; API chat also remains pending fresh-key validation.
+
+## 2026-10-29 — Itemized inventory and wrapped table rows
+Status: inventory extraction and table layout updated; Python/Lua wrapping checks PASS; in-game visual confirmation PENDING game reload.
+
+- Replaced the nine broad stock/status rows in `world_knowledge.supplies_table()` with one row per distinct scanned game item, aggregated by item type and in-game display name. Each row carries total quantity, category, known location(s), and calories or fluid volume when available. Zero-stock status rows are omitted.
+- Updated `SolChat.lua` to wrap long item names and category/location details across the card, while preserving the existing scrollable table. Version is now 0.2.7. Synced the changed Lua file into the active test-profile mod tree.
+- Current game snapshot generated 276 distinct item rows, including 36 Food-category rows and 54 tool/gardening-related rows. The table retains item names as Project Zomboid provides them.
+- Validation: Python compile PASS; Lua 5.1 syntax PASS; `SolText.wrap()` width checks PASS for every item name and detail in the 276-row snapshot. Sol Mind was restarted and is reading the active game mailbox. The running game has already loaded the prior `SolChat.lua`; save and restart Project Zomboid before judging the revised wrapped layout.
+- Created `01_WORK/RELEASE/SOL_2026-10-29_DETAILED_STOCK_TABLE`, with refreshed 1,164-file SHA-256 manifest. API provider remains outside this table-display validation.
+
+## 2026-10-29 — Wells missing from Sol's water knowledge
+Status: root cause identified; WORK and a new launch candidate updated; static Python and Lua syntax checks pass; in-game source recognition is pending reload.
+
+- Screenshot evidence showed a world object labeled `Well` with unknown capacity/used/empty, while Sol replied that there was no clean water. The old world scanner captured inventory containers and fluids only; it had no `waterSources` field. `water_report()` therefore interpreted zero stored-container liters as the only water fact. This did not prove the well was empty or absent.
+- Confirmed existing game-side source APIs are used by farming, kitchen, and downtime actions (`isWaterSource`, `getFluidAmount`, `hasFluid`, `isTaintedWater`). The scanner now separately records nearby fixed-world objects exposing those source/fluid signals, with label, coordinates, amount, and taint when readable. It does not count the well as carried water or invent an amount.
+- `world_knowledge.water_report()` now carries the separate source records. Supplies text explicitly says stored container liters and reports a nearby well, unknown capacity/amount, and unknown cleanliness where those values are not readable. `supplies_table()` adds a separate environmental source row.
+- Validation: Python compile and a synthetic unknown-well scenario PASS; Lua 5.1 syntax gate: 235 files, 0 errors, one pre-existing literal-backtick warning in `SCNavigation.lua`. New launch candidate: `01_WORK/RELEASE/SOL_2026-10-29_WELL_WATER_AWARENESS`, 1,164 manifest entries.
+- Runtime remains unverified: current game loaded the old scanner and must reload/restart to activate the Lua change; then request a fresh stock/water report next to the well. The unknown fields in the screenshot mean water quantity and drinkability still need live API confirmation. Do not claim the well is confirmed drinkable until that check passes.
+
+## 2026-10-29 — Resizable Sol chat and message copy/paste
+Status: WORK and a new launch candidate updated; Lua syntax passes; in-game interaction and visual checks pending reload.
+
+- Sol chat uses a custom Arabic renderer for message bubbles, so the rendered transcript was not selectable like a native text field. Its message input already uses the game's `ISTextEntryBox`.
+- `SolChat.lua` now exposes a lower-right resize grip, clamps the window to the screen, updates its input/microphone placement, and lets messages/table details use the expanded width. The conversation layout and scroll viewport recalculate after resizing.
+- Mouse selection highlights a bubble or a range of bubbles. Ctrl+C copies the selected message text through the game's `Clipboard.setClipboard`; Ctrl+A selects all messages after selection has begun. Focus in the input is checked so native input copy behavior is not replaced; Ctrl+V remains with the game's text-entry control.
+- Validation: Lua 5.1 syntax gate: 235 files, 0 errors, one pre-existing `SCNavigation.lua` literal-backtick warning. Confirmed the installed Build 42 UI provides `ISUIElement:setWidth/setHeight`, `ISTextEntryBox:isFocused`, and Sol already uses the clipboard API.
+- New candidate: `01_WORK/RELEASE/SOL_2026-10-29_CHAT_RESIZE_SELECTION`, carrying forward detailed stock table and well awareness. The active game has already loaded its prior `SolChat.lua`; resizing, Arabic reflow, select/copy, and paste need in-game checks after a safe reload. No game restart or external profile mutation was performed.
+
+## 2026-10-29 — Gunworks weapon-upgrade compatibility and appearance-source audit
+Status: ROOT CAUSE CONFIRMED; WORK AND LAUNCH CANDIDATE UPDATED; gameplay proof pending a safe reload.
+- User reported Lua errors after installing a weapon scope. The active `console.txt` stack identifies `Gunworks-gang` `UniversalAttachment.normalizeOutcomeType` during `Inspect Weapon` actions at frames 78501, 78502, 78562, and 78563.
+- Source proof: Inspect Weapon (`risky_inspect_button.lua:381,397`) calls `ISUpgradeWeapon:new(character, weapon, part, 50)`. Gunworks overrides that constructor as `(character, weapon, part, outcomeFullType)` and assigns argument four to `self.outcomeFullType`; its normalizer calls `getFullType()` for any non-string. Thus duration `50` is treated as an item/outcome and throws. This is a mod API signature collision, not evidence that the scope asset itself is corrupt.
+- Added Sol-owned `SCGunworksCompat.lua`, loaded from `SCBootstrap.lua`. At `OnGameBoot`, it detects Gunworks' `UniversalAttachment` API and wraps the constructor so a numeric fourth legacy argument becomes `nil`; string outcome IDs remain intact. This preserves Gunworks' own outcome-specific call path and does not edit Workshop files.
+- WORK and `SOL_2026-10-29_CHAT_RESIZE_SELECTION` candidate are synchronized; manifest refreshed. Static source review confirms the compatibility branch is gated on Gunworks being present. No automated tests were run. Current game remains open and already loaded the previous Sol Lua; in-game re-test requires a safe reload after the user finishes playing. Do not mark runtime fixed until the same scope/Inspect action is retried and the log remains clear.
+- Appearance audit (superseded by the 2026-10-29 VSGirl isolation correction below): runtime mods included `TombBodyCompat`, `TombBodyCompatBootsExp`, `TombBodyCustom`, `TombFit`, and `TombGothHair`; VSGirlBodyExtension was not loaded in that session. The Sol JAR has a player-body adapter, but `PlayerBodyModels.controlled` excludes NPC companions; calling it an NPC adapter was incorrect. The earlier assumption that the user accepts a global effect is also superseded: the required effect is Sol-only.
+- Do not copy full Workshop mods or load the VSGirl Java jar alongside SolCombined.jar. The user now confirms VSGirlBodyExtension is the desired body source and requires it only on Sol, with its selected hair/clothing/integration dependencies and Sol's own UI retained. Third-party redistribution permission remains unverified; keep this integration private/local.
+- Continue reading the live game log while the user plays; treat new unrelated-mod errors separately from Sol failures and record timestamps/stacks before suggesting a change.
+
+### Live log notes — 2026-10-29 18:58 Europe/Berlin
+- The current Project Zomboid process remains active (PID 2584); the game log advanced through frame 103282 during monitoring.
+- No new `Gunworks-gang.normalizeOutcomeType` exceptions appeared; total remains four at frames 78501/78502/78562/78563, all predating the Sol compatibility patch load (the patch is not yet in the running process).
+- Sol follow behavior emitted repeated `native_path_failed` / `idle_unreachable` around squares 7258:8409:0 and later a multi-level route toward z=2. At frame 103282, follow emitted `board_vehicle_rejected` while the leader was 2.2 tiles away. Preserve this as a separate navigation/vehicle-order issue for diagnosis; no code changed for it in this turn.
+- Other live warnings seen: `Invalid SpriteConfig object! scripted object = Commercial_FullGlassRedWall` and GameEntityFactory custom-item warnings for `Wood_StandCoffin`, `Welding_IronBandBarzier`, and `Key_Duplicator`; no stack in the captured tail attributes them to Sol.
+
+### Correction — focused Sol appearance subset staged locally
+- A focused source/path audit was completed after the earlier “no Workshop assets copied” note. Added 691 unique appearance-support files to WORK and the current launch candidate, not full mods: Tomb female body model (1), female NUDE body maps (14), active Goth NUDE overrides (3), Vanilla+ clothing compatibility XML (5), Boots Expanded compatibility resources (53), and TombFit clothing compatibility media (615). Three same-path texture variants were resolved by using the Goth NUDE overrides, matching the active load order. No files were changed in Steam Workshop folders.
+- Excluded the male body and male textures, custom SPNCC heads, unrelated mod logic, and Tomb's 83-mesh Goth hair add-on. Current Sol's logged hair path is the base `f_hair_bob.x`, so those extra hairstyles are not part of preserving the current look. VSGirlBodyExtension and its clothing add-on were not in the active game mod list; they remain excluded.
+- Added `Sol/42/SOL_APPEARANCE_LOCAL_ONLY.txt` with provenance and local-use-only restrictions. This asset bundle is not cleared for public Workshop distribution. The user accepts the body model's global female-character effect.
+- WORK and candidate contain the same selected assets. The candidate manifest now has 1,857 entries and is being integrity/parity checked. This remains static evidence only: the live game was not restarted, the body renderer was not reloaded, and the displayed Sol appearance is not yet proven from the self-contained candidate. Keep STABLE/LIVE unchanged until visual in-game validation confirms the model, texture details, and outfit support.
+
+## 2026-10-29 — Activate Viewpoint and weapon integration mods in isolated runtime test
+Status: per-save test mod list updated and backed up; new runtime load and log verification PENDING; release candidate unchanged.
+
+- User returned the isolated test world to the main menu after Viewpoint had been omitted from the save's mod list. Confirmed the target save is `07_TEST/RUNTIME_TEST/profile/Zomboid/Saves/Sandbox/2026-10-29_12-47-55`; its prior `mods.txt` contained only `ZombieBuddy` and `Sol`.
+- Confirmed Workshop metadata/IDs are installed locally: `Viewpoint`, `ProjectViewpointADS`, `XannyArmsCore`, `XannyArmsGunPack`, `XannyArmsViewpoint`, `SWMG` (Gunworks-gang), and `RiskyInspectWeapon` (Inspect Weapon). Added them to this save's mod list while preserving its `ZombieBuddy` and `Sol` entries. The original save-local file is backed up at `03_BACKUPS/runtime_viewpoint_test_20261029/mods.txt.before`.
+- This changes only the isolated test save configuration; no LIVE profile, Steam Workshop folder, WORK source, STABLE, or release candidate was changed. The running game has not yet reloaded this save with the new list, so no Viewpoint/ADS visual or Sol compatibility runtime claim is made.
+- Log review at 2026-10-29 19:38 local time: leaving the test world raised a Lua exception in `Extra Fliers` `NewMediaDefinitions.lua:6` (`table.insert` received a nil table), on the `IngameState.exit` path. This is a separate third-party mod issue, not attributed to Sol/Viewpoint. Also present: a dialogue font texture load error and numerous third-party translator-format warnings. Review the log again after the test save loads with the new mods; verify mod activation and check for new Viewpoint, Xanny, Gunworks, and Inspect Weapon errors.
+## 2026-10-29 — Save Viewpoint control bindings reference
+Status: documentation only; no in-game controls changed.
+
+- Transcribed the user's Project Viewpoint Controls screenshot into `DOCS/VIEWPOINT_CONTROLS_REFERENCE.md`: view toggles, cursor/free look, screenshot and performance overlay, loot controls, and free-camera movement.
+- Recorded Viewpoint's on-screen rebind notes. This is a reference of displayed defaults, not a claim that the user's current bindings were changed or independently verified in runtime.
+## 2026-10-29 — Compare saved-world and isolated-test appearance mods
+Status: save-list comparison confirmed; likely face/detail cause identified; visual attribution to Sol remains an inference pending a controlled in-game comparison.
+
+- Main profile `latestSave.ini` points to Sandbox save `2026-10-29_17-43-08`. Its `mods.txt` includes `SPNCC`, `SPNCCDetails`, `SPNCCDetailsHD`, `TombBody`, `TombBodyCustom`, `TombBodyTexNUDE`, `TombGothTexNUDE`, `TombBodyCompat`, `TombBodyCompatBootsExp`, `TombFit`, `TombGothHair`, `TombWardrobeALT`, `VanillaOutfitsExpanded`, and `DGVViewpointEyes`.
+- Isolated test save `2026-10-29_12-47-55` has only `ZombieBuddy`, `Sol`, `Viewpoint`, `ProjectViewpointADS`, `XannyArmsCore`, `XannyArmsGunPack`, `XannyArmsViewpoint`, `SWMG`, and `RiskyInspectWeapon`; it does not activate the SPNCC or Tomb appearance mod IDs. Sol's local candidate also carries a focused Tomb body/texture and clothing-fit asset subset, but the earlier audit excluded SPNCC custom-head assets.
+- Local Workshop `mod.info` confirms SPNCC adds custom faces and visible muscles; SPNCCDetails adds freckles/moles and SPNCCDetailsHD supplies 512x512 detail textures; TombBodyCustom adds five alternate heads for SPNCC. These missing face/head/detail mods are the strongest explanation for the face-detail mismatch. This is a mod-list/source inference, not proof of which exact overlay is currently rendered on Sol.
+- TombBody and its NUDE/Goth texture packs affect the body model/skin; TombBodyCompat and TombBodyCompatBootsExp fit clothing/boots to that model; TombFit refits supported gear/headwear and improves supported hair behavior. TombWardrobeALT and VanillaOutfitsExpanded add outfit choices. `DGVViewpointEyes` metadata describes HUD/UI features, not character face/body assets. `SPNCCFaces` (Vanilla Faces Pack) is not enabled in the main save and should not be mistaken for a missing dependency.
+- Prior appearance audit recorded Sol's runtime hair model as base `skinned/hair/f_hair_bob.x`, so TombGothHair being enabled in the main save does not by itself establish that one of its custom hairstyles is used by Sol. Compare the same Sol in both saves before deciding whether its hair assets are needed.
+
+## 2026-10-29 — Correction: user wants the appearance dependency bundle inside Sol
+Status: WORK asset bundle staged and static asset references pass; new reviewable candidate pending refresh; gameplay appearance and error-log proof still pending a safe reload. STABLE and LIVE were not changed.
+
+- User clarified that the required outcome is a unified Sol appearance bundle, including the dependencies of the body, head/face details, hair models, and compatible clothing, rather than a diagnosis of only the face mismatch. The user then named VSGirlBodyExtension, VSGirlBodyExtensionHair (Hair VS), VSGirlBodyExtensionClothingCompatibility (Patch Compatibility Clothing), and VSGirlBodyExtensionBathing (Fix Shower And Bath A Take).
+- VSGirlBodyExtension 1.19.31 declares only ZombieBuddy as a hard dependency; Sol already declares ZombieBuddy. The VSGirl core mod was shown Disabled in the user's supplied mod-details screenshot. Its optional Java jar and SolCombined.jar share 310 `localplayerbody` classes: 252 are byte-identical and 58 differ; the VSGirl jar has three classes absent from Sol. Do not add the whole VSGirl jar alongside SolCombined because duplicated class names would make runtime selection order-dependent. SolCombined already contains the adapted body/head/hair routing tables.
+- CORRECTION to the earlier assumption that VSGirl was irrelevant: Sol's jar embeds the VSGirl-derived appearance engine/routes. However, the current `Sol/42/media/models_X/Skinned/FemaleBody.fbx` hash exactly matches Tomb's Player Body 42.13, while VSGirl's `LocalPlayerVSGirl/FemaleBody.fbx` is a different model. Runtime actor selection remains to be visually verified; file provenance alone does not prove which mesh is rendered.
+- Staged the six female VSGirl body/native-head size models, their model script, the 68 female body map files, and 350 unique textures directly referenced by SolCombined's native-head/base/body-detail route tables. Staged all 117 files from the focused Hair VS addon (55 remade-hair FBX, 55 common-hair GLB, shared hair atlas, and localized names). Merged its 46 female styles with Tomb Goth Hair's 60 female styles into one `hairStyles.xml`. Kept original Fluffy Hair's complete mod out; the directly referenced atlas is in the bundle.
+- The previous Tomb/SPNCC selection is now completed with nine female custom head items and 45 face textures, eight detail items and their HD textures, plus minimal SPNCC slot/tag registration. It retains the original item IDs and body-location names for existing saved Sol equipment.
+- Dependency audit: VSGirl Clothing Compatibility is 1.54 GB and describes L-only front-panel patches for FR7 and Psykhe sleeveless tops; it loads after 2DimensionWardrobe, FantasyWorkshopVS42_4.0, and CosplayShop, but does not hard-require those outfit mods. Sol's current default dress is vanilla and does not use the described patched pieces, so the 1.54 GB pack is not copied wholesale. VSGirl Bathing is a separate 3.2 KB action guard with hard requirements on VSGirlBodyExtension and TakeABathAndShowerNew; it does not contribute body appearance assets. These remain separate optional behavior/clothing integrations if Sol later uses those exact features.
+- Static checks: all 378 XML files and 8 JSON files parse; 106 merged hairstyle entries have no duplicate IDs; all 55 remade-hair routes resolve; all 350 VSGirl route textures and six body model references resolve; all face/detail/body clothing texture references resolve. No source Workshop files were modified.
+- Keep the launch candidate marked as unverified until Sol is restarted in the isolated test save with the source appearance mod IDs disabled; visually inspect body/head/hair and read new console exceptions. Do not update STABLE/LIVE before that runtime check.
+
+## 2026-10-29 — Unified appearance candidate refreshed
+Status: candidate assembled and source parity verified; runtime appearance validation is pending because Project Zomboid remains open.
+
+- Created `01_WORK/RELEASE/SOL_2026-10-29_UNIFIED_APPEARANCE_BUNDLE` from the current `01_WORK/Sol/42`, with SolMind carried forward from the chat-resize candidate.
+- Sol payload parity: 2,528 files in WORK and candidate, zero missing files, zero SHA-256 differences. The release manifest covers 2,544 payload files and is being independently integrity-checked.
+- The candidate includes the focused VSGirl route/body/hair assets and merged Hair VS styles recorded above; it intentionally excludes the conflicting VSGirl Java jar, the 1.54 GB garment patch collection, and the separate bathing behavior patch.
+- The running Java game process prevents a safe appearance reload in this turn. No save, LIVE install, or STABLE build was edited. Keep candidate status static/unverified until an isolated reload confirms the rendered body/head/hair and relevant console log.
+
+## 2026-10-29 — Target appearance save matched; runtime baseline investigation
+Status: target appearance save identified; Steam game and Sol bridge reach the main menu, but automated menu activation has not opened a save. Runtime appearance comparison is not yet complete.
+
+- Correction to the earlier test-save recommendation: `2026-10-29_12-47-55` is the isolated appearance-free test save and is not the source of the target look. The main profile's `latestSave.ini` points to `C:\Users\JAMAL\Zomboid\Saves\Sandbox\2026-10-29_17-43-08`.
+- Its `mods.txt` enables `TombBody`, `TombBodyCustom`, `TombBodyTexNUDE`, `TombGothTexNUDE`, `SPNCC`, `SPNCCDetails`, `SPNCCDetailsHD`, `FH`, `TombGothHair`, and fitting support (`TombBodyCompat`, `TombFit`), alongside Sol. Its saved `pzopt-resume.jpg` shows the same purple-walled bedroom/door arrangement as the user's screenshot of Sol, linking the saved world and visual target more strongly than the save name alone.
+- Started Project Zomboid through Steam (normal profile; PID 26112). After the delayed black startup, the main menu became visible. The top status reports ZombieBuddy 2.3.4 and 21 active Java mods including Sol; console reports `[SurvivorCompanionBridge] ready protocol=42.21-isocompanion-21` and a `LocalPlayerBodyVSGirl` hair surface setup. These confirm startup hooks, not an in-world appearance result.
+- Tried menu activation by clicking LOAD and SOLO, keyboard Down/Return, and focusing the PZ window. The pointer hover/highlight changes, but no menu transition occurs. No save has been selected and no save contents/mod lists were edited. User interaction is needed to click LOAD if the same state persists.
+- The current console has numerous warnings/errors from the wider enabled mod set (including failed `require` calls, missing `light-switches` tiledef for UltimateGeneratorOverhaul, translation format warnings, and map/meta warnings). None of the inspected Sol/bridge lines is an ERROR; do not attribute these global errors to Sol without a fresh in-world stack trace.
+- Next: enter the matching save `2026-10-29_17-43-08` or a safe clone, inspect Sol's rendered face/body/hair/outfit, and capture only new Sol-relevant errors. Keep the unified candidate unpromoted until that proof. Current `02_STABLE` and LIVE remain untouched.
+
+- CORRECTION to the immediately preceding note: the PZ Optimization dialog was dismissed with Tab and is no longer visible. The current blocker is that clicks/keys sent through the UI automation move/hover the pointer but do not activate main-menu items.
+
+## 2026-10-29 — Runtime appearance comparison invalidated by stale test-profile Sol payload
+Status: Sol actor is present in the isolated appearance save, but the observed body is not the requested body. This launch did not load the unified appearance candidate; do not treat its visual result as a candidate pass/fail.
+
+- The user correctly reported that Sol is present but does not have the requested body. Current world snapshot shows a living Sol actor at approximately (7090.5, 8370.1, 1), health 59.1, in the bedroom, with recorded wounds and inventory. Runtime log reports `Grace Ashcroft voice bound during finalizeSpawn`, then `living=1 stored=0` and `accepted=false reason=sol_already_exists`; this is the duplicate-spawn guard, not proof that Sol failed to spawn.
+- `07_TEST/RUNTIME_TEST/profile/Zomboid/mods/Sol/42` is stale: 1,835 files versus 2,528 in the unified appearance candidate. Exactly 693 candidate files are absent from that runtime Sol folder, primarily 328 VSGirl appearance textures, 176 skinned body/hair models, 69 body textures, 45 face textures, 43 detail textures, 20 clothing-item registrations, and the merged hair styles/integration scripts. The tested runtime therefore did not contain the complete candidate.
+- The cloned baseline save still enables the original appearance mods (`SPNCC`, `SPNCCDetails`, `SPNCCDetailsHD`, `TombBody`, `TombBodyCustom`, `TombBodyTexNUDE`, `TombGothTexNUDE`, `FH`, `TombGothHair`, and compatibility mods). This is appropriate for a baseline but does not isolate the unified candidate.
+- Next controlled comparison: after the user exits the world and closes the game, install the candidate into the isolated profile only; create a second clone of the baseline save; remove the integrated appearance source mod IDs from only that candidate clone's `mods.txt`; restart and visually verify Sol's face/body/hair, then read fresh console diagnostics. Keep source save, STABLE, and LIVE unchanged.
+
+## 2026-10-29 — VSGirl must be isolated to Sol and preserve Sol UI
+Status: Sol-specific scope implementation staged in WORK and the release candidate; runtime appearance/UI validation pending.
+
+- The user's target is specifically the VSGirlBodyExtension body shown in the provided image, with its necessary clothing, hair, and integration assets moved into the Sol package so that only Sol uses that body. Sol's current interface must remain the active interface; do not enable the complete VSGirl mod as a shortcut.
+- The previous unified candidate is not suitable for this target: it mixed Tomb's `FemaleBody.fbx` with VSGirl assets. The user identified VSGirlBodyExtension as the actual body source. The previous runtime comparison also used a stale Sol payload and therefore did not validate the candidate.
+- Java inspection confirms `PlayerChoice.isEnabled` calls `AppearanceProfiles.renderable`, which calls `PlayerBodyModels.controlled`; that method rejects `IsoPlayer.isNpc()`. Sol is `survivorcompanion.bridge.SCNativeCompanion`, so copied VSGirl assets alone cannot make the NPC render with that body.
+- Sol and VSGirl both declare Java package `localplayerbody`. Loading both Java jars together risks class collisions and is not an acceptable integration plan. Keep one Sol-owned Java jar and merge only required behavior into that owner; preserve Sol's existing companion and UI code.
+- Worktree inventory found the shipped Java jar but no corresponding `localplayerbody` Java source project. A narrow reproducible patcher was added at `05_TOOLS/sol_appearance/ScopeVSGirlBodyToSol.java`, using the ASM copy already shipped in the local ZombieBuddy jar. It modifies only the `controlled` gate in SolCombined.jar: only `SCNativeCompanion` carrying `SolAppearanceVSGirlBody=true` passes; unmarked actors continue through the original gate. The patched class was inspected with `javap` and copied to WORK and the appearance candidate.
+- `SCActor.finalizeSpawn` now marks only the companion whose saved spawn identity has `forename=Sol`, sets VSGirl's existing `LocalPlayerVSGirlBody=true`, size `L`, and native-head `false` keys, and requests a model refresh before reveal. Shared Tomb `FemaleBody.fbx` and root female-body texture overrides were removed from both WORK and candidate; namespaced VSGirl assets remain.
+- Remaining implementation work is to complete static resource/manifest checks and prepare the isolated test profile with integrated source appearance mods disabled. Runtime test must confirm Sol's VSGirl body/face/hair/outfit, unchanged body on an ordinary female NPC, and Sol's own interface/controls. The bathing fix remains excluded unless requested separately. Do not promote STABLE/LIVE until the user verifies those in-game observations.
+- Validation gate: controlled isolated save; confirm Sol has the VSGirl body, face/details, hair, and compatible outfit; confirm a nearby ordinary female NPC retains the vanilla body; confirm Sol's own UI and companion controls still load; inspect fresh Java/Lua logs. Do not promote candidate to STABLE or LIVE until these checks pass.
+
+## 2026-10-29 — VSGirl Sol-only test package prepared
+- Correction confirmed: saved companions are reconstructed by `SCPersistence.restoreAt()` through `SC.Actor.beginSpawn()`, which reaches `finalizeSpawn()`. The Sol marker is therefore set for restored Sol as well as a newly spawned Sol; no periodic world scan is needed.
+- Rebuilt the narrow Java patch from the preserved original candidate JAR using `ScopeVSGirlBodyToSol.java`. The rebuilt JAR is byte-identical to WORK: SHA-256 `54A8DE3CEB813843E5C2DAC9F9535992E21D17102F9BC23B888E1463F7374B5B`. Its exception requires both `SCNativeCompanion` and `SolAppearanceVSGirlBody=true`.
+- Refreshed `01_WORK/RELEASE/SOL_2026-10-29_UNIFIED_APPEARANCE_BUNDLE/Sol/42` from current WORK and copied it into the isolated profile. Each Sol payload has 2,522 files; the patched JAR hashes match.
+- Created `07_TEST/RUNTIME_TEST/profile/Zomboid/Saves/Sandbox/2026-10-29_17-43-08_VSGIRL_SOL_ONLY_TEST` by copying the appearance-reference baseline. Only the clone's `mods.txt` was edited: SPNCC, Tomb body/textures/fit/hair/wardrobe sources are disabled so the candidate package is the appearance source; Sol and ZombieBuddy remain enabled. Original and baseline saves are untouched.
+- No Project Zomboid process was running during staging, and no game was launched. Lua 5.1 syntax gate: 238 files, 0 errors, one pre-existing `SCNavigation.lua` literal-backtick warning. Runtime appearance, Sol UI, ordinary-female preservation, and fresh log review remain for the user's in-game test. No STABLE/LIVE promotion.
+## 2026-10-30 — Appearance test exposed a Sol body-slot API error
+- The isolated save reached Sol's Lua load path, which logged `expected argument of type ItemBodyLocation, got String` at `SCIntegratedAppearanceBodyLocations.lua`. The stack points directly to Sol's vendored appearance support, not an unrelated mod.
+- Build 42 bytecode confirms `BodyLocationGroup.getOrCreateLocation`, `moveLocationToIndex`, and `setMultiItem` all require `zombie.scripting.objects.ItemBodyLocation` objects. Updated the integration to register each `SPNCC:*` name through `ItemBodyLocation.register()` and pass the resulting object to these APIs.
+- Corrected WORK and the unified appearance candidate; refreshed the release manifest. Lua syntax check passes (238 files; 0 errors; one pre-existing warning). Added `05_TOOLS/sol_appearance/check_body_locations.py`; its Lua mock verifies all nine custom locations are registered and all three API methods receive typed objects.
+- The currently open game process has already loaded the old Lua file and still shows a black load screen; the runtime profile has not been updated during this active session. The body-slot correction is not yet runtime-verified. After this session exits, copy the corrected file to the isolated profile and rerun the same cloned save. STABLE, LIVE, and original saves remain untouched.
+## 2026-10-30 — Runtime crash diagnosed and corrected
+- The first isolated load of `2026-10-29_17-43-08_VSGIRL_SOL_ONLY_TEST` crashed while entering the world. `console.txt` and `Logs/2026-10-30_00-25_DebugLog.txt` identify an unhandled JVM `VerifyError` in `localplayerbody.PlayerBodyModels.controlled`, reached from `ModelManager.getBodyModel` during `IngameState.enter`.
+- The verifier evidence showed `KahluaTable.rawget` returns `Object`, while the patched bytecode invoked `Boolean.equals` as if that receiver were a `Boolean`. This was the fatal blocker; the repeated `Spongie's Character Customisation.applyVisual` null-ID errors were secondary fallout from the invalid body-location registration/failed model path and remain to be rechecked after a successful world load.
+- Corrected the reproducible ASM patcher to invoke `Object.equals(Object)` on the `rawget` result. Rebuilt from the preserved pre-patch SolCombined JAR; `javap -v` confirms the stack-compatible call and the Sol-only marker gate. The repaired JAR SHA-256 is `2D8FC4841DDE68B241A21FA9A1ECB52C4D3B40E13A416A680B33A9D29FFC21BC`.
+- Replaced the faulty JAR in WORK, the unified appearance candidate, and the isolated test profile only. Refreshed candidate SHA-256 manifest (2,538 entries; zero mismatches). STABLE, LIVE, and the original save were not changed.
+- Relaunching the isolated test now. Appearance is still pending in-world visual confirmation and review of a fresh post-fix log.
+
+## 2026-10-30 — In-world error pass and test-save routing correction
+- The user reached the world with Sol's UI visible; the Java VerifyError did not recur. On graceful close, the process remained responsive through frame 48,089 and exited after the user stopped the game.
+- The next log pass found two Sol-owned appearance issues: the Java marker check called `rawget(...).equals(TRUE)`, which threw when ordinary actors had no marker; and `media/registries.lua` plus `SCIntegratedAppearanceBodyLocations.lua` registered the same SPNCC tags/body locations more than once. The Java patch now calls `Boolean.TRUE.equals(rawget(...))`; registry lookups reuse `ItemTag.get` / `ItemBodyLocation.get` and only register absent IDs; the body-location setup reuses the same objects for `setMultiItem`.
+- A focused Lua mock check passes: all nine locations resolve to typed values, no duplicate registration occurs, and group methods receive those values. `javap` confirms the null-safe Boolean receiver. Updated WORK, the unified appearance candidate, and the isolated runtime payload; candidate manifest has 2,538 entries.
+- Important test correction: the just-closed game had loaded `2026-10-29_17-43-08_APPEARANCE_BASELINE`, not the isolated `..._VSGIRL_SOL_ONLY_TEST` clone. This is confirmed by `profile/Zomboid/latestSave.ini` and the source appearance mods in that baseline's `mods.txt`. The original save remains untouched. Updated only the isolated profile's `latestSave.ini` to select `2026-10-29_17-43-08_VSGIRL_SOL_ONLY_TEST`; its mod list excludes SPNCC/Tomb/FH sources.
+- The isolated test is being relaunched with the corrected payload and selected clone. The previous in-world screenshot is not evidence of Sol-only body isolation; runtime appearance comparison remains pending.
+
+## 2026-10-30 — Isolated profile cleanup and external UI error attribution
+- The single Lua error visible during the prior startup came from `ExtraFliersB42` (`NewMediaDefinitions.lua:6`): the mod inserts into `PrintMediaDefinitions.Fliers`, which is nil in Build 42's base definition. This is outside Sol. Removed only this unrelated mod from the isolated profile's default list for a quieter appearance test; the installed Workshop copy and user's normal profile were not edited.
+- The isolated profile default list also had `DetailedPlayerModelFRedux`, `DetailedPlayerTexturesFDOLLB42`, and `FH` enabled even though the cloned save's `mods.txt` excluded appearance sources. Removed them from the isolated profile default list and preserved the original as `default.txt.before_sol_only_appearance_20261030`.
+- Hardened the test launcher: it now requires the isolated clone in `latestSave.ini` and rejects appearance-source IDs in both profile defaults and save mod list. Launcher validation passed by starting the new test session.
+- Current startup is stable at the menu. No ExtraFliers exception, duplicate SPNCC registry error, `BodyLocation.isId` NPE, or PlayerBodyModels verifier error has appeared in this run. The selected clone has not entered the world yet, so Sol UI and appearance are still pending.
+
+## 2026-10-30 — Clean isolated world load, visual review pending
+- The corrected isolated test clone `2026-10-29_17-43-08_VSGIRL_SOL_ONLY_TEST` reached the world with the cleaned profile default list and the unified Sol payload (2,522 Sol/42 files, parity checked against WORK and candidate).
+- Fresh runtime evidence `07_TEST/RUNTIME_TEST/runtime-evidence/20261030_005804` records `[SolUI] ready v0.2.0`, `[SolAppearance] VSGirl body scoped to Sol (size=L, nativeHead=false)`, and VSGirl private surface initialization. Sol diagnostics report one living Sol actor and spawn gate ready.
+- In this run the targeted error counts are zero: `VerifyError`, duplicate SPNCC registry IDs, `SCIntegratedAppearanceBodyLocations`, `BodyLocation.isId`, and Extra Fliers `NewMediaDefinitions.lua`. The game remains responsive in-world through at least frame 3,300 in the inspected output.
+- Runtime appearance/UI is not marked passed from logs alone. Await the user's in-scene visual confirmation of body, face, hair, and Sol UI before deciding any next appearance adjustments. STABLE/LIVE remain untouched.
+
+## 2026-10-30 — User visual acceptance for Sol appearance
+- The user visually confirmed in the isolated world that Sol's body, face, and hair match the requested appearance. Runtime logs also show Sol UI ready and the VSGirl route scoped to the marked Sol companion.
+- The user-confirmed Sol appearance check is passed. Broader isolation from ordinary female actors remains supported by the marker-gated Java selector and disabled source appearance mods in the isolated profile; a separate ordinary-NPC visual comparison was not performed.
+- Keep this as a local appearance candidate only. Do not promote to STABLE/LIVE until any desired ordinary-NPC comparison and the user's release decision.
+# Appearance integration status — 2026-10-30
+- Combined SPNCC/Tomb appearance test froze due to repeated `BodyLocation.isId` null-ID exception each frame. Root cause points to duplicate registration between SPNCC source and Sol's vendored standalone registry.
+- Guarded Sol registry so active SPNCC owns the overlapping IDs; standalone Sol registration remains available when SPNCC is absent. WORK, release candidate, and test runtime copies match.
+- Focused Lua/registry/launcher/manifest checks pass. Fresh isolated retry clone is staged; real in-world retest is still required. Preserve original save and do not promote to STABLE/LIVE until the retry is stable and visually reviewed.
+- Retest was launched at 02:14 using `2026-10-29_17-43-08_VSGIRL_PLAYER_APPEARANCE_TEST_RETRY`, but Java exited at 02:15 before the readiness marker or world load. No `BodyLocation.isId` or `GameWindow.frameStep` error appeared in that short startup. Exit code is unknown; inspect `runtime-evidence/20261030_021428` and the 02:14 DebugLog next session. No runtime pass yet.
+
+- Canonical local launch folder: `01_WORK/RELEASE/SOL_2026-10-30_LAUNCH`. Refresh this folder from WORK whenever a Sol mod change is accepted; regenerate and verify `MANIFEST_SHA256.txt` before calling it current.
+- Current package contains Sol Build 42 payload (2,522 files) plus SolMind (16 files), 2,538 manifest entries total. Sol files match `01_WORK/Sol/42` exactly; SolMind matches the latest chat-resize candidate exactly. Build 42 metadata requires ZombieBuddy 2.3.3+.
+- Package is assembled and integrity-verified for local installation/testing. Sol-only appearance was previously visually accepted, but the combined SPNCC/Tomb registry-guard runtime test remains pending; do not call that stack runtime-stable yet.
+
+## 2026-10-31 — One-time desert military starter kit for Sol
+- Updated `SolDress.lua`: the first Sol incarnation in a world receives `Hat_ArmyDesertNew`, `Jacket_ArmyCamoDesertNew`, `Trousers_CamoDesertNew`, `Vest_BulletDesertNew`, `Bag_ALICEpack_DesertCamo`, `Shoes_ArmyBootsDesert`, and equips `BaseballBat_Metal` in her primary hand.
+- The consumed-first-kit flag is stored in world `ModData` (`Sol_InitialDesertLoadout`). Later Sol incarnations, including a replacement after death, use the ordinary vanilla outfit fallback. Existing restored clothing is left intact.
+- Refreshed the canonical launch folder and regenerated its 2,538-entry SHA-256 manifest. WORK and launch `SolDress.lua` hashes match. In-game spawn and death/respawn behavior still require runtime verification.
+
+- 2026-10-31: Sol source sync — aligned WORK and the local launch package at modversion 0.26.41; GitHub target is the complete private Sol/42 payload only, including its required SolCombined.jar. SolMind/test files excluded. Runtime verification still pending.
+
+- 2026-10-31: Installed Sol 0.26.41 at the active Steam profile's Zomboid/mods/Sol/42 after confirming ProjectZomboid64 was closed. Previous 0.26.40 was moved intact to mods_backups/Sol_42_before_0.26.41_20261031_034031. Installed payload hash parity: 2,522 files, 0 mismatches.
+- 2026-10-31: Cursor investigation found borderless=true and lockCursorToWindow=false, but showCursorWhileAiming=false. Changed only showCursorWhileAiming to true; original options.ini preserved at 03_BACKUPS/mouse_cursor_20261031/options.ini.before. Viewpoint still binds Cursor free/locked to MOUSE3; behavior needs user verification after next launch.
+
+- 2026-10-31 cursor correction: user clarified the failure is the mouse pointer in the Borderless main menu, not the aiming cursor. Current cause matched orderless=true with lockCursorToWindow=false; set the latter to true and restored showCursorWhileAiming=false. No mod code/performance settings changed. Restart is required; validation is pending because the current game process was already running.
+
+## 2026-11-06 — Sol / bridge protocol compatibility
+
+- Diagnosed the new-world case where the Sol interface loaded but no actor appeared: Lua expected `42.21-isocompanion-21`, while the installed Living Fellows 0.26.67 bridge reported `42.21-isocompanion-24`; runtime explicitly disabled actors and rejected spawn.
+- Prepared release candidate `01_WORK/RELEASE/SOL_2026-11-06_BRIDGE24_COMPAT`. It aligns the Lua handshake and both bundled copies of `survivorcompanion.bridge` to protocol 24, preserving Sol's `localplayerbody` classes.
+- Static API comparison found no removed public methods from `SCBridge` or `SCNativeCompanion`; four methods were added in the upstream bridge.
+- Runtime remains pending. The game was open during preparation; only install after it exits, then confirm `actors=enabled` and accepted Sol spawn before behavioral testing.
+- 2026-11-06: Installed Sol 0.26.42 bridge-protocol-24 into the normal Steam profile at `C:\Users\JAMAL\Zomboid\mods\Sol` after verifying the game was closed. All 2,528 files match the release candidate by relative path and SHA-256. Runtime spawn check pending the user’s next launch.
+
+- 2026-11-06: Cursor issue correction: `showCursorWhileAiming` was briefly changed in error, then restored to `true`; `options.ini` now matches its pre-change backup byte-for-byte, preserving the aiming cursor and menu pointer. Static evidence found a real MMB binding collision: OldPoint was also bound to `MOUSE3` for overhead-camera rotation while Viewpoint uses it for cursor capture. Backed up `viewpoint-live.properties` and moved only `oldpoint.cameraRotationKey` from `MOUSE3` to `MOUSE5`. Runtime confirmation is pending.
+- 2026-11-06 follow-up from user video: confirmed symptom is a frozen pointer sprite after Viewpoint recaptures the mouse; camera look continues normally, so it is separate from the aiming reticle. Reverted the previous cursor edits byte-for-byte to their saved pre-change baselines (`options.ini` and `viewpoint-live.properties`); current cursor toggle and OldPoint bindings are back at their recorded prior values. No Windows settings or reticle options were changed. Runtime retest pending.
+
+## 2026-11-06 — Live Sol behavior test checklist
+
+Current live session: user is in-world; game log is `C:\Users\JAMAL\Zomboid\console.txt`. Run one check at a time and record the exact command, Sol's pre-command activity/order, immediate response, and result before proceeding. Do not infer command execution from her verbal acknowledgement alone.
+
+1. **Baseline and follow:** Record Sol's visible status/order/activity and distance. Issue Follow/Come with me, then walk a short distance. Pass: she starts moving promptly and remains with the player. Record any delay or unchanged activity.
+2. **Direct command interrupts autonomous work:** If Sol is already fighting or doing a visible work activity, issue Follow/retreat once. Pass: the prior action is cancelled and she moves toward the player. Do not create a dangerous fight just to force this case; if no autonomous action occurs, mark it skipped.
+3. **Combat then retreat:** Only in a controlled/safe situation (e.g. the player's established God Mode and one nearby zombie), observe her combat response, then immediately order Follow/Stay behind me. Pass: she stops pursuing/attacking and retreats with the player. Record whether she was busy, the requested order, and her position after each step.
+4. **Medical response:** If a non-critical wound already exists, request treatment once. Pass: she approaches, treats the intended wound, and reports/finishes; otherwise skip rather than creating an injury.
+5. **Food and water:** Only when hunger/thirst makes consumption relevant, ensure suitable food and clean drink are available to Sol, request each separately, and note inventory/stat changes. If she is not hungry/thirsty, mark not applicable.
+6. **Vehicle entry/exit:** In a safe area with a stopped, unlocked vehicle, test entering from nearby, verify which seat she takes, then request exit and verify she exits. Test driving only as a separate step after entry/exit works.
+7. **Cursor symptom (separate from Sol):** In first person, use MMB to release the UI cursor, move it, then MMB to recapture. Record whether camera look resumes and whether the mouse-arrow graphic disappears; do not change reticle/aim settings during Sol tests.
+
+For any failure, pause before repeating. Capture the exact phrase/time, Sol status panel, and approximate distance; then correlate that moment with fresh console/Lua errors and command/action ownership logs. A verbal “okay” is not a pass without an observable state or movement change.
+
+**Cursor test update:** Before starting Sol behavior checks, the user reports resolving the stuck pointer from the in-game settings. The supplied screenshot shows `Show Mouse Cursor While Aiming` unchecked, `Iso Cursor Visibility` at 50%, and `Lock Cursor to Window` unchecked. This is the user's successful in-game configuration; no independent reproduction has been made, and no further cursor setting changes are needed unless the issue returns.
+
+## 2026-11-06 Vehicle detection and drive-order repair
+- Confirmed during the live session: the prior closest-vehicle lookup defaulted to an 8-tile radius from the local player; the driver lookup used 12 tiles from Sol. The user saw Sol at the car while replies claimed she was driving/inside, but the log showed repeated `invalid_destination` and `companion is not at the passenger door` outcomes.
+- WORK change: nearest vehicle is now searched within 30 tiles from Sol in board and driver paths; an explicitly selected vehicle is preserved. Chat-action and nearby-seat actions route through SolOrders so the order has one approach/boarding state machine.
+- Door approach no longer falls back to a tile occupied by the player. Board and driver approach windows are 90 seconds. Completion-sounding Arabic vehicle claims are guarded unless game state confirms completion.
+- Static validation: Lua 5.1 syntax check on 225 client files passed (0 errors; one pre-existing SCNavigation warning); Python AST check passed. No in-game validation was performed in this change turn.
+- Release sync: canonical launch payload refreshed from Bridge24 candidate; manifest regenerated. Vehicle behavior runtime gate remains pending.
+
+## 2026-11-06 — GPS drive command gap
+- Live trace showed a wheel-seat request and route previews, but no GPS `driving to` / refusal event. `sol_drive` appeared in the available-action catalog without a dispatch implementation.
+- The action path is now wired to the selected GPS point; runtime acceptance still requires Sol to reach the driver seat, start the route, move, and report arrival or a concrete failure. See `DOCS/GPS_DRIVE_ACTION_FIX_2026-11-06.md`.
+## 2026-11-13 — s132 helicopter guidance checkpoint
+
+- Implemented coordinated yaw+bank steering based on Jamal's recorded manual controls, with turn hysteresis and transition logs. Updated the LAB flight recorder for complete heading capture and close-on-exit.
+- Internal authorization, steering, off-axis route, landing, and recorder tests pass. This is a kinematic harness, not a game-physics simulation.
+- Next gate: launch only SOL_LAB on save `2026-11-12_18-08-44`; verify Sol actually starts, climbs, follows a near GPS marker with changing X/Y, arrives, and lands when commanded. Keep release/Steam unchanged until live acceptance.
+- Exact user test order and log pass criteria: `DOCS/S132_HELICOPTER_LIVE_TEST.md`.
+
+## 2026-11-13 — s133 helicopter altitude gate repair
+
+- Root cause of the last live failure: Sol used tile `getZ()` for helicopter altitude, but AviationCore uses `getWorldPos(...):z()`. The altitude-ready gate stayed closed, so GPS steering never began. Repeated start presses also reset the climb phase; both are fixed in LAB controller 0.4.4.
+- Internal tests pass with a fixture that deliberately separates floor level from world altitude; off-axis route and landing replay pass. This is not live physics evidence.
+- LAB installed with rollback at `07_TEST/SOL_LAB/_backup/20261113_035249_before_s133_heli_world_altitude`. Do not update Steam/release.
+- Remaining acceptance: on save `2026-11-12_18-08-44`, confirm worldZ rises to targetZ, GPS guidance appears, both map axes move toward marker, arrival holds altitude, and **هبطي هون** lands. See `DOCS/S132_HELICOPTER_LIVE_TEST.md`.
+
+## 2026-11-13 — s134 AviationCore pilot bridge hardening
+
+- Live trace confirmed engine-ready with Sol in pilot seat and player as passenger, but no flight input or altitude/guidance logs; the helicopter was still grounded at shutdown. AviationCore rejects any local actor outside seat 0 before reading input.
+- WORK and SOL_LAB now scan a bounded stack range for the exact FlightRuntime source before routing its local-pilot request to Sol. Runtime emits a one-time route marker. LAB rollback: `07_TEST/SOL_LAB/_backup/20261113_041319_before_s134_flight_runtime_bridge`.
+- Static and harness checks pass; this is not live physics proof. Next: launch only SOL_LAB, use save `2026-11-12_18-08-44`, and require bridge marker → climb/worldZ → GPS guidance → coordinate movement/arrival → commanded landing. Do not promote to release or Steam before this evidence.

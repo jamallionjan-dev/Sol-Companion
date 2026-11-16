@@ -1,0 +1,6618 @@
+[
+{
+"file": "SCAIMailbox.lua",
+"old": "tonumber(string.sub(body, index + 1, stop - 1))",
+"new": "tonumber((string.sub(body, index + 1, stop - 1)))",
+"count": 1,
+"lines": [
+143
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionHistoryLimit\", 20))",
+"new": "tonumber((config(\"actionHistoryLimit\", 20)))",
+"count": 1,
+"lines": [
+196
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(setting[1], setting[2]))",
+"new": "tonumber((config(setting[1], setting[2])))",
+"count": 1,
+"lines": [
+249
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRetryBaseMs\", 1500))",
+"new": "tonumber((config(\"actionRetryBaseMs\", 1500)))",
+"count": 1,
+"lines": [
+303
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRetrySecondMs\", 5000))",
+"new": "tonumber((config(\"actionRetrySecondMs\", 5000)))",
+"count": 1,
+"lines": [
+304
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRetryThirdMs\", 15000))",
+"new": "tonumber((config(\"actionRetryThirdMs\", 15000)))",
+"count": 1,
+"lines": [
+305
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRetryMaximumMs\", 60000))",
+"new": "tonumber((config(\"actionRetryMaximumMs\", 60000)))",
+"count": 1,
+"lines": [
+306
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRetryMaxAttempts\", 4))",
+"new": "tonumber((config(\"actionRetryMaxAttempts\", 4)))",
+"count": 1,
+"lines": [
+325
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(\n            config(\"actionRollbackMaxAttempts\", 4))",
+"new": "tonumber(\n            (config(\"actionRollbackMaxAttempts\", 4)))",
+"count": 1,
+"lines": [
+397
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRollbackRetryMs\", 250))",
+"new": "tonumber((config(\"actionRollbackRetryMs\", 250)))",
+"count": 1,
+"lines": [
+406
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionRollbackQuarantineMs\", 5000))",
+"new": "tonumber((config(\"actionRollbackQuarantineMs\", 5000)))",
+"count": 1,
+"lines": [
+432
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionUrgentQueueMs\", 5000))",
+"new": "tonumber((config(\"actionUrgentQueueMs\", 5000)))",
+"count": 1,
+"lines": [
+653
+]
+},
+{
+"file": "SCActionSupervisor.lua",
+"old": "tonumber(config(\"actionPoseMaximumDisplacement\", 0.25))",
+"new": "tonumber((config(\"actionPoseMaximumDisplacement\", 0.25)))",
+"count": 1,
+"lines": [
+1156
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+27
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(SC.Dialogue.lastSpokenAt(actor))",
+"new": "tonumber((SC.Dialogue.lastSpokenAt(actor)))",
+"count": 1,
+"lines": [
+1566
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().stableHash(salt))",
+"new": "tonumber((U().stableHash(salt)))",
+"count": 1,
+"lines": [
+1712
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().stableHash(key .. \":table:\"\n                        .. tostring(math.floor(current / 60000))))",
+"new": "tonumber((U().stableHash(key .. \":table:\"\n                        .. tostring(math.floor(current / 60000)))))",
+"count": 1,
+"lines": [
+2096
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().stableHash(seed))",
+"new": "tonumber((U().stableHash(seed)))",
+"count": 1,
+"lines": [
+2204
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().nativeHealth(actor))",
+"new": "tonumber((U().nativeHealth(actor)))",
+"count": 1,
+"lines": [
+2507
+]
+},
+{
+"file": "SCBanter.lua",
+"old": "tonumber(U().moodleLevel(actor, \"PANIC\", 0))",
+"new": "tonumber((U().moodleLevel(actor, \"PANIC\", 0)))",
+"count": 1,
+"lines": [
+2644
+]
+},
+{
+"file": "SCBaseLife.lua",
+"old": "tonumber(string.match(row.objectId,\n                    \"^object:(%d+)$\"))",
+"new": "tonumber((string.match(row.objectId,\n                    \"^object:(%d+)$\")))",
+"count": 1,
+"lines": [
+848
+]
+},
+{
+"file": "SCBaseLife.lua",
+"old": "tonumber(U().config(\"productionLumberReach\"))",
+"new": "tonumber((U().config(\"productionLumberReach\")))",
+"count": 1,
+"lines": [
+1141
+]
+},
+{
+"file": "SCBaseLife.lua",
+"old": "tonumber(U().config(\"baseJobRetryMaxMs\"))",
+"new": "tonumber((U().config(\"baseJobRetryMaxMs\")))",
+"count": 1,
+"lines": [
+3803
+]
+},
+{
+"file": "SCBaseLife.lua",
+"old": "tonumber(U().config(\"baseJobParkAfterFailures\"))",
+"new": "tonumber((U().config(\"baseJobParkAfterFailures\")))",
+"count": 1,
+"lines": [
+3996
+]
+},
+{
+"file": "SCBaseLife.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+4524
+]
+},
+{
+"file": "SCBaseVisuals.lua",
+"old": "tonumber(configured(\"companionNameLabelHeadClearance\", 120))",
+"new": "tonumber((configured(\"companionNameLabelHeadClearance\", 120)))",
+"count": 1,
+"lines": [
+606
+]
+},
+{
+"file": "SCBaseVisuals.lua",
+"old": "tonumber(configured(\"companionNameLabelOffsetY\", 2))",
+"new": "tonumber((configured(\"companionNameLabelOffsetY\", 2)))",
+"count": 1,
+"lines": [
+611
+]
+},
+{
+"file": "SCBaseVisuals.lua",
+"old": "tonumber(configured(\"companionNameLabelDistance\", 20))",
+"new": "tonumber((configured(\"companionNameLabelDistance\", 20)))",
+"count": 1,
+"lines": [
+671
+]
+},
+{
+"file": "SCBaseVisuals.lua",
+"old": "tonumber(configured(\"baseLayoutLegendX\", 90))",
+"new": "tonumber((configured(\"baseLayoutLegendX\", 90)))",
+"count": 1,
+"lines": [
+755
+]
+},
+{
+"file": "SCBaseVisuals.lua",
+"old": "tonumber(configured(\"baseLayoutLegendY\", 160))",
+"new": "tonumber((configured(\"baseLayoutLegendY\", 160)))",
+"count": 1,
+"lines": [
+756
+]
+},
+{
+"file": "SCBaseWatch.lua",
+"old": "tonumber(getTimestampMs())",
+"new": "tonumber((getTimestampMs()))",
+"count": 1,
+"lines": [
+13
+]
+},
+{
+"file": "SCBaseWork.lua",
+"old": "tonumber(U().config(\"campStorageItemBudget\"))",
+"new": "tonumber((U().config(\"campStorageItemBudget\")))",
+"count": 1,
+"lines": [
+315
+]
+},
+{
+"file": "SCBaseWork.lua",
+"old": "tonumber(companion:getPlayerNum())",
+"new": "tonumber((companion:getPlayerNum()))",
+"count": 1,
+"lines": [
+685
+]
+},
+{
+"file": "SCBaseWork.lua",
+"old": "tonumber(U().config(\"needsFatigueThreshold\"))",
+"new": "tonumber((U().config(\"needsFatigueThreshold\")))",
+"count": 1,
+"lines": [
+1476
+]
+},
+{
+"file": "SCChefWork.lua",
+"old": "tonumber(tostring(value))",
+"new": "tonumber((tostring(value)))",
+"count": 1,
+"lines": [
+51
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatPushOutcomeWindowMs\"))",
+"new": "tonumber((U().config(\"combatPushOutcomeWindowMs\")))",
+"count": 1,
+"lines": [
+418
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatPushInjuryHealthLoss\"))",
+"new": "tonumber((U().config(\"combatPushInjuryHealthLoss\")))",
+"count": 1,
+"lines": [
+474
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatFlankSeparationDegrees\"))",
+"new": "tonumber((utility.config(\"combatFlankSeparationDegrees\")))",
+"count": 2,
+"lines": [
+695,
+726
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatDeadTargetAttackLeaseMs\"))",
+"new": "tonumber((U().config(\"combatDeadTargetAttackLeaseMs\")))",
+"count": 1,
+"lines": [
+1002
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatStalledAttackLeaseMs\"))",
+"new": "tonumber((U().config(\"combatStalledAttackLeaseMs\")))",
+"count": 1,
+"lines": [
+1061
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatDesignationScoreBonus\"))",
+"new": "tonumber((utility.config(\"combatDesignationScoreBonus\")))",
+"count": 1,
+"lines": [
+1585
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\n                            \"combatStealthEmergencyRadius\"))",
+"new": "tonumber((utility.config(\n                            \"combatStealthEmergencyRadius\")))",
+"count": 1,
+"lines": [
+1590
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatDesignationAvoidPenalty\"))",
+"new": "tonumber((utility.config(\"combatDesignationAvoidPenalty\")))",
+"count": 1,
+"lines": [
+1594
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(\n        utility.config(\"combatLiveLosChecksPerPulse\"))",
+"new": "tonumber(\n        (utility.config(\"combatLiveLosChecksPerPulse\")))",
+"count": 1,
+"lines": [
+1647
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatGroundedLaneYieldMs\"))",
+"new": "tonumber((U().config(\"combatGroundedLaneYieldMs\")))",
+"count": 1,
+"lines": [
+1854
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(options.rng())",
+"new": "tonumber((options.rng()))",
+"count": 1,
+"lines": [
+2415
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatTargetActionHardCap\"))",
+"new": "tonumber((U().config(\"combatTargetActionHardCap\")))",
+"count": 1,
+"lines": [
+3050
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatTargetActionCandidates\"))",
+"new": "tonumber((U().config(\"combatTargetActionCandidates\")))",
+"count": 1,
+"lines": [
+3052
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(U().config(\"combatTargetPairMargin\"))",
+"new": "tonumber((U().config(\"combatTargetPairMargin\")))",
+"count": 1,
+"lines": [
+3170
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatFollowRetreatSoftLeash\"))",
+"new": "tonumber((utility.config(\"combatFollowRetreatSoftLeash\")))",
+"count": 1,
+"lines": [
+3275
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatFollowRetreatHardLeash\"))",
+"new": "tonumber((utility.config(\"combatFollowRetreatHardLeash\")))",
+"count": 1,
+"lines": [
+3277
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatRetreatCorridorDangerPenalty\"))",
+"new": "tonumber((utility.config(\"combatRetreatCorridorDangerPenalty\")))",
+"count": 2,
+"lines": [
+3342,
+3379
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatRetreatCohesionWeight\"))",
+"new": "tonumber((utility.config(\"combatRetreatCohesionWeight\")))",
+"count": 2,
+"lines": [
+3345,
+3382
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatRetreatCohesionPenalty\"))",
+"new": "tonumber((utility.config(\"combatRetreatCohesionPenalty\")))",
+"count": 2,
+"lines": [
+3347,
+3384
+]
+},
+{
+"file": "SCCombat.lua",
+"old": "tonumber(utility.config(\"combatNoTargetToleranceMs\"))",
+"new": "tonumber((utility.config(\"combatNoTargetToleranceMs\")))",
+"count": 1,
+"lines": [
+4449
+]
+},
+{
+"file": "SCCombatTrace.lua",
+"old": "tonumber(config(\"combatTraceIntervalMs\", 2000))",
+"new": "tonumber((config(\"combatTraceIntervalMs\", 2000)))",
+"count": 1,
+"lines": [
+99
+]
+},
+{
+"file": "SCCombatTrace.lua",
+"old": "tonumber(config(\"combatTraceReentryPerSecond\", 3))",
+"new": "tonumber((config(\"combatTraceReentryPerSecond\", 3)))",
+"count": 1,
+"lines": [
+112
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_FollowDistance\" },\n            valueFrom(entry, { \"followDistance\" }, persistedOrder.followDistance\n                or utility.config(\"followDistance\") or 3)))",
+"new": "tonumber((valueFrom(data, { \"SC_FollowDistance\" },\n            valueFrom(entry, { \"followDistance\" }, persistedOrder.followDistance\n                or utility.config(\"followDistance\") or 3))))",
+"count": 1,
+"lines": [
+258
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_MoveModeVersion\" },\n            valueFrom(entry, { \"moveModeVersion\" }, persistedOrder.movementModeVersion)))",
+"new": "tonumber((valueFrom(data, { \"SC_MoveModeVersion\" },\n            valueFrom(entry, { \"moveModeVersion\" }, persistedOrder.movementModeVersion))))",
+"count": 1,
+"lines": [
+272
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_Trust\" },\n            valueFrom(entry, { \"trust\" }, persistedPersonality.trust or 0)))",
+"new": "tonumber((valueFrom(data, { \"SC_Trust\" },\n            valueFrom(entry, { \"trust\" }, persistedPersonality.trust or 0))))",
+"count": 1,
+"lines": [
+287
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_Bond\" },\n            valueFrom(entry, { \"bond\" }, persistedPersonality.bond or 0)))",
+"new": "tonumber((valueFrom(data, { \"SC_Bond\" },\n            valueFrom(entry, { \"bond\" }, persistedPersonality.bond or 0))))",
+"count": 1,
+"lines": [
+289
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_Morale\" },\n            valueFrom(entry, { \"morale\" }, persistedPersonality.morale or 55)))",
+"new": "tonumber((valueFrom(data, { \"SC_Morale\" },\n            valueFrom(entry, { \"morale\" }, persistedPersonality.morale or 55))))",
+"count": 1,
+"lines": [
+291
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_Stress\" },\n            valueFrom(entry, { \"stress\" }, persistedPersonality.stress or 12)))",
+"new": "tonumber((valueFrom(data, { \"SC_Stress\" },\n            valueFrom(entry, { \"stress\" }, persistedPersonality.stress or 12))))",
+"count": 1,
+"lines": [
+293
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_TimeTogetherMs\" },\n            valueFrom(entry, { \"timeTogetherMs\" }, persistedPersonality.timeTogetherMs or 0)))",
+"new": "tonumber((valueFrom(data, { \"SC_TimeTogetherMs\" },\n            valueFrom(entry, { \"timeTogetherMs\" }, persistedPersonality.timeTogetherMs or 0))))",
+"count": 1,
+"lines": [
+302
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(valueFrom(data, { \"SC_CommandSerial\" }, 0))",
+"new": "tonumber((valueFrom(data, { \"SC_CommandSerial\" }, 0)))",
+"count": 1,
+"lines": [
+307
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(U().config(\"viewPeekMaximumDistance\"))",
+"new": "tonumber((U().config(\"viewPeekMaximumDistance\")))",
+"count": 1,
+"lines": [
+1263
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(U().config(\"combatPushWindowMs\"))",
+"new": "tonumber((U().config(\"combatPushWindowMs\")))",
+"count": 1,
+"lines": [
+1270
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(U().config(\"combatPushMoraleCost\"))",
+"new": "tonumber((U().config(\"combatPushMoraleCost\")))",
+"count": 1,
+"lines": [
+1278
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(U().config(\"combatPushStressCost\"))",
+"new": "tonumber((U().config(\"combatPushStressCost\")))",
+"count": 1,
+"lines": [
+1279
+]
+},
+{
+"file": "SCCommands.lua",
+"old": "tonumber(U().config(\"combatDesignationDurationMs\"))",
+"new": "tonumber((U().config(\"combatDesignationDurationMs\")))",
+"count": 1,
+"lines": [
+1294
+]
+},
+{
+"file": "SCCommunity.lua",
+"old": "tonumber(U().config(\"maxCompanions\"))",
+"new": "tonumber((U().config(\"maxCompanions\")))",
+"count": 1,
+"lines": [
+445
+]
+},
+{
+"file": "SCCommunity.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+1094
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(objects, \"size\"))",
+"new": "tonumber((call(objects, \"size\")))",
+"count": 1,
+"lines": [
+77
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(buildFace, \"getWidth\"))",
+"new": "tonumber((call(buildFace, \"getWidth\")))",
+"count": 1,
+"lines": [
+113
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(buildFace, \"getHeight\"))",
+"new": "tonumber((call(buildFace, \"getHeight\")))",
+"count": 1,
+"lines": [
+114
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(buildFace, \"getzLayers\"))",
+"new": "tonumber((call(buildFace, \"getzLayers\")))",
+"count": 1,
+"lines": [
+115
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(face, \"getWidth\"))",
+"new": "tonumber((call(face, \"getWidth\")))",
+"count": 1,
+"lines": [
+221
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(face, \"getHeight\"))",
+"new": "tonumber((call(face, \"getHeight\")))",
+"count": 1,
+"lines": [
+222
+]
+},
+{
+"file": "SCConstructionPlanner.lua",
+"old": "tonumber(call(face, \"getzLayers\"))",
+"new": "tonumber((call(face, \"getzLayers\")))",
+"count": 1,
+"lines": [
+223
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(U().config(\"noiseRemarkMemoryMs\"))",
+"new": "tonumber((U().config(\"noiseRemarkMemoryMs\")))",
+"count": 1,
+"lines": [
+303
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(U().config(\"noiseRemarkCooldownMs\"))",
+"new": "tonumber((U().config(\"noiseRemarkCooldownMs\")))",
+"count": 1,
+"lines": [
+327
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(utility.config(\"followSettleMs\"))",
+"new": "tonumber((utility.config(\"followSettleMs\")))",
+"count": 1,
+"lines": [
+383
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(utility.config(\"followSettleStaggerMs\"))",
+"new": "tonumber((utility.config(\"followSettleStaggerMs\")))",
+"count": 1,
+"lines": [
+384
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(utility.stableHash(\n            tostring(utility.idOf(actor)) .. \":follow-settle\"))",
+"new": "tonumber((utility.stableHash(\n            tostring(utility.idOf(actor)) .. \":follow-settle\")))",
+"count": 1,
+"lines": [
+386
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(U().config(\"combatNoTargetFollowMs\"))",
+"new": "tonumber((U().config(\"combatNoTargetFollowMs\")))",
+"count": 1,
+"lines": [
+403
+]
+},
+{
+"file": "SCDecision.lua",
+"old": "tonumber(utility.distance(actor, player))",
+"new": "tonumber((utility.distance(actor, player)))",
+"count": 2,
+"lines": [
+2195,
+2275
+]
+},
+{
+"file": "SCDialogue.lua",
+"old": "tonumber(utility.config(\"combatBarkSoundRadius\"))",
+"new": "tonumber((utility.config(\"combatBarkSoundRadius\")))",
+"count": 1,
+"lines": [
+3596
+]
+},
+{
+"file": "SCDialogue.lua",
+"old": "tonumber(U().nativeHealth(actor))",
+"new": "tonumber((U().nativeHealth(actor)))",
+"count": 1,
+"lines": [
+4051
+]
+},
+{
+"file": "SCDiaryUI.lua",
+"old": "tonumber(core:getScreenWidth())",
+"new": "tonumber((core:getScreenWidth()))",
+"count": 1,
+"lines": [
+62
+]
+},
+{
+"file": "SCDiaryUI.lua",
+"old": "tonumber(core:getScreenHeight())",
+"new": "tonumber((core:getScreenHeight()))",
+"count": 1,
+"lines": [
+63
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(U().stableHash(seed))",
+"new": "tonumber((U().stableHash(seed)))",
+"count": 2,
+"lines": [
+67,
+1085
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(U().config(\"curtainCooldownMs\"))",
+"new": "tonumber((U().config(\"curtainCooldownMs\")))",
+"count": 1,
+"lines": [
+330
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"campReadingStorageRadius\"))",
+"new": "tonumber((utility.config(\"campReadingStorageRadius\")))",
+"count": 1,
+"lines": [
+732
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"campReadingStorageBudget\"))",
+"new": "tonumber((utility.config(\"campReadingStorageBudget\")))",
+"count": 1,
+"lines": [
+734
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"campReadingItemBudget\"))",
+"new": "tonumber((utility.config(\"campReadingItemBudget\")))",
+"count": 1,
+"lines": [
+736
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(U().config(\"downtimeWashFailureCooldownMs\"))",
+"new": "tonumber((U().config(\"downtimeWashFailureCooldownMs\")))",
+"count": 1,
+"lines": [
+939
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(visual:getBlood(part))",
+"new": "tonumber((visual:getBlood(part)))",
+"count": 2,
+"lines": [
+1028,
+4098
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(visual:getDirt(part))",
+"new": "tonumber((visual:getDirt(part)))",
+"count": 2,
+"lines": [
+1029,
+4098
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(U().config(\"downtimeFurnitureFailureCooldownMs\"))",
+"new": "tonumber((U().config(\"downtimeFurnitureFailureCooldownMs\")))",
+"count": 2,
+"lines": [
+1321,
+3369
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(\n        utility.characterStatValue(actor, \"FATIGUE\", 0))",
+"new": "tonumber(\n        (utility.characterStatValue(actor, \"FATIGUE\", 0)))",
+"count": 3,
+"lines": [
+1434,
+1502,
+3747
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(\n        utility.config(\"needsFatigueThreshold\"))",
+"new": "tonumber(\n        (utility.config(\"needsFatigueThreshold\")))",
+"count": 1,
+"lines": [
+1436
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"downtimeFurnitureRadius\"))",
+"new": "tonumber((utility.config(\"downtimeFurnitureRadius\")))",
+"count": 1,
+"lines": [
+1439
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"downtimeFurnitureSquareBudget\"))",
+"new": "tonumber((utility.config(\"downtimeFurnitureSquareBudget\")))",
+"count": 1,
+"lines": [
+1441
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"needsFatigueThreshold\"))",
+"new": "tonumber((utility.config(\"needsFatigueThreshold\")))",
+"count": 1,
+"lines": [
+1504
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"downtimeFloorRestMs\"))",
+"new": "tonumber((utility.config(\"downtimeFloorRestMs\")))",
+"count": 1,
+"lines": [
+1509
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"downtimeStudyChancePercent\"))",
+"new": "tonumber((utility.config(\"downtimeStudyChancePercent\")))",
+"count": 1,
+"lines": [
+2133
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(SC.Background.downtimeModifier(profile, \"study_corpse\"))",
+"new": "tonumber((SC.Background.downtimeModifier(profile, \"study_corpse\")))",
+"count": 1,
+"lines": [
+2137
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(U().stableHash(text))",
+"new": "tonumber((U().stableHash(text)))",
+"count": 1,
+"lines": [
+2143
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"downtimeStudyRollWindowMs\"))",
+"new": "tonumber((utility.config(\"downtimeStudyRollWindowMs\")))",
+"count": 2,
+"lines": [
+2156,
+2445
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"respectStressLimit\"))",
+"new": "tonumber((utility.config(\"respectStressLimit\")))",
+"count": 1,
+"lines": [
+2400
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"respectChancePercent\"))",
+"new": "tonumber((utility.config(\"respectChancePercent\")))",
+"count": 1,
+"lines": [
+2406
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(SC.Tales.lastEpisodeEndedAt())",
+"new": "tonumber((SC.Tales.lastEpisodeEndedAt()))",
+"count": 1,
+"lines": [
+2409
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"respectAfterFightMs\"))",
+"new": "tonumber((utility.config(\"respectAfterFightMs\")))",
+"count": 1,
+"lines": [
+2411
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"respectReactionPercent\"))",
+"new": "tonumber((utility.config(\"respectReactionPercent\")))",
+"count": 1,
+"lines": [
+2477
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(utility.config(\"respectReactionRadius\"))",
+"new": "tonumber((utility.config(\"respectReactionRadius\")))",
+"count": 1,
+"lines": [
+2485
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(\n                U().characterStatValue(actor, \"FATIGUE\", 0))",
+"new": "tonumber(\n                (U().characterStatValue(actor, \"FATIGUE\", 0)))",
+"count": 1,
+"lines": [
+3815
+]
+},
+{
+"file": "SCDowntime.lua",
+"old": "tonumber(\n            U().config(\"bedEntryTimeoutMs\"))",
+"new": "tonumber(\n            (U().config(\"bedEntryTimeoutMs\")))",
+"count": 1,
+"lines": [
+3821
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"scavengeReachTiles\"))",
+"new": "tonumber((utility.config(\"scavengeReachTiles\")))",
+"count": 1,
+"lines": [
+886
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"scavengeFacingDot\"))",
+"new": "tonumber((utility.config(\"scavengeFacingDot\")))",
+"count": 1,
+"lines": [
+916
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"scavengeBlindBaseScore\"))",
+"new": "tonumber((utility.config(\"scavengeBlindBaseScore\")))",
+"count": 1,
+"lines": [
+1011
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(U().config(\"scavengeOpenContainerMs\"))",
+"new": "tonumber((U().config(\"scavengeOpenContainerMs\")))",
+"count": 1,
+"lines": [
+1101
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\n            \"scavengeFormationSearchRadius\"))",
+"new": "tonumber((utility.config(\n            \"scavengeFormationSearchRadius\")))",
+"count": 1,
+"lines": [
+1329
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\n            \"scavengeLootReactionCorpseGrossChancePercent\"))",
+"new": "tonumber((utility.config(\n            \"scavengeLootReactionCorpseGrossChancePercent\")))",
+"count": 1,
+"lines": [
+1561
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"scavengeLootReactionChancePercent\"))",
+"new": "tonumber((utility.config(\"scavengeLootReactionChancePercent\")))",
+"count": 1,
+"lines": [
+1583
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(U().config(\"scavengeFormationLeash\"))",
+"new": "tonumber((U().config(\"scavengeFormationLeash\")))",
+"count": 1,
+"lines": [
+2485
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(U().config(\"scavengeApproachMaxMs\"))",
+"new": "tonumber((U().config(\"scavengeApproachMaxMs\")))",
+"count": 1,
+"lines": [
+2523
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"spawnMinDistance\"))",
+"new": "tonumber((utility.config(\"spawnMinDistance\")))",
+"count": 1,
+"lines": [
+2592
+]
+},
+{
+"file": "SCEncounter.lua",
+"old": "tonumber(utility.config(\"spawnMaxDistance\"))",
+"new": "tonumber((utility.config(\"spawnMaxDistance\")))",
+"count": 1,
+"lines": [
+2594
+]
+},
+{
+"file": "SCExpeditionPrototype.lua",
+"old": "tonumber(SC.GameplayUtil.nativeHealth(record.actor))",
+"new": "tonumber((SC.GameplayUtil.nativeHealth(record.actor)))",
+"count": 1,
+"lines": [
+391
+]
+},
+{
+"file": "SCExpeditionPrototype.lua",
+"old": "tonumber(SC.GameplayUtil.config(\n            \"logisticsInventoryItemBudget\"))",
+"new": "tonumber((SC.GameplayUtil.config(\n            \"logisticsInventoryItemBudget\")))",
+"count": 1,
+"lines": [
+3498
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"factionBarkCooldownMs\"))",
+"new": "tonumber((SC.Config.get(\"factionBarkCooldownMs\")))",
+"count": 1,
+"lines": [
+127
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"factionWarningOuterRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionWarningOuterRadius\")))",
+"count": 1,
+"lines": [
+138
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"factionWarningInnerRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionWarningInnerRadius\")))",
+"count": 1,
+"lines": [
+139
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionPursuitLeash\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionPursuitLeash\")))",
+"count": 1,
+"lines": [
+457
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"factionPursuitLeash\"))",
+"new": "tonumber((SC.Config.get(\"factionPursuitLeash\")))",
+"count": 1,
+"lines": [
+459
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionFirearmMaxRange\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionFirearmMaxRange\")))",
+"count": 1,
+"lines": [
+487
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"combatShoveDistance\"))",
+"new": "tonumber((SC.Config.get(\"combatShoveDistance\")))",
+"count": 1,
+"lines": [
+510
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionLastSeenMs\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionLastSeenMs\")))",
+"count": 1,
+"lines": [
+538
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionHeardMemoryMs\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionHeardMemoryMs\")))",
+"count": 1,
+"lines": [
+556
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionChallengeMs\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionChallengeMs\")))",
+"count": 1,
+"lines": [
+620
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionPatrolMinRadius\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionPatrolMinRadius\")))",
+"count": 1,
+"lines": [
+692
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionPatrolMaxRadius\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionPatrolMaxRadius\")))",
+"count": 1,
+"lines": [
+694
+]
+},
+{
+"file": "SCFactionBehavior.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionPatrolIntervalHours\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionPatrolIntervalHours\")))",
+"count": 1,
+"lines": [
+727
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(key))",
+"new": "tonumber((SC.Config.get(key)))",
+"count": 1,
+"lines": [
+103
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionContractTargetDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionContractTargetDistance\")))",
+"count": 1,
+"lines": [
+258
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestTargetMinDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestTargetMinDistance\")))",
+"count": 1,
+"lines": [
+304
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestTargetMaxDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestTargetMaxDistance\")))",
+"count": 1,
+"lines": [
+305
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestHouseSampleBudget\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestHouseSampleBudget\")))",
+"count": 1,
+"lines": [
+306
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestInventoryScanLimit\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestInventoryScanLimit\")))",
+"count": 1,
+"lines": [
+348
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(\n            SC.Config.get(\"factionQuestHordeMinSize\"))",
+"new": "tonumber(\n            (SC.Config.get(\"factionQuestHordeMinSize\")))",
+"count": 1,
+"lines": [
+553
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(\n            SC.Config.get(\"factionQuestHordeMaxSize\"))",
+"new": "tonumber(\n            (SC.Config.get(\"factionQuestHordeMaxSize\")))",
+"count": 1,
+"lines": [
+555
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionContractThreatRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionContractThreatRadius\")))",
+"count": 2,
+"lines": [
+562,
+572
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionContractDeadlineHours\"))",
+"new": "tonumber((SC.Config.get(\"factionContractDeadlineHours\")))",
+"count": 1,
+"lines": [
+900
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\n            \"factionContractThreatMinLoadedSquares\"))",
+"new": "tonumber((SC.Config.get(\n            \"factionContractThreatMinLoadedSquares\")))",
+"count": 1,
+"lines": [
+1072
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionGuestAccessHours\"))",
+"new": "tonumber((SC.Config.get(\"factionGuestAccessHours\")))",
+"count": 3,
+"lines": [
+1160,
+1172,
+1398
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionContractCooldownHours\"))",
+"new": "tonumber((SC.Config.get(\"factionContractCooldownHours\")))",
+"count": 4,
+"lines": [
+1204,
+1334,
+1366,
+1604
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestHordeActivationRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestHordeActivationRadius\")))",
+"count": 1,
+"lines": [
+1628
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionContractPulseIntervalMs\"))",
+"new": "tonumber((SC.Config.get(\"factionContractPulseIntervalMs\")))",
+"count": 1,
+"lines": [
+1674
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(\"factionPrivateContactRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionPrivateContactRadius\")))",
+"count": 1,
+"lines": [
+1889
+]
+},
+{
+"file": "SCFactionContracts.lua",
+"old": "tonumber(SC.Config.get(spec[1]))",
+"new": "tonumber((SC.Config.get(spec[1])))",
+"count": 1,
+"lines": [
+2114
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionRumourMinDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionRumourMinDistance\")))",
+"count": 1,
+"lines": [
+153
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionRumourMaxDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionRumourMaxDistance\")))",
+"count": 1,
+"lines": [
+154
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionResourceAuditHours\"))",
+"new": "tonumber((SC.Config.get(\"factionResourceAuditHours\")))",
+"count": 1,
+"lines": [
+313
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionCrisisCooldownHours\"))",
+"new": "tonumber((SC.Config.get(\"factionCrisisCooldownHours\")))",
+"count": 1,
+"lines": [
+438
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionCrisisCheckHours\"))",
+"new": "tonumber((SC.Config.get(\"factionCrisisCheckHours\")))",
+"count": 1,
+"lines": [
+518
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionCrisisChancePercent\"))",
+"new": "tonumber((SC.Config.get(\"factionCrisisChancePercent\")))",
+"count": 1,
+"lines": [
+520
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionRepresentativeApproachRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionRepresentativeApproachRadius\")))",
+"count": 1,
+"lines": [
+565
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionLifePulseIntervalMs\"))",
+"new": "tonumber((SC.Config.get(\"factionLifePulseIntervalMs\")))",
+"count": 1,
+"lines": [
+589
+]
+},
+{
+"file": "SCFactionLife.lua",
+"old": "tonumber(SC.Config.get(\"factionTradeDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionTradeDistance\")))",
+"count": 1,
+"lines": [
+1112
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionRecruitmentContractsRequired\"))",
+"new": "tonumber((SC.Config.get(\"factionRecruitmentContractsRequired\")))",
+"count": 3,
+"lines": [
+220,
+632,
+667
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionRecruitmentCooldownHours\"))",
+"new": "tonumber((SC.Config.get(\"factionRecruitmentCooldownHours\")))",
+"count": 2,
+"lines": [
+279,
+431
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionTradeDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionTradeDistance\")))",
+"count": 2,
+"lines": [
+330,
+499
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionRecruitmentTrialMinHours\"))",
+"new": "tonumber((SC.Config.get(\"factionRecruitmentTrialMinHours\")))",
+"count": 1,
+"lines": [
+360
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionRecruitmentTrialMaxHours\"))",
+"new": "tonumber((SC.Config.get(\"factionRecruitmentTrialMaxHours\")))",
+"count": 1,
+"lines": [
+361
+]
+},
+{
+"file": "SCFactionRecruitment.lua",
+"old": "tonumber(SC.Config.get(\"factionRecruitmentExtensionHours\"))",
+"new": "tonumber((SC.Config.get(\"factionRecruitmentExtensionHours\")))",
+"count": 1,
+"lines": [
+517
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(os.clock())",
+"new": "tonumber((os.clock()))",
+"count": 1,
+"lines": [
+173
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionMinHouseDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionMinHouseDistance\")))",
+"count": 1,
+"lines": [
+787
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"baseDefaultAreaRadius\"))",
+"new": "tonumber((SC.Config.get(\"baseDefaultAreaRadius\")))",
+"count": 1,
+"lines": [
+809
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionSpawnMinDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionSpawnMinDistance\")))",
+"count": 1,
+"lines": [
+948
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionSpawnMaxDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionSpawnMaxDistance\")))",
+"count": 1,
+"lines": [
+950
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionHouseSampleBudget\"))",
+"new": "tonumber((SC.Config.get(\"factionHouseSampleBudget\")))",
+"count": 1,
+"lines": [
+952
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionBarricadeFirstPassPlanks\"))",
+"new": "tonumber((SC.Config.get(\"factionBarricadeFirstPassPlanks\")))",
+"count": 1,
+"lines": [
+1093
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionBarricadeFinalPlanks\"))",
+"new": "tonumber((SC.Config.get(\"factionBarricadeFinalPlanks\")))",
+"count": 2,
+"lines": [
+1107,
+1505
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionMemberMin\"))",
+"new": "tonumber((SC.Config.get(\"factionMemberMin\")))",
+"count": 3,
+"lines": [
+1460,
+3366,
+3467
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionMemberMax\"))",
+"new": "tonumber((SC.Config.get(\"factionMemberMax\")))",
+"count": 3,
+"lines": [
+1461,
+3367,
+3468
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"maxCompanions\"))",
+"new": "tonumber((SC.Config.get(\"maxCompanions\")))",
+"count": 1,
+"lines": [
+1467
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionAwarenessRadius\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionAwarenessRadius\")))",
+"count": 1,
+"lines": [
+2567
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionHibernationDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionHibernationDistance\")))",
+"count": 2,
+"lines": [
+3129,
+3290
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionWakeDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionWakeDistance\")))",
+"count": 1,
+"lines": [
+3291
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionMaxHouseholds\"))",
+"new": "tonumber((SC.Config.get(\"factionMaxHouseholds\")))",
+"count": 2,
+"lines": [
+3337,
+3459
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionFirstEligibleDay\"))",
+"new": "tonumber((SC.Config.get(\"factionFirstEligibleDay\")))",
+"count": 1,
+"lines": [
+3355
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionSpawnCooldownDays\"))",
+"new": "tonumber((SC.Config.get(\"factionSpawnCooldownDays\")))",
+"count": 1,
+"lines": [
+3358
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionDailySpawnChancePercent\"))",
+"new": "tonumber((SC.Config.get(\"factionDailySpawnChancePercent\")))",
+"count": 1,
+"lines": [
+3363
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionMaxCamps\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionMaxCamps\")))",
+"count": 2,
+"lines": [
+3401,
+3482
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionSpawnMinDistance\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionSpawnMinDistance\")))",
+"count": 2,
+"lines": [
+3408,
+3437
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionSpawnMaxDistance\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionSpawnMaxDistance\")))",
+"count": 2,
+"lines": [
+3409,
+3438
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionFirstEligibleDay\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionFirstEligibleDay\")))",
+"count": 1,
+"lines": [
+3422
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionSpawnCooldownDays\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionSpawnCooldownDays\")))",
+"count": 1,
+"lines": [
+3426
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"banditFactionDailySpawnChancePercent\"))",
+"new": "tonumber((SC.Config.get(\"banditFactionDailySpawnChancePercent\")))",
+"count": 1,
+"lines": [
+3431
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"debugFactionMinHouseDistance\"))",
+"new": "tonumber((SC.Config.get(\"debugFactionMinHouseDistance\")))",
+"count": 2,
+"lines": [
+3464,
+3487
+]
+},
+{
+"file": "SCFactions.lua",
+"old": "tonumber(SC.Config.get(\"factionProductionCheckIntervalMs\"))",
+"new": "tonumber((SC.Config.get(\"factionProductionCheckIntervalMs\")))",
+"count": 1,
+"lines": [
+3623
+]
+},
+{
+"file": "SCFarmWork.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+52
+]
+},
+{
+"file": "SCFarmWork.lua",
+"old": "tonumber(SC.Dialogue.lastSpokenAt(actor))",
+"new": "tonumber((SC.Dialogue.lastSpokenAt(actor)))",
+"count": 1,
+"lines": [
+910
+]
+},
+{
+"file": "SCGameplayUtil.lua",
+"old": "tonumber(U.config(\"navigationBodyClearance\"))",
+"new": "tonumber((U.config(\"navigationBodyClearance\")))",
+"count": 1,
+"lines": [
+789
+]
+},
+{
+"file": "SCGameplayUtil.lua",
+"old": "tonumber(U.config(\"dialogueDisplayMinMs\"))",
+"new": "tonumber((U.config(\"dialogueDisplayMinMs\")))",
+"count": 1,
+"lines": [
+2078
+]
+},
+{
+"file": "SCGameplayUtil.lua",
+"old": "tonumber(U.config(\"dialogueDisplayMaxMs\"))",
+"new": "tonumber((U.config(\"dialogueDisplayMaxMs\")))",
+"count": 1,
+"lines": [
+2079
+]
+},
+{
+"file": "SCGameplayUtil.lua",
+"old": "tonumber(U.config(\"dialogueDisplayBaseMs\"))",
+"new": "tonumber((U.config(\"dialogueDisplayBaseMs\")))",
+"count": 1,
+"lines": [
+2080
+]
+},
+{
+"file": "SCGameplayUtil.lua",
+"old": "tonumber(U.config(\"dialogueDisplayPerCharacterMs\"))",
+"new": "tonumber((U.config(\"dialogueDisplayPerCharacterMs\")))",
+"count": 1,
+"lines": [
+2081
+]
+},
+{
+"file": "SCGatherWork.lua",
+"old": "tonumber(U().config(\"baseJobRetryMs\"))",
+"new": "tonumber((U().config(\"baseJobRetryMs\")))",
+"count": 2,
+"lines": [
+242,
+281
+]
+},
+{
+"file": "SCGestures.lua",
+"old": "tonumber(U().stableHash(text))",
+"new": "tonumber((U().stableHash(text)))",
+"count": 1,
+"lines": [
+271
+]
+},
+{
+"file": "SCGestures.lua",
+"old": "tonumber(utility.characterStatValue(actor, \"FATIGUE\", 0))",
+"new": "tonumber((utility.characterStatValue(actor, \"FATIGUE\", 0)))",
+"count": 2,
+"lines": [
+609,
+709
+]
+},
+{
+"file": "SCGestures.lua",
+"old": "tonumber(utility.characterStatValue(actor, \"ENDURANCE\", 1))",
+"new": "tonumber((utility.characterStatValue(actor, \"ENDURANCE\", 1)))",
+"count": 1,
+"lines": [
+710
+]
+},
+{
+"file": "SCInfectionCrisis.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+52
+]
+},
+{
+"file": "SCInfectionCrisis.lua",
+"old": "tonumber(utility.config(\"maxCompanions\"))",
+"new": "tonumber((utility.config(\"maxCompanions\")))",
+"count": 1,
+"lines": [
+160
+]
+},
+{
+"file": "SCInfectionCrisis.lua",
+"old": "tonumber(utility.stableHash(\n        tostring(utility.idOf(actor) or \"companion\") .. \":bed:\"\n            .. tostring(math.floor(current / 1000))))",
+"new": "tonumber((utility.stableHash(\n        tostring(utility.idOf(actor) or \"companion\") .. \":bed:\"\n            .. tostring(math.floor(current / 1000)))))",
+"count": 1,
+"lines": [
+446
+]
+},
+{
+"file": "SCInfectionCrisis.lua",
+"old": "tonumber(utility.stableHash(crisis.id .. \":fear:\"\n        .. tostring(math.floor(current / 1000))))",
+"new": "tonumber((utility.stableHash(crisis.id .. \":fear:\"\n        .. tostring(math.floor(current / 1000)))))",
+"count": 1,
+"lines": [
+916
+]
+},
+{
+"file": "SCLogistics.lua",
+"old": "tonumber(U().config(\"logisticsFailureCooldownMs\"))",
+"new": "tonumber((U().config(\"logisticsFailureCooldownMs\")))",
+"count": 1,
+"lines": [
+1083
+]
+},
+{
+"file": "SCLogistics.lua",
+"old": "tonumber(U().config(\"logisticsFailureMaxCooldownMs\"))",
+"new": "tonumber((U().config(\"logisticsFailureMaxCooldownMs\")))",
+"count": 1,
+"lines": [
+1084
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(utility.config(\"medicalAssessCacheMs\"))",
+"new": "tonumber((utility.config(\"medicalAssessCacheMs\")))",
+"count": 1,
+"lines": [
+345
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(utility.config(\"medicalBandageSearchDepth\"))",
+"new": "tonumber((utility.config(\"medicalBandageSearchDepth\")))",
+"count": 2,
+"lines": [
+472,
+512
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(utility.config(\"medicalBandageSearchLimit\"))",
+"new": "tonumber((utility.config(\"medicalBandageSearchLimit\")))",
+"count": 2,
+"lines": [
+473,
+511
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(U().config(\"medicalTreatmentClaimMs\"))",
+"new": "tonumber((U().config(\"medicalTreatmentClaimMs\")))",
+"count": 1,
+"lines": [
+1697
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(utility.config(\"medicalRange\"))",
+"new": "tonumber((utility.config(\"medicalRange\")))",
+"count": 1,
+"lines": [
+1743
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(utility.config(\"medicalPlayerBandageRange\"))",
+"new": "tonumber((utility.config(\"medicalPlayerBandageRange\")))",
+"count": 1,
+"lines": [
+2000
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(U().config(\"medicalReceivingCareHoldMs\"))",
+"new": "tonumber((U().config(\"medicalReceivingCareHoldMs\")))",
+"count": 1,
+"lines": [
+2031
+]
+},
+{
+"file": "SCMedical.lua",
+"old": "tonumber(U().config(\"medicalHelpRequestCooldownMs\"))",
+"new": "tonumber((U().config(\"medicalHelpRequestCooldownMs\")))",
+"count": 1,
+"lines": [
+2080
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(actorSquare, \"getZ\"))",
+"new": "tonumber((call(actorSquare, \"getZ\")))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(doctorSquare, \"getZ\"))",
+"new": "tonumber((call(doctorSquare, \"getZ\")))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(doctor, \"DistTo\", actor))",
+"new": "tonumber((call(doctor, \"DistTo\", actor)))",
+"count": 1,
+"lines": [
+48
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(actor, \"getX\"))",
+"new": "tonumber((call(actor, \"getX\")))",
+"count": 1,
+"lines": [
+88
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(actor, \"getY\"))",
+"new": "tonumber((call(actor, \"getY\")))",
+"count": 1,
+"lines": [
+88
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(actor, \"getZ\"))",
+"new": "tonumber((call(actor, \"getZ\")))",
+"count": 1,
+"lines": [
+89
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(value, \"getX\"))",
+"new": "tonumber((call(value, \"getX\")))",
+"count": 1,
+"lines": [
+99
+]
+},
+{
+"file": "SCMedicalUI.lua",
+"old": "tonumber(call(value, \"getY\"))",
+"new": "tonumber((call(value, \"getY\")))",
+"count": 1,
+"lines": [
+100
+]
+},
+{
+"file": "SCNames.lua",
+"old": "tonumber(utility.stableHash(value))",
+"new": "tonumber((utility.stableHash(value)))",
+"count": 1,
+"lines": [
+95
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"combatMeleeOuterTolerance\"))",
+"new": "tonumber((SC.Config.get(\"combatMeleeOuterTolerance\")))",
+"count": 1,
+"lines": [
+349
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"combatMeleeInnerTolerance\"))",
+"new": "tonumber((SC.Config.get(\"combatMeleeInnerTolerance\")))",
+"count": 1,
+"lines": [
+366
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"combatStompDistance\"))",
+"new": "tonumber((SC.Config.get(\"combatStompDistance\")))",
+"count": 1,
+"lines": [
+379
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"combatShoveDistance\"))",
+"new": "tonumber((SC.Config.get(\"combatShoveDistance\")))",
+"count": 1,
+"lines": [
+380
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"movementTurnSkipDistance\"))",
+"new": "tonumber((SC.Config.get(\"movementTurnSkipDistance\")))",
+"count": 1,
+"lines": [
+866
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(thresholdKey))",
+"new": "tonumber((SC.Config.get(thresholdKey)))",
+"count": 1,
+"lines": [
+893
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"combatSteeringProbeDistance\"))",
+"new": "tonumber((SC.Config.get(\"combatSteeringProbeDistance\")))",
+"count": 1,
+"lines": [
+973
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionVisualMinTicks\"))",
+"new": "tonumber((SC.Config.get(\"actionVisualMinTicks\")))",
+"count": 1,
+"lines": [
+1430
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionVisualMaxTicks\"))",
+"new": "tonumber((SC.Config.get(\"actionVisualMaxTicks\")))",
+"count": 1,
+"lines": [
+1432
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"visualEffectClaimMs\"))",
+"new": "tonumber((SC.Config.get(\"visualEffectClaimMs\")))",
+"count": 3,
+"lines": [
+1530,
+4222,
+4269
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"furnitureTurnTimeoutMs\"))",
+"new": "tonumber((SC.Config.get(\"furnitureTurnTimeoutMs\")))",
+"count": 1,
+"lines": [
+1754
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"farmFarmerDurationMultiplier\"))",
+"new": "tonumber((SC.Config.get(\"farmFarmerDurationMultiplier\")))",
+"count": 1,
+"lines": [
+2153
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"workResultClaimMs\"))",
+"new": "tonumber((SC.Config.get(\"workResultClaimMs\")))",
+"count": 1,
+"lines": [
+3776
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingShortMinMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingShortMinMs\")))",
+"count": 1,
+"lines": [
+3800
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingShortMaxMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingShortMaxMs\")))",
+"count": 1,
+"lines": [
+3801
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingLongMinMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingLongMinMs\")))",
+"count": 1,
+"lines": [
+3803
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingLongMaxMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingLongMaxMs\")))",
+"count": 1,
+"lines": [
+3804
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingMinMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingMinMs\")))",
+"count": 1,
+"lines": [
+3806
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingMaxMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingMaxMs\")))",
+"count": 1,
+"lines": [
+3807
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingRepeatWindowMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingRepeatWindowMs\")))",
+"count": 1,
+"lines": [
+3823
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingRepeatBoostMs\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingRepeatBoostMs\")))",
+"count": 1,
+"lines": [
+3824
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingLookChancePercent\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingLookChancePercent\")))",
+"count": 1,
+"lines": [
+3832
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"actionPacingLookDelayPercent\"))",
+"new": "tonumber((SC.Config.get(\"actionPacingLookDelayPercent\")))",
+"count": 1,
+"lines": [
+3833
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"furniturePathTimeoutMs\"))",
+"new": "tonumber((SC.Config.get(\"furniturePathTimeoutMs\")))",
+"count": 2,
+"lines": [
+4471,
+4501
+]
+},
+{
+"file": "SCNativeActions.lua",
+"old": "tonumber(SC.Config.get(\"bedEntryTimeoutMs\"))",
+"new": "tonumber((SC.Config.get(\"bedEntryTimeoutMs\")))",
+"count": 1,
+"lines": [
+4520
+]
+},
+{
+"file": "SCNativeTraversalActions.lua",
+"old": "tonumber(SC.Config.get(name))",
+"new": "tonumber((SC.Config.get(name)))",
+"count": 1,
+"lines": [
+31
+]
+},
+{
+"file": "SCNativeTraversalActions.lua",
+"old": "tonumber(dialogue.lastSpokenAt(record.actor))",
+"new": "tonumber((dialogue.lastSpokenAt(record.actor)))",
+"count": 1,
+"lines": [
+172
+]
+},
+{
+"file": "SCNavTraffic.lua",
+"old": "tonumber(U().config(\"navigationPassageApproachRadius\"))",
+"new": "tonumber((U().config(\"navigationPassageApproachRadius\")))",
+"count": 1,
+"lines": [
+148
+]
+},
+{
+"file": "SCNavTraffic.lua",
+"old": "tonumber(U().config(\"navigationPassageHeadLeaseMs\"))",
+"new": "tonumber((U().config(\"navigationPassageHeadLeaseMs\")))",
+"count": 1,
+"lines": [
+149
+]
+},
+{
+"file": "SCNavTraffic.lua",
+"old": "tonumber(U().config(\"navigationPassageStallMs\"))",
+"new": "tonumber((U().config(\"navigationPassageStallMs\")))",
+"count": 1,
+"lines": [
+150
+]
+},
+{
+"file": "SCNavTraffic.lua",
+"old": "tonumber(U().config(\"navigationGoalProgressDistance\"))",
+"new": "tonumber((U().config(\"navigationGoalProgressDistance\")))",
+"count": 1,
+"lines": [
+151
+]
+},
+{
+"file": "SCNavTraffic.lua",
+"old": "tonumber(U().config(\"navigationPassageYieldMs\"))",
+"new": "tonumber((U().config(\"navigationPassageYieldMs\")))",
+"count": 1,
+"lines": [
+164
+]
+},
+{
+"file": "SCNavTraversal.lua",
+"old": "tonumber(utility.config(\"navigationTraversalExitClearance\"))",
+"new": "tonumber((utility.config(\"navigationTraversalExitClearance\")))",
+"count": 1,
+"lines": [
+457
+]
+},
+{
+"file": "SCNavTraversal.lua",
+"old": "tonumber(utility.config(\"navigationTraversalExitTolerance\"))",
+"new": "tonumber((utility.config(\"navigationTraversalExitTolerance\")))",
+"count": 1,
+"lines": [
+459
+]
+},
+{
+"file": "SCNavTraversal.lua",
+"old": "tonumber(utility.config(\"navigationTraversalExitTimeoutMs\"))",
+"new": "tonumber((utility.config(\"navigationTraversalExitTimeoutMs\")))",
+"count": 1,
+"lines": [
+467
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationRouteMemorySuccessBonus\"))",
+"new": "tonumber((U().config(\"navigationRouteMemorySuccessBonus\")))",
+"count": 1,
+"lines": [
+676
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationStealthVisibleRadius\"))",
+"new": "tonumber((utility.config(\"navigationStealthVisibleRadius\")))",
+"count": 1,
+"lines": [
+1384
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationStealthObstructedRadius\"))",
+"new": "tonumber((utility.config(\"navigationStealthObstructedRadius\")))",
+"count": 1,
+"lines": [
+1386
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationStealthCloseRadius\"))",
+"new": "tonumber((utility.config(\"navigationStealthCloseRadius\")))",
+"count": 1,
+"lines": [
+1388
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationStealthThreatPenalty\"))",
+"new": "tonumber((utility.config(\"navigationStealthThreatPenalty\")))",
+"count": 1,
+"lines": [
+1390
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationStealthClosePenalty\"))",
+"new": "tonumber((utility.config(\"navigationStealthClosePenalty\")))",
+"count": 1,
+"lines": [
+1392
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNodeBudget\"))",
+"new": "tonumber((U().config(\"navigationNodeBudget\")))",
+"count": 1,
+"lines": [
+1496
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNodeBudgetPerTileSquared\"))",
+"new": "tonumber((U().config(\"navigationNodeBudgetPerTileSquared\")))",
+"count": 1,
+"lines": [
+1502
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNodeBudgetMaximum\"))",
+"new": "tonumber((U().config(\"navigationNodeBudgetMaximum\")))",
+"count": 1,
+"lines": [
+1504
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationFastFollowMaxSteps\"))",
+"new": "tonumber((U().config(\"navigationFastFollowMaxSteps\")))",
+"count": 1,
+"lines": [
+1592
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"formationTrackMaxSquares\"))",
+"new": "tonumber((U().config(\"formationTrackMaxSquares\")))",
+"count": 1,
+"lines": [
+1687
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"formationTrackJoinCandidates\"))",
+"new": "tonumber((U().config(\"formationTrackJoinCandidates\")))",
+"count": 1,
+"lines": [
+1711
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(\n        U().config(\"navigationContinuousFollowLookahead\"))",
+"new": "tonumber(\n        (U().config(\"navigationContinuousFollowLookahead\")))",
+"count": 1,
+"lines": [
+1927
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationProvisionalAdvanceLimit\"))",
+"new": "tonumber((U().config(\"navigationProvisionalAdvanceLimit\")))",
+"count": 1,
+"lines": [
+1991
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationProvisionalReach\"))",
+"new": "tonumber((U().config(\"navigationProvisionalReach\")))",
+"count": 1,
+"lines": [
+2021
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationStealthVisibleRadius\"))",
+"new": "tonumber((U().config(\"navigationStealthVisibleRadius\")))",
+"count": 1,
+"lines": [
+2185
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationStealthObstructedRadius\"))",
+"new": "tonumber((U().config(\"navigationStealthObstructedRadius\")))",
+"count": 1,
+"lines": [
+2186
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationStealthCloseRadius\"))",
+"new": "tonumber((U().config(\"navigationStealthCloseRadius\")))",
+"count": 1,
+"lines": [
+2187
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationStealthThreatPenalty\"))",
+"new": "tonumber((U().config(\"navigationStealthThreatPenalty\")))",
+"count": 1,
+"lines": [
+2188
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationStealthClosePenalty\"))",
+"new": "tonumber((U().config(\"navigationStealthClosePenalty\")))",
+"count": 1,
+"lines": [
+2189
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationAlternativeRoutes\"))",
+"new": "tonumber((utility.config(\"navigationAlternativeRoutes\")))",
+"count": 1,
+"lines": [
+2447
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationPartialRouteMinimumGain\"))",
+"new": "tonumber((U().config(\"navigationPartialRouteMinimumGain\")))",
+"count": 1,
+"lines": [
+2525
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationDetourFailureThreshold\"))",
+"new": "tonumber((U().config(\"navigationDetourFailureThreshold\")))",
+"count": 2,
+"lines": [
+2603,
+2616
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationDetourNodeBudget\"))",
+"new": "tonumber((U().config(\"navigationDetourNodeBudget\")))",
+"count": 1,
+"lines": [
+2606
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationBudgetRetryNodeBudget\"))",
+"new": "tonumber((utility.config(\"navigationBudgetRetryNodeBudget\")))",
+"count": 1,
+"lines": [
+2648
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationEmergencyVegetationScale\"))",
+"new": "tonumber((utility.config(\"navigationEmergencyVegetationScale\")))",
+"count": 1,
+"lines": [
+2650
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationAlternativeRoutes\"))",
+"new": "tonumber((U().config(\"navigationAlternativeRoutes\")))",
+"count": 1,
+"lines": [
+2818
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationFlowMotionMs\"))",
+"new": "tonumber((utility.config(\"navigationFlowMotionMs\")))",
+"count": 2,
+"lines": [
+3133,
+7848
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationFlowMinimumGap\"))",
+"new": "tonumber((utility.config(\"navigationFlowMinimumGap\")))",
+"count": 1,
+"lines": [
+3144
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationRecoveryProgressDistance\"))",
+"new": "tonumber((U().config(\"navigationRecoveryProgressDistance\")))",
+"count": 1,
+"lines": [
+3743
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationPathSearchLeaseMs\"))",
+"new": "tonumber((U().config(\"navigationPathSearchLeaseMs\")))",
+"count": 1,
+"lines": [
+3887
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationPathSearchHardMs\"))",
+"new": "tonumber((U().config(\"navigationPathSearchHardMs\")))",
+"count": 1,
+"lines": [
+3888
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationFollowPathSearchLeaseMs\"))",
+"new": "tonumber((U().config(\"navigationFollowPathSearchLeaseMs\")))",
+"count": 1,
+"lines": [
+3891
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationFollowPathSearchHardMs\"))",
+"new": "tonumber((U().config(\"navigationFollowPathSearchHardMs\")))",
+"count": 1,
+"lines": [
+3893
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationFollowEngineDistance\"))",
+"new": "tonumber((U().config(\"navigationFollowEngineDistance\")))",
+"count": 1,
+"lines": [
+3930
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationMovingRouteRepairDistance\"))",
+"new": "tonumber((U().config(\"navigationMovingRouteRepairDistance\")))",
+"count": 1,
+"lines": [
+3979
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationMovingRouteMaxNodes\"))",
+"new": "tonumber((utility.config(\"navigationMovingRouteMaxNodes\")))",
+"count": 1,
+"lines": [
+4018
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationRouteCrossTrackDistance\"))",
+"new": "tonumber((utility.config(\"navigationRouteCrossTrackDistance\")))",
+"count": 1,
+"lines": [
+4213
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationRouteInstabilityMs\"))",
+"new": "tonumber((utility.config(\"navigationRouteInstabilityMs\")))",
+"count": 1,
+"lines": [
+4225
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"combatSteeringProbeDistance\"))",
+"new": "tonumber((utility.config(\"combatSteeringProbeDistance\")))",
+"count": 1,
+"lines": [
+4302
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeFailureStuckAttempts\"))",
+"new": "tonumber((U().config(\"navigationNativeFailureStuckAttempts\")))",
+"count": 1,
+"lines": [
+4475
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativePendingMs\"))",
+"new": "tonumber((U().config(\"navigationNativePendingMs\")))",
+"count": 2,
+"lines": [
+4612,
+5038
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeStartGraceMs\"))",
+"new": "tonumber((U().config(\"navigationNativeStartGraceMs\")))",
+"count": 2,
+"lines": [
+4613,
+5063
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationNativeDoorScanSteps\"))",
+"new": "tonumber((utility.config(\"navigationNativeDoorScanSteps\")))",
+"count": 1,
+"lines": [
+4654
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationLockedRoomLimit\"))",
+"new": "tonumber((utility.config(\"navigationLockedRoomLimit\")))",
+"count": 1,
+"lines": [
+4727
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationLockedRoomMemoryMs\"))",
+"new": "tonumber((utility.config(\"navigationLockedRoomMemoryMs\")))",
+"count": 1,
+"lines": [
+4733
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationProgressDistance\"))",
+"new": "tonumber((U().config(\"navigationProgressDistance\")))",
+"count": 1,
+"lines": [
+4850
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationGoalProgressDistance\"))",
+"new": "tonumber((U().config(\"navigationGoalProgressDistance\")))",
+"count": 1,
+"lines": [
+4861
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationPassageYieldMs\"))",
+"new": "tonumber((U().config(\"navigationPassageYieldMs\")))",
+"count": 1,
+"lines": [
+4924
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeDoorScanSteps\"))",
+"new": "tonumber((U().config(\"navigationNativeDoorScanSteps\")))",
+"count": 1,
+"lines": [
+4947
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeDoorMaxScanSteps\"))",
+"new": "tonumber((U().config(\"navigationNativeDoorMaxScanSteps\")))",
+"count": 1,
+"lines": [
+4949
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationLockedRoomMemoryMs\"))",
+"new": "tonumber((U().config(\"navigationLockedRoomMemoryMs\")))",
+"count": 1,
+"lines": [
+4992
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeDoorOpenDistance\"))",
+"new": "tonumber((U().config(\"navigationNativeDoorOpenDistance\")))",
+"count": 1,
+"lines": [
+5006
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationMultiLevelStallMs\"))",
+"new": "tonumber((U().config(\"navigationMultiLevelStallMs\")))",
+"count": 1,
+"lines": [
+5065
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeStallMs\"))",
+"new": "tonumber((U().config(\"navigationNativeStallMs\")))",
+"count": 1,
+"lines": [
+5066
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationNativeTurnGraceMs\"))",
+"new": "tonumber((U().config(\"navigationNativeTurnGraceMs\")))",
+"count": 1,
+"lines": [
+5069
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\n            \"navigationOpenDoorDirectAttempts\"))",
+"new": "tonumber((U().config(\n            \"navigationOpenDoorDirectAttempts\")))",
+"count": 1,
+"lines": [
+5111
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(U().config(\"navigationOpenDoorDirectFallbackMs\"))",
+"new": "tonumber((U().config(\"navigationOpenDoorDirectFallbackMs\")))",
+"count": 1,
+"lines": [
+5123
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"navigationRecoveryAttempts\"))",
+"new": "tonumber((utility.config(\"navigationRecoveryAttempts\")))",
+"count": 1,
+"lines": [
+5666
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"companionStackDistance\"))",
+"new": "tonumber((utility.config(\"companionStackDistance\")))",
+"count": 1,
+"lines": [
+7855
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"companionStackHoldMs\"))",
+"new": "tonumber((utility.config(\"companionStackHoldMs\")))",
+"count": 1,
+"lines": [
+7884
+]
+},
+{
+"file": "SCNavigation.lua",
+"old": "tonumber(utility.config(\"companionUnstackCooldownMs\"))",
+"new": "tonumber((utility.config(\"companionUnstackCooldownMs\")))",
+"count": 1,
+"lines": [
+7890
+]
+},
+{
+"file": "SCNeeds.lua",
+"old": "tonumber(U().stableHash(seed))",
+"new": "tonumber((U().stableHash(seed)))",
+"count": 3,
+"lines": [
+37,
+224,
+243
+]
+},
+{
+"file": "SCNeeds.lua",
+"old": "tonumber(U().stableHash(identity .. \":toilet_style\"))",
+"new": "tonumber((U().stableHash(identity .. \":toilet_style\")))",
+"count": 1,
+"lines": [
+118
+]
+},
+{
+"file": "SCNeeds.lua",
+"old": "tonumber(U().stableHash(identity .. \":pee_pose:\"\n        .. tostring(math.floor(hour or 0))))",
+"new": "tonumber((U().stableHash(identity .. \":pee_pose:\"\n        .. tostring(math.floor(hour or 0)))))",
+"count": 1,
+"lines": [
+122
+]
+},
+{
+"file": "SCNeeds.lua",
+"old": "tonumber(U().stableHash(seed .. \":tease\"))",
+"new": "tonumber((U().stableHash(seed .. \":tease\")))",
+"count": 1,
+"lines": [
+251
+]
+},
+{
+"file": "SCNeeds.lua",
+"old": "tonumber(tostring(amount))",
+"new": "tonumber((tostring(amount)))",
+"count": 1,
+"lines": [
+801
+]
+},
+{
+"file": "SCNicknameLife.lua",
+"old": "tonumber(SC.GameplayUtil.stableHash(value))",
+"new": "tonumber((SC.GameplayUtil.stableHash(value)))",
+"count": 1,
+"lines": [
+58
+]
+},
+{
+"file": "SCOddballBedridden.lua",
+"old": "tonumber(tostring(value))",
+"new": "tonumber((tostring(value)))",
+"count": 1,
+"lines": [
+156
+]
+},
+{
+"file": "SCOddballLonnie.lua",
+"old": "tonumber(U().nowMs())",
+"new": "tonumber((U().nowMs()))",
+"count": 1,
+"lines": [
+462
+]
+},
+{
+"file": "SCOddballLoretta.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+75
+]
+},
+{
+"file": "SCOddballPurdy.lua",
+"old": "tonumber(member.key:match(\"^member%-(%d+)$\"))",
+"new": "tonumber((member.key:match(\"^member%-(%d+)$\")))",
+"count": 1,
+"lines": [
+293
+]
+},
+{
+"file": "SCOddballRed.lua",
+"old": "tonumber(U().config(\"oddballGoreRainMultiplier\"))",
+"new": "tonumber((U().config(\"oddballGoreRainMultiplier\")))",
+"count": 1,
+"lines": [
+156
+]
+},
+{
+"file": "SCOddballRed.lua",
+"old": "tonumber(U().config(\"oddballGoreCloakHours\"))",
+"new": "tonumber((U().config(\"oddballGoreCloakHours\")))",
+"count": 2,
+"lines": [
+493,
+978
+]
+},
+{
+"file": "SCOddballRed.lua",
+"old": "tonumber(U().config(\n            \"oddballGoreCloakHours\"))",
+"new": "tonumber((U().config(\n            \"oddballGoreCloakHours\")))",
+"count": 1,
+"lines": [
+681
+]
+},
+{
+"file": "SCOddballSpiffo.lua",
+"old": "tonumber(U().config(\"oddballPoseWatchAngle\"))",
+"new": "tonumber((U().config(\"oddballPoseWatchAngle\")))",
+"count": 1,
+"lines": [
+101
+]
+},
+{
+"file": "SCOddballSpiffo.lua",
+"old": "tonumber(U().config(\"oddballPoseStepCooldownMs\"))",
+"new": "tonumber((U().config(\"oddballPoseStepCooldownMs\")))",
+"count": 2,
+"lines": [
+556,
+581
+]
+},
+{
+"file": "SCOddballSpiffo.lua",
+"old": "tonumber(U().config(\"oddballPoseRevealDistance\"))",
+"new": "tonumber((U().config(\"oddballPoseRevealDistance\")))",
+"count": 1,
+"lines": [
+558
+]
+},
+{
+"file": "SCPathSearch.lua",
+"old": "tonumber(clock())",
+"new": "tonumber((clock()))",
+"count": 1,
+"lines": [
+174
+]
+},
+{
+"file": "SCPathSearch.lua",
+"old": "tonumber(slice.clock())",
+"new": "tonumber((slice.clock()))",
+"count": 1,
+"lines": [
+181
+]
+},
+{
+"file": "SCPathSearch.lua",
+"old": "tonumber(job.options.squarePenalty(\n                                otherSquare, current.square))",
+"new": "tonumber((job.options.squarePenalty(\n                                otherSquare, current.square)))",
+"count": 1,
+"lines": [
+256
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(\n        SC.GameplayUtil.config(\"nativeZombieSnapshotIntervalMs\"))",
+"new": "tonumber(\n        (SC.GameplayUtil.config(\"nativeZombieSnapshotIntervalMs\")))",
+"count": 1,
+"lines": [
+62
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(\n        SC.GameplayUtil.config(\"nativeZombieSnapshotMaximum\"))",
+"new": "tonumber(\n        (SC.GameplayUtil.config(\"nativeZombieSnapshotMaximum\")))",
+"count": 1,
+"lines": [
+70
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(SC.GameplayUtil.config(\n            \"perceptionNativeCompletedHoldMs\"))",
+"new": "tonumber((SC.GameplayUtil.config(\n            \"perceptionNativeCompletedHoldMs\")))",
+"count": 1,
+"lines": [
+298
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(SC.GameplayUtil.config(\n            \"perceptionNativeSharedPulseMs\"))",
+"new": "tonumber((SC.GameplayUtil.config(\n            \"perceptionNativeSharedPulseMs\")))",
+"count": 1,
+"lines": [
+300
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(U.config(\"perceptionNativeCandidateQueueHardCap\"))",
+"new": "tonumber((U.config(\"perceptionNativeCandidateQueueHardCap\")))",
+"count": 1,
+"lines": [
+407
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(U.config(\"perceptionNativeRosterQueryPerSlice\"))",
+"new": "tonumber((U.config(\"perceptionNativeRosterQueryPerSlice\")))",
+"count": 1,
+"lines": [
+409
+]
+},
+{
+"file": "SCPerceptionScan.lua",
+"old": "tonumber(U.config(\"perceptionNativeLosPerSlice\"))",
+"new": "tonumber((U.config(\"perceptionNativeLosPerSlice\")))",
+"count": 1,
+"lines": [
+411
+]
+},
+{
+"file": "SCPerformance.lua",
+"old": "tonumber(clockOverride())",
+"new": "tonumber((clockOverride()))",
+"count": 2,
+"lines": [
+54,
+66
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(\n        SC.Config.get(\"persistence\", \"maxDocumentEntries\"))",
+"new": "tonumber(\n        (SC.Config.get(\"persistence\", \"maxDocumentEntries\")))",
+"count": 1,
+"lines": [
+115
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(\n        SC.Config.get(\"persistence\", \"maxSavedInventoryDepth\"))",
+"new": "tonumber(\n        (SC.Config.get(\"persistence\", \"maxSavedInventoryDepth\")))",
+"count": 1,
+"lines": [
+123
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(getTimestampMs())",
+"new": "tonumber((getTimestampMs()))",
+"count": 9,
+"lines": [
+708,
+715,
+868,
+872,
+1675,
+2208,
+3852,
+3977,
+4342
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(owner.documentBudget())",
+"new": "tonumber((owner.documentBudget()))",
+"count": 1,
+"lines": [
+1401
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistenceRetryDelayMs\"))",
+"new": "tonumber((SC.Config.get(\"persistenceRetryDelayMs\")))",
+"count": 1,
+"lines": [
+1626
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistenceCaptureHardDeadlineMs\"))",
+"new": "tonumber((SC.Config.get(\"persistenceCaptureHardDeadlineMs\")))",
+"count": 1,
+"lines": [
+1655
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistenceCaptureDeadlineMs\"))",
+"new": "tonumber((SC.Config.get(\"persistenceCaptureDeadlineMs\")))",
+"count": 1,
+"lines": [
+1657
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistenceCapturePerActorMs\"))",
+"new": "tonumber((SC.Config.get(\"persistenceCapturePerActorMs\")))",
+"count": 1,
+"lines": [
+1659
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(\n        SC.Config.get(\"persistenceActorRetryLimit\"))",
+"new": "tonumber(\n        (SC.Config.get(\"persistenceActorRetryLimit\")))",
+"count": 1,
+"lines": [
+1936
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(\n        SC.Config.get(\"persistenceSnapshotRestartLimit\"))",
+"new": "tonumber(\n        (SC.Config.get(\"persistenceSnapshotRestartLimit\")))",
+"count": 1,
+"lines": [
+1963
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(clock())",
+"new": "tonumber((clock()))",
+"count": 1,
+"lines": [
+1992
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistencePulseGapGraceMs\"))",
+"new": "tonumber((SC.Config.get(\"persistencePulseGapGraceMs\")))",
+"count": 1,
+"lines": [
+2003
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistenceSliceBudgetMs\"))",
+"new": "tonumber((SC.Config.get(\"persistenceSliceBudgetMs\")))",
+"count": 1,
+"lines": [
+2011
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(\n                        SC.Config.get(\"persistenceActorRetryLimit\"))",
+"new": "tonumber(\n                        (SC.Config.get(\"persistenceActorRetryLimit\")))",
+"count": 1,
+"lines": [
+2065
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistence\", \"restoreIntervalMs\"))",
+"new": "tonumber((SC.Config.get(\"persistence\", \"restoreIntervalMs\")))",
+"count": 1,
+"lines": [
+3818
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistence\", \"restoreMaximumBackoffMs\"))",
+"new": "tonumber((SC.Config.get(\"persistence\", \"restoreMaximumBackoffMs\")))",
+"count": 1,
+"lines": [
+3820
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"persistence\", \"restoreMaximumAttempts\"))",
+"new": "tonumber((SC.Config.get(\"persistence\", \"restoreMaximumAttempts\")))",
+"count": 1,
+"lines": [
+3838
+]
+},
+{
+"file": "SCPersistence.lua",
+"old": "tonumber(SC.Config.get(\"recoveryMaxRetirements\"))",
+"new": "tonumber((SC.Config.get(\"recoveryMaxRetirements\")))",
+"count": 1,
+"lines": [
+4336
+]
+},
+{
+"file": "SCPersonalItems.lua",
+"old": "tonumber(U().config(\"maxInventoryItems\"))",
+"new": "tonumber((U().config(\"maxInventoryItems\")))",
+"count": 3,
+"lines": [
+148,
+161,
+183
+]
+},
+{
+"file": "SCPlayerCare.lua",
+"old": "tonumber(SC.Config.get(\"medicalPlayerBandageActionTicks\"))",
+"new": "tonumber((SC.Config.get(\"medicalPlayerBandageActionTicks\")))",
+"count": 1,
+"lines": [
+142
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(U().config(\"formationRoleStableMs\"))",
+"new": "tonumber((U().config(\"formationRoleStableMs\")))",
+"count": 1,
+"lines": [
+219
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(U().config(\"formationVacancyGraceMs\"))",
+"new": "tonumber((U().config(\"formationVacancyGraceMs\")))",
+"count": 1,
+"lines": [
+220
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"navigationBreadcrumbLimit\"))",
+"new": "tonumber((utility.config(\"navigationBreadcrumbLimit\")))",
+"count": 2,
+"lines": [
+485,
+527
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(U().config(\"formationTrackMaxSquares\"))",
+"new": "tonumber((U().config(\"formationTrackMaxSquares\")))",
+"count": 1,
+"lines": [
+679
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"formationPredictionMs\"))",
+"new": "tonumber((utility.config(\"formationPredictionMs\")))",
+"count": 1,
+"lines": [
+749
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"formationPredictionMaxDistance\"))",
+"new": "tonumber((utility.config(\"formationPredictionMaxDistance\")))",
+"count": 1,
+"lines": [
+753
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(\n            utility.config(\"formationOpenInterceptDistance\"))",
+"new": "tonumber(\n            (utility.config(\"formationOpenInterceptDistance\")))",
+"count": 1,
+"lines": [
+796
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"formationPortalHoldMs\"))",
+"new": "tonumber((utility.config(\"formationPortalHoldMs\")))",
+"count": 1,
+"lines": [
+834
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"formationReflowDelayMs\"))",
+"new": "tonumber((utility.config(\"formationReflowDelayMs\")))",
+"count": 1,
+"lines": [
+848
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"formationTargetHysteresisDistance\"))",
+"new": "tonumber((utility.config(\"formationTargetHysteresisDistance\")))",
+"count": 1,
+"lines": [
+935
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(U().config(\n                \"formationCatchUpStealthMaximumMs\"))",
+"new": "tonumber((U().config(\n                \"formationCatchUpStealthMaximumMs\")))",
+"count": 1,
+"lines": [
+1105
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(U().config(\n                    \"formationCatchUpRetryDelayMs\"))",
+"new": "tonumber((U().config(\n                    \"formationCatchUpRetryDelayMs\")))",
+"count": 1,
+"lines": [
+1112
+]
+},
+{
+"file": "SCPositioning.lua",
+"old": "tonumber(utility.config(\"rearScanTravelTiles\"))",
+"new": "tonumber((utility.config(\"rearScanTravelTiles\")))",
+"count": 1,
+"lines": [
+1223
+]
+},
+{
+"file": "SCProduction.lua",
+"old": "tonumber(U().config(key))",
+"new": "tonumber((U().config(key)))",
+"count": 1,
+"lines": [
+95
+]
+},
+{
+"file": "SCProduction.lua",
+"old": "tonumber(utility.stableHash(text))",
+"new": "tonumber((utility.stableHash(text)))",
+"count": 1,
+"lines": [
+162
+]
+},
+{
+"file": "SCProduction.lua",
+"old": "tonumber(SC.Dialogue.lastSpokenAt(actor))",
+"new": "tonumber((SC.Dialogue.lastSpokenAt(actor)))",
+"count": 1,
+"lines": [
+550
+]
+},
+{
+"file": "SCProduction.lua",
+"old": "tonumber(\n        U().config(\"productionDisposalScanBudget\"))",
+"new": "tonumber(\n        (U().config(\"productionDisposalScanBudget\")))",
+"count": 1,
+"lines": [
+2141
+]
+},
+{
+"file": "SCProduction.lua",
+"old": "tonumber(string.match(tostring(reason or \"\"), \"^bodies_carry_items:(%d+)$\"))",
+"new": "tonumber((string.match(tostring(reason or \"\"), \"^bodies_carry_items:(%d+)$\")))",
+"count": 1,
+"lines": [
+2493
+]
+},
+{
+"file": "SCRelationship.lua",
+"old": "tonumber(U().config(configKey))",
+"new": "tonumber((U().config(configKey)))",
+"count": 1,
+"lines": [
+129
+]
+},
+{
+"file": "SCRelationship.lua",
+"old": "tonumber(U().config(\"maxMemories\"))",
+"new": "tonumber((U().config(\"maxMemories\")))",
+"count": 1,
+"lines": [
+247
+]
+},
+{
+"file": "SCRelationship.lua",
+"old": "tonumber(U().config(\"playerStrikeMemoryGameHours\"))",
+"new": "tonumber((U().config(\"playerStrikeMemoryGameHours\")))",
+"count": 1,
+"lines": [
+314
+]
+},
+{
+"file": "SCRelationship.lua",
+"old": "tonumber(U().config(\"relationshipObservationIntervalMs\"))",
+"new": "tonumber((U().config(\"relationshipObservationIntervalMs\")))",
+"count": 1,
+"lines": [
+331
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"decisionOrdinaryPerTick\"))",
+"new": "tonumber((SC.Config.get(\"decisionOrdinaryPerTick\")))",
+"count": 1,
+"lines": [
+425
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"decisionOrdinaryReservedPerTick\"))",
+"new": "tonumber((SC.Config.get(\"decisionOrdinaryReservedPerTick\")))",
+"count": 1,
+"lines": [
+426
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"decisionCriticalPerTick\"))",
+"new": "tonumber((SC.Config.get(\"decisionCriticalPerTick\")))",
+"count": 1,
+"lines": [
+438
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"decisionCriticalIntervalMs\"))",
+"new": "tonumber((SC.Config.get(\"decisionCriticalIntervalMs\")))",
+"count": 1,
+"lines": [
+439
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"recoverySustainedHealthMs\"))",
+"new": "tonumber((SC.Config.get(\"recoverySustainedHealthMs\")))",
+"count": 1,
+"lines": [
+927
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"runtimeHealthGraceMs\"))",
+"new": "tonumber((SC.Config.get(\"runtimeHealthGraceMs\")))",
+"count": 1,
+"lines": [
+956
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"tradeRecoveryPerPulse\"))",
+"new": "tonumber((SC.Config.get(\"tradeRecoveryPerPulse\")))",
+"count": 1,
+"lines": [
+1015
+]
+},
+{
+"file": "SCRuntime.lua",
+"old": "tonumber(SC.Config.get(\"vehicleRestoreRetryWindowMs\"))",
+"new": "tonumber((SC.Config.get(\"vehicleRestoreRetryWindowMs\")))",
+"count": 1,
+"lines": [
+1163
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatBreachLandingMs\"))",
+"new": "tonumber((U.config(\"combatBreachLandingMs\")))",
+"count": 1,
+"lines": [
+70
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionRadius\"))",
+"new": "tonumber((U.config(\"perceptionRadius\")))",
+"count": 2,
+"lines": [
+93,
+980
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeTopologyCacheMs\"))",
+"new": "tonumber((U.config(\"escapeTopologyCacheMs\")))",
+"count": 1,
+"lines": [
+584
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeTopologySliceMs\"))",
+"new": "tonumber((U.config(\"escapeTopologySliceMs\")))",
+"count": 1,
+"lines": [
+596
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeScanRadius\"))",
+"new": "tonumber((U.config(\"escapeScanRadius\")))",
+"count": 1,
+"lines": [
+607
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeScanNodeBudget\"))",
+"new": "tonumber((U.config(\"escapeScanNodeBudget\")))",
+"count": 1,
+"lines": [
+608
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionExitLimit\"))",
+"new": "tonumber((U.config(\"perceptionExitLimit\")))",
+"count": 2,
+"lines": [
+609,
+749
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeTopologyEdgesPerSlice\"))",
+"new": "tonumber((U.config(\"escapeTopologyEdgesPerSlice\")))",
+"count": 1,
+"lines": [
+617
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatRetreatDestinationThreatRadius\"))",
+"new": "tonumber((U.config(\"combatRetreatDestinationThreatRadius\")))",
+"count": 1,
+"lines": [
+655
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatRetreatCorridorThreatRadius\"))",
+"new": "tonumber((U.config(\"combatRetreatCorridorThreatRadius\")))",
+"count": 1,
+"lines": [
+657
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatFollowRetreatSoftLeash\"))",
+"new": "tonumber((U.config(\"combatFollowRetreatSoftLeash\")))",
+"count": 1,
+"lines": [
+710
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatFollowRetreatHardLeash\"))",
+"new": "tonumber((U.config(\"combatFollowRetreatHardLeash\")))",
+"count": 1,
+"lines": [
+712
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatRetreatCohesionWeight\"))",
+"new": "tonumber((U.config(\"combatRetreatCohesionWeight\")))",
+"count": 1,
+"lines": [
+716
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatRetreatCohesionPenalty\"))",
+"new": "tonumber((U.config(\"combatRetreatCohesionPenalty\")))",
+"count": 1,
+"lines": [
+718
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"combatRetreatCorridorDangerPenalty\"))",
+"new": "tonumber((U.config(\"combatRetreatCorridorDangerPenalty\")))",
+"count": 1,
+"lines": [
+739
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"escapeValidatedCandidateLimit\"))",
+"new": "tonumber((U.config(\"escapeValidatedCandidateLimit\")))",
+"count": 1,
+"lines": [
+750
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(util().config(\"perceptionVisualQueueHardCap\"))",
+"new": "tonumber((util().config(\"perceptionVisualQueueHardCap\")))",
+"count": 1,
+"lines": [
+944
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionVisualRetentionMs\"))",
+"new": "tonumber((U.config(\"perceptionVisualRetentionMs\")))",
+"count": 1,
+"lines": [
+973
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionVisualChecksPerSlice\"))",
+"new": "tonumber((U.config(\"perceptionVisualChecksPerSlice\")))",
+"count": 1,
+"lines": [
+997
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionImmediateVisualHardCap\"))",
+"new": "tonumber((U.config(\"perceptionImmediateVisualHardCap\")))",
+"count": 1,
+"lines": [
+999
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionVisualSliceMs\"))",
+"new": "tonumber((U.config(\"perceptionVisualSliceMs\")))",
+"count": 1,
+"lines": [
+1001
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionVisualQueueHardCap\"))",
+"new": "tonumber((U.config(\"perceptionVisualQueueHardCap\")))",
+"count": 1,
+"lines": [
+1006
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionVisualRetentionLimit\"))",
+"new": "tonumber((U.config(\"perceptionVisualRetentionLimit\")))",
+"count": 1,
+"lines": [
+1046
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(util().config(\"perceptionSafetyFreshMs\"))",
+"new": "tonumber((util().config(\"perceptionSafetyFreshMs\")))",
+"count": 1,
+"lines": [
+1107
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionNativeSliceMs\"))",
+"new": "tonumber((U.config(\"perceptionNativeSliceMs\")))",
+"count": 2,
+"lines": [
+1142,
+1447
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexIntervalMs\"))",
+"new": "tonumber((U.config(\"perceptionReflexIntervalMs\")))",
+"count": 2,
+"lines": [
+1381,
+1429
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexRadius\"))",
+"new": "tonumber((U.config(\"perceptionReflexRadius\")))",
+"count": 1,
+"lines": [
+1440
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexCandidateHardCap\"))",
+"new": "tonumber((U.config(\"perceptionReflexCandidateHardCap\")))",
+"count": 1,
+"lines": [
+1455
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexNearbyHardCap\"))",
+"new": "tonumber((U.config(\"perceptionReflexNearbyHardCap\")))",
+"count": 1,
+"lines": [
+1457
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexMovingObjectHardCap\"))",
+"new": "tonumber((U.config(\"perceptionReflexMovingObjectHardCap\")))",
+"count": 1,
+"lines": [
+1494
+]
+},
+{
+"file": "SCSenses.lua",
+"old": "tonumber(U.config(\"perceptionReflexObjectsPerSquare\"))",
+"new": "tonumber((U.config(\"perceptionReflexObjectsPerSquare\")))",
+"count": 1,
+"lines": [
+1496
+]
+},
+{
+"file": "SCSpawn.lua",
+"old": "tonumber(SC.Vehicle.storedCount())",
+"new": "tonumber((SC.Vehicle.storedCount()))",
+"count": 1,
+"lines": [
+1034
+]
+},
+{
+"file": "SCSpawn.lua",
+"old": "tonumber(SC.Config.get(\"maxCompanions\"))",
+"new": "tonumber((SC.Config.get(\"maxCompanions\")))",
+"count": 1,
+"lines": [
+1036
+]
+},
+{
+"file": "SCSupport.lua",
+"old": "tonumber(SC.Config.get(\"maxCompanions\"))",
+"new": "tonumber((SC.Config.get(\"maxCompanions\")))",
+"count": 1,
+"lines": [
+106
+]
+},
+{
+"file": "SCTales.lua",
+"old": "tonumber(U().nativeHealth(actor))",
+"new": "tonumber((U().nativeHealth(actor)))",
+"count": 1,
+"lines": [
+362
+]
+},
+{
+"file": "SCTales.lua",
+"old": "tonumber(utility.nativeHealth(actor))",
+"new": "tonumber((utility.nativeHealth(actor)))",
+"count": 1,
+"lines": [
+539
+]
+},
+{
+"file": "SCTales.lua",
+"old": "tonumber(U().stableHash(seed))",
+"new": "tonumber((U().stableHash(seed)))",
+"count": 1,
+"lines": [
+615
+]
+},
+{
+"file": "SCTales.lua",
+"old": "tonumber(U().stableHash(seed .. \":guest\"))",
+"new": "tonumber((U().stableHash(seed .. \":guest\")))",
+"count": 1,
+"lines": [
+671
+]
+},
+{
+"file": "SCTopology.lua",
+"old": "tonumber(U().config(\"navigationFireEmergencyPenalty\"))",
+"new": "tonumber((U().config(\"navigationFireEmergencyPenalty\")))",
+"count": 1,
+"lines": [
+833
+]
+},
+{
+"file": "SCTopology.lua",
+"old": "tonumber(U().config(\"navigationExplosiveTrapEmergencyPenalty\"))",
+"new": "tonumber((U().config(\"navigationExplosiveTrapEmergencyPenalty\")))",
+"count": 1,
+"lines": [
+841
+]
+},
+{
+"file": "SCTopology.lua",
+"old": "tonumber(U().config(\"navigationBrokenGlassPenalty\"))",
+"new": "tonumber((U().config(\"navigationBrokenGlassPenalty\")))",
+"count": 1,
+"lines": [
+845
+]
+},
+{
+"file": "SCTrade.lua",
+"old": "tonumber(SC.Config.get(\"factionTradeInventoryScanLimit\"))",
+"new": "tonumber((SC.Config.get(\"factionTradeInventoryScanLimit\")))",
+"count": 2,
+"lines": [
+378,
+1729
+]
+},
+{
+"file": "SCTrade.lua",
+"old": "tonumber(SC.Config.get(\"factionTradeDistance\"))",
+"new": "tonumber((SC.Config.get(\"factionTradeDistance\")))",
+"count": 1,
+"lines": [
+1177
+]
+},
+{
+"file": "SCTrade.lua",
+"old": "tonumber(SC.Config.get(\"factionQuestInventoryScanLimit\"))",
+"new": "tonumber((SC.Config.get(\"factionQuestInventoryScanLimit\")))",
+"count": 1,
+"lines": [
+1339
+]
+},
+{
+"file": "SCTrade.lua",
+"old": "tonumber(SC.Config.get(\"factionWarningOuterRadius\"))",
+"new": "tonumber((SC.Config.get(\"factionWarningOuterRadius\")))",
+"count": 2,
+"lines": [
+1791,
+1813
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(SC.Config.get(\"uiPanelOpacity\"))",
+"new": "tonumber((SC.Config.get(\"uiPanelOpacity\")))",
+"count": 1,
+"lines": [
+483
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(SC.Config.get(\"medicalPlayerBandageRange\"))",
+"new": "tonumber((SC.Config.get(\"medicalPlayerBandageRange\")))",
+"count": 1,
+"lines": [
+1188
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(string.sub(action, -1))",
+"new": "tonumber((string.sub(action, -1)))",
+"count": 1,
+"lines": [
+2240
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(self.content:getYScroll())",
+"new": "tonumber((self.content:getYScroll()))",
+"count": 1,
+"lines": [
+4900
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(self.roster:getYScroll())",
+"new": "tonumber((self.roster:getYScroll()))",
+"count": 1,
+"lines": [
+5341
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(SC.Config.get(\"uiRefreshMaximumLagMs\"))",
+"new": "tonumber((SC.Config.get(\"uiRefreshMaximumLagMs\")))",
+"count": 1,
+"lines": [
+5845
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(SC.Config.get(\"uiRefreshCadenceMs\"))",
+"new": "tonumber((SC.Config.get(\"uiRefreshCadenceMs\")))",
+"count": 1,
+"lines": [
+5877
+]
+},
+{
+"file": "SCUI.lua",
+"old": "tonumber(SC.Config.get(\"uiRefreshSliceBudgetMs\"))",
+"new": "tonumber((SC.Config.get(\"uiRefreshSliceBudgetMs\")))",
+"count": 1,
+"lines": [
+5896
+]
+},
+{
+"file": "SCUIContext.lua",
+"old": "tonumber(safeMethod(player, \"getPlayerNum\"))",
+"new": "tonumber((safeMethod(player, \"getPlayerNum\")))",
+"count": 1,
+"lines": [
+270
+]
+},
+{
+"file": "SCUIContext.lua",
+"old": "tonumber(safeMethod(player, \"getZ\"))",
+"new": "tonumber((safeMethod(player, \"getZ\")))",
+"count": 1,
+"lines": [
+736
+]
+},
+{
+"file": "SCUIContext.lua",
+"old": "tonumber(SC.Config.get(\"medicalPlayerBandageRange\"))",
+"new": "tonumber((SC.Config.get(\"medicalPlayerBandageRange\")))",
+"count": 1,
+"lines": [
+1322
+]
+},
+{
+"file": "SCVehicle.lua",
+"old": "tonumber(getTimestampMs())",
+"new": "tonumber((getTimestampMs()))",
+"count": 4,
+"lines": [
+798,
+1444,
+1457,
+1927
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(vehicle, \"getPartCount\"))",
+"new": "tonumber((call(vehicle, \"getPartCount\")))",
+"count": 1,
+"lines": [
+36
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(items, \"getCapacity\"))",
+"new": "tonumber((call(items, \"getCapacity\")))",
+"count": 1,
+"lines": [
+42
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(vehicle, \"getSqlId\"))",
+"new": "tonumber((call(vehicle, \"getSqlId\")))",
+"count": 1,
+"lines": [
+71
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(vehicle, \"getX\"))",
+"new": "tonumber((call(vehicle, \"getX\")))",
+"count": 2,
+"lines": [
+125,
+150
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(vehicle, \"getY\"))",
+"new": "tonumber((call(vehicle, \"getY\")))",
+"count": 2,
+"lines": [
+126,
+152
+]
+},
+{
+"file": "SCVehicleUnload.lua",
+"old": "tonumber(call(vehicle, \"getZ\"))",
+"new": "tonumber((call(vehicle, \"getZ\")))",
+"count": 1,
+"lines": [
+153
+]
+},
+{
+"file": "SCVitalsTrace.lua",
+"old": "tonumber(config(\"vitalsStatTraceIntervalMs\", 10000))",
+"new": "tonumber((config(\"vitalsStatTraceIntervalMs\", 10000)))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SCVitalsTrace.lua",
+"old": "tonumber(config(\"vitalsStatTraceActorLimit\", 32))",
+"new": "tonumber((config(\"vitalsStatTraceActorLimit\", 32)))",
+"count": 1,
+"lines": [
+50
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteMaximum\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteMaximum\")))",
+"count": 1,
+"lines": [
+140
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteMaximumSquares\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteMaximumSquares\")))",
+"count": 1,
+"lines": [
+156
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n            U().config(\"navigationWorkRouteVariants\"))",
+"new": "tonumber(\n            (U().config(\"navigationWorkRouteVariants\")))",
+"count": 1,
+"lines": [
+169
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteValidationEdges\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteValidationEdges\")))",
+"count": 1,
+"lines": [
+225
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteMaximumAgeMs\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteMaximumAgeMs\")))",
+"count": 1,
+"lines": [
+256
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteJoinMaximumSteps\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteJoinMaximumSteps\")))",
+"count": 1,
+"lines": [
+258
+]
+},
+{
+"file": "SCWorkRoutes.lua",
+"old": "tonumber(\n        U().config(\"navigationWorkRouteJoinCandidates\"))",
+"new": "tonumber(\n        (U().config(\"navigationWorkRouteJoinCandidates\")))",
+"count": 1,
+"lines": [
+260
+]
+},
+{
+"file": "SCWorkTransport.lua",
+"old": "tonumber(U().config(\"workRecoveryRetryBaseMs\"))",
+"new": "tonumber((U().config(\"workRecoveryRetryBaseMs\")))",
+"count": 1,
+"lines": [
+232
+]
+},
+{
+"file": "SCWorkTransport.lua",
+"old": "tonumber(U().config(\"workRecoveryRetryMaximumMs\"))",
+"new": "tonumber((U().config(\"workRecoveryRetryMaximumMs\")))",
+"count": 1,
+"lines": [
+233
+]
+},
+{
+"file": "SCZombieTargeting.lua",
+"old": "tonumber(U().config(\"zombieTargetRadius\"))",
+"new": "tonumber((U().config(\"zombieTargetRadius\")))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SCZombieTargeting.lua",
+"old": "tonumber(U().config(\"zombieTargetMaxChecks\"))",
+"new": "tonumber((U().config(\"zombieTargetMaxChecks\")))",
+"count": 1,
+"lines": [
+47
+]
+},
+{
+"file": "SolActionRegistry.lua",
+"old": "tonumber(mcall(objs, \"size\"))",
+"new": "tonumber((mcall(objs, \"size\")))",
+"count": 1,
+"lines": [
+48
+]
+},
+{
+"file": "SolActionRegistry.lua",
+"old": "tonumber(mcall(it, \"getMaxDamage\"))",
+"new": "tonumber((mcall(it, \"getMaxDamage\")))",
+"count": 1,
+"lines": [
+127
+]
+},
+{
+"file": "SolActionRegistry.lua",
+"old": "tonumber(mcall(it, \"getCondition\"))",
+"new": "tonumber((mcall(it, \"getCondition\")))",
+"count": 1,
+"lines": [
+127
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(list, \"size\"))",
+"new": "tonumber((mcall(list, \"size\")))",
+"count": 2,
+"lines": [
+352,
+549
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(it, \"getHungerChange\"))",
+"new": "tonumber((mcall(it, \"getHungerChange\")))",
+"count": 1,
+"lines": [
+367
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(it, \"getAge\"))",
+"new": "tonumber((mcall(it, \"getAge\")))",
+"count": 1,
+"lines": [
+378
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(it, \"getOffAgeMax\"))",
+"new": "tonumber((mcall(it, \"getOffAgeMax\")))",
+"count": 1,
+"lines": [
+378
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(lr, \"size\"))",
+"new": "tonumber((mcall(lr, \"size\")))",
+"count": 1,
+"lines": [
+519
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(objs, \"size\"))",
+"new": "tonumber((mcall(objs, \"size\")))",
+"count": 1,
+"lines": [
+542
+]
+},
+{
+"file": "SolActions.lua",
+"old": "tonumber(mcall(o, \"getContainerCount\"))",
+"new": "tonumber((mcall(o, \"getContainerCount\")))",
+"count": 1,
+"lines": [
+545
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(t, \"getWater\"))",
+"new": "tonumber((call(t, \"getWater\")))",
+"count": 1,
+"lines": [
+86
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(t, \"getMaxWater\"))",
+"new": "tonumber((call(t, \"getMaxWater\")))",
+"count": 1,
+"lines": [
+86
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(t, \"getCurrentFeedAmount\"))",
+"new": "tonumber((call(t, \"getCurrentFeedAmount\")))",
+"count": 1,
+"lines": [
+87
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(t, \"getMaxFeed\"))",
+"new": "tonumber((call(t, \"getMaxFeed\")))",
+"count": 1,
+"lines": [
+87
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(call(cont, \"getItems\"), \"size\"))",
+"new": "tonumber((call(call(cont, \"getItems\"), \"size\")))",
+"count": 1,
+"lines": [
+89
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(hutch, \"getMaxNestBox\"))",
+"new": "tonumber((call(hutch, \"getMaxNestBox\")))",
+"count": 2,
+"lines": [
+105,
+244
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(box, \"getEggsNb\"))",
+"new": "tonumber((call(box, \"getEggsNb\")))",
+"count": 2,
+"lines": [
+108,
+247
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(m, \"getWater\"))",
+"new": "tonumber((call(m, \"getWater\")))",
+"count": 1,
+"lines": [
+122
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(fc, \"getPrimaryFluidAmount\"))",
+"new": "tonumber((call(fc, \"getPrimaryFluidAmount\")))",
+"count": 2,
+"lines": [
+143,
+212
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(trough, \"getMaxWater\"))",
+"new": "tonumber((call(trough, \"getMaxWater\")))",
+"count": 1,
+"lines": [
+213
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(trough, \"getWater\"))",
+"new": "tonumber((call(trough, \"getWater\")))",
+"count": 3,
+"lines": [
+213,
+219,
+222
+]
+},
+{
+"file": "SolAnimalCare.lua",
+"old": "tonumber(call(trough, \"getCurrentFeedAmount\"))",
+"new": "tonumber((call(trough, \"getCurrentFeedAmount\")))",
+"count": 2,
+"lines": [
+231,
+237
+]
+},
+{
+"file": "SolBaseScan.lua",
+"old": "tonumber(method(objs, \"size\"))",
+"new": "tonumber((method(objs, \"size\")))",
+"count": 1,
+"lines": [
+166
+]
+},
+{
+"file": "SolBaseScan.lua",
+"old": "tonumber(method(o, \"getContainerCount\"))",
+"new": "tonumber((method(o, \"getContainerCount\")))",
+"count": 1,
+"lines": [
+170
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(call(s, \"getBodyDamage\"), \"getNumPartsBleeding\"))",
+"new": "tonumber((call(call(s, \"getBodyDamage\"), \"getNumPartsBleeding\")))",
+"count": 1,
+"lines": [
+24
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(s, \"getX\"))",
+"new": "tonumber((call(s, \"getX\")))",
+"count": 1,
+"lines": [
+26
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(s, \"getY\"))",
+"new": "tonumber((call(s, \"getY\")))",
+"count": 1,
+"lines": [
+26
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(list, \"size\"))",
+"new": "tonumber((call(list, \"size\")))",
+"count": 1,
+"lines": [
+28
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(z, \"getX\"))",
+"new": "tonumber((call(z, \"getX\")))",
+"count": 1,
+"lines": [
+32
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(z, \"getY\"))",
+"new": "tonumber((call(z, \"getY\")))",
+"count": 1,
+"lines": [
+32
+]
+},
+{
+"file": "SolBleedStop.lua",
+"old": "tonumber(call(v, \"getCurrentSpeedKmHour\"))",
+"new": "tonumber((call(v, \"getCurrentSpeedKmHour\")))",
+"count": 1,
+"lines": [
+52
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(objects, \"size\"))",
+"new": "tonumber((method(objects, \"size\")))",
+"count": 2,
+"lines": [
+82,
+145
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(v, \"getX\"))",
+"new": "tonumber((method(v, \"getX\")))",
+"count": 1,
+"lines": [
+188
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(v, \"getY\"))",
+"new": "tonumber((method(v, \"getY\")))",
+"count": 1,
+"lines": [
+188
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(v, \"getForwardDirectionX\"))",
+"new": "tonumber((method(v, \"getForwardDirectionX\")))",
+"count": 1,
+"lines": [
+190
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(v, \"getForwardDirectionY\"))",
+"new": "tonumber((method(v, \"getForwardDirectionY\")))",
+"count": 1,
+"lines": [
+191
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(forward, \"x\"))",
+"new": "tonumber((method(forward, \"x\")))",
+"count": 2,
+"lines": [
+194,
+1032
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(forward, \"z\"))",
+"new": "tonumber((method(forward, \"z\")))",
+"count": 2,
+"lines": [
+195,
+1032
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(extents, \"z\"))",
+"new": "tonumber((method(extents, \"z\")))",
+"count": 2,
+"lines": [
+197,
+892
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(extents, \"x\"))",
+"new": "tonumber((method(extents, \"x\")))",
+"count": 2,
+"lines": [
+197,
+892
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(script, \"getWheelCount\"))",
+"new": "tonumber((method(script, \"getWheelCount\")))",
+"count": 1,
+"lines": [
+896
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(method(method(script, \"getWheel\", i), \"getOffset\"), \"z\"))",
+"new": "tonumber((method(method(method(script, \"getWheel\", i), \"getOffset\"), \"z\")))",
+"count": 1,
+"lines": [
+898
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(script, \"getSteeringClamp\", 5))",
+"new": "tonumber((method(script, \"getSteeringClamp\", 5)))",
+"count": 1,
+"lines": [
+905
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(cars[i].v, \"getCurrentSpeedKmHour\"))",
+"new": "tonumber((method(cars[i].v, \"getCurrentSpeedKmHour\")))",
+"count": 1,
+"lines": [
+972
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(vehicle, \"getX\"))",
+"new": "tonumber((method(vehicle, \"getX\")))",
+"count": 1,
+"lines": [
+1021
+]
+},
+{
+"file": "SolBypass.lua",
+"old": "tonumber(method(vehicle, \"getY\"))",
+"new": "tonumber((method(vehicle, \"getY\")))",
+"count": 1,
+"lines": [
+1022
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(a, \"getX\"))",
+"new": "tonumber((call(a, \"getX\")))",
+"count": 1,
+"lines": [
+26
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(a, \"getY\"))",
+"new": "tonumber((call(a, \"getY\")))",
+"count": 1,
+"lines": [
+26
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(fc, \"getAmount\"))",
+"new": "tonumber((call(fc, \"getAmount\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(car, \"getPartCount\"))",
+"new": "tonumber((call(car, \"getPartCount\")))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(objs, \"size\"))",
+"new": "tonumber((call(objs, \"size\")))",
+"count": 1,
+"lines": [
+99
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(o, \"getContainerCount\"))",
+"new": "tonumber((call(o, \"getContainerCount\")))",
+"count": 1,
+"lines": [
+101
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(tank, \"getContainerContentAmount\"))",
+"new": "tonumber((call(tank, \"getContainerContentAmount\")))",
+"count": 1,
+"lines": [
+120
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(tank, \"getContainerCapacity\"))",
+"new": "tonumber((call(tank, \"getContainerCapacity\")))",
+"count": 1,
+"lines": [
+121
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(spot, \"getX\"))",
+"new": "tonumber((call(spot, \"getX\")))",
+"count": 1,
+"lines": [
+162
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(spot, \"getY\"))",
+"new": "tonumber((call(spot, \"getY\")))",
+"count": 1,
+"lines": [
+162
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(j.part, \"getContainerContentAmount\"))",
+"new": "tonumber((call(j.part, \"getContainerContentAmount\")))",
+"count": 2,
+"lines": [
+168,
+186
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(j.part, \"getContainerCapacity\"))",
+"new": "tonumber((call(j.part, \"getContainerCapacity\")))",
+"count": 1,
+"lines": [
+187
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(part, \"getContainerContentAmount\"))",
+"new": "tonumber((call(part, \"getContainerContentAmount\")))",
+"count": 1,
+"lines": [
+268
+]
+},
+{
+"file": "SolCanRefuel.lua",
+"old": "tonumber(call(part, \"getContainerCapacity\"))",
+"new": "tonumber((call(part, \"getContainerCapacity\")))",
+"count": 1,
+"lines": [
+268
+]
+},
+{
+"file": "SolCarRules.lua",
+"old": "tonumber(call(car, \"getPartCount\"))",
+"new": "tonumber((call(car, \"getPartCount\")))",
+"count": 2,
+"lines": [
+19,
+30
+]
+},
+{
+"file": "SolCarRules.lua",
+"old": "tonumber(call(anchor, \"getX\"))",
+"new": "tonumber((call(anchor, \"getX\")))",
+"count": 1,
+"lines": [
+48
+]
+},
+{
+"file": "SolCarRules.lua",
+"old": "tonumber(call(anchor, \"getY\"))",
+"new": "tonumber((call(anchor, \"getY\")))",
+"count": 1,
+"lines": [
+48
+]
+},
+{
+"file": "SolCarRules.lua",
+"old": "tonumber(call(v, \"getX\"))",
+"new": "tonumber((call(v, \"getX\")))",
+"count": 1,
+"lines": [
+52
+]
+},
+{
+"file": "SolCarRules.lua",
+"old": "tonumber(call(v, \"getY\"))",
+"new": "tonumber((call(v, \"getY\")))",
+"count": 1,
+"lines": [
+52
+]
+},
+{
+"file": "SolDress.lua",
+"old": "tonumber(call(worn, \"size\"))",
+"new": "tonumber((call(worn, \"size\")))",
+"count": 1,
+"lines": [
+45
+]
+},
+{
+"file": "SolDress.lua",
+"old": "tonumber(call(items, \"size\"))",
+"new": "tonumber((call(items, \"size\")))",
+"count": 1,
+"lines": [
+97
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(o, \"getX\"))",
+"new": "tonumber((call(o, \"getX\")))",
+"count": 1,
+"lines": [
+62
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(o, \"getY\"))",
+"new": "tonumber((call(o, \"getY\")))",
+"count": 1,
+"lines": [
+62
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(L, \"getX\"))",
+"new": "tonumber((call(L, \"getX\")))",
+"count": 1,
+"lines": [
+79
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(L, \"getY\"))",
+"new": "tonumber((call(L, \"getY\")))",
+"count": 1,
+"lines": [
+79
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(a, \"getX\"))",
+"new": "tonumber((call(a, \"getX\")))",
+"count": 1,
+"lines": [
+106
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(a, \"getY\"))",
+"new": "tonumber((call(a, \"getY\")))",
+"count": 1,
+"lines": [
+106
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(a, \"getZ\"))",
+"new": "tonumber((call(a, \"getZ\")))",
+"count": 1,
+"lines": [
+106
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getSqlId\"))",
+"new": "tonumber((call(car, \"getSqlId\")))",
+"count": 1,
+"lines": [
+138
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(loaded, \"getZ\"))",
+"new": "tonumber((call(loaded, \"getZ\")))",
+"count": 1,
+"lines": [
+146
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(script, \"getMass\"))",
+"new": "tonumber((call(script, \"getMass\")))",
+"count": 1,
+"lines": [
+148
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(loaded, \"getEngineQuality\"))",
+"new": "tonumber((call(loaded, \"getEngineQuality\")))",
+"count": 1,
+"lines": [
+149
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(tank, \"getContainerContentAmount\"))",
+"new": "tonumber((call(tank, \"getContainerContentAmount\")))",
+"count": 2,
+"lines": [
+169,
+615
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getKeyId\"))",
+"new": "tonumber((call(car, \"getKeyId\")))",
+"count": 1,
+"lines": [
+209
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(key, \"getKeyId\"))",
+"new": "tonumber((call(key, \"getKeyId\")))",
+"count": 1,
+"lines": [
+212
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getPartCount\"))",
+"new": "tonumber((call(car, \"getPartCount\")))",
+"count": 1,
+"lines": [
+217
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(list, \"size\"))",
+"new": "tonumber((call(list, \"size\")))",
+"count": 1,
+"lines": [
+264
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(zl, \"size\"))",
+"new": "tonumber((call(zl, \"size\")))",
+"count": 1,
+"lines": [
+713
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(vl, \"size\"))",
+"new": "tonumber((call(vl, \"size\")))",
+"count": 1,
+"lines": [
+719
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getAngleX\"))",
+"new": "tonumber((call(car, \"getAngleX\")))",
+"count": 1,
+"lines": [
+839
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getAngleY\"))",
+"new": "tonumber((call(car, \"getAngleY\")))",
+"count": 1,
+"lines": [
+840
+]
+},
+{
+"file": "SolFar.lua",
+"old": "tonumber(call(car, \"getAngleZ\"))",
+"new": "tonumber((call(car, \"getAngleZ\")))",
+"count": 1,
+"lines": [
+841
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(gameTime(), \"getWorldAgeHours\"))",
+"new": "tonumber((call(gameTime(), \"getWorldAgeHours\")))",
+"count": 1,
+"lines": [
+73
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(gameTime(), \"getMinutesPerDay\"))",
+"new": "tonumber((call(gameTime(), \"getMinutesPerDay\")))",
+"count": 1,
+"lines": [
+78
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(L, \"getX\"))",
+"new": "tonumber((call(L, \"getX\")))",
+"count": 1,
+"lines": [
+99
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(L, \"getY\"))",
+"new": "tonumber((call(L, \"getY\")))",
+"count": 1,
+"lines": [
+99
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(p, \"getX\"))",
+"new": "tonumber((call(p, \"getX\")))",
+"count": 1,
+"lines": [
+144
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(p, \"getY\"))",
+"new": "tonumber((call(p, \"getY\")))",
+"count": 1,
+"lines": [
+144
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(count(props.minVeg, props.maxVeg, props.minVegAutorized, props.maxVegAutorized, live, skill))",
+"new": "tonumber((count(props.minVeg, props.maxVeg, props.minVegAutorized, props.maxVegAutorized, live, skill)))",
+"count": 1,
+"lines": [
+317
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(list, \"size\"))",
+"new": "tonumber((call(list, \"size\")))",
+"count": 1,
+"lines": [
+387
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(objs, \"size\"))",
+"new": "tonumber((call(objs, \"size\")))",
+"count": 2,
+"lines": [
+472,
+530
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(f.item, \"getCurrentUses\"))",
+"new": "tonumber((call(f.item, \"getCurrentUses\")))",
+"count": 1,
+"lines": [
+505
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(fc, \"getAmount\"))",
+"new": "tonumber((call(fc, \"getAmount\")))",
+"count": 1,
+"lines": [
+517
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(item, \"getAge\"))",
+"new": "tonumber((call(item, \"getAge\")))",
+"count": 1,
+"lines": [
+551
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(c, \"getCapacityWeight\"))",
+"new": "tonumber((call(c, \"getCapacityWeight\")))",
+"count": 1,
+"lines": [
+560
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(call(c, \"getContentsWeight\"))",
+"new": "tonumber((call(c, \"getContentsWeight\")))",
+"count": 1,
+"lines": [
+560
+]
+},
+{
+"file": "SolFarWork.lua",
+"old": "tonumber(tcall(gu.perkLevel, a, \"Farming\", 0))",
+"new": "tonumber((tcall(gu.perkLevel, a, \"Farming\", 0)))",
+"count": 1,
+"lines": [
+667
+]
+},
+{
+"file": "SolFarmAct.lua",
+"old": "tonumber(call(actor, \"getPerkLevel\", perks.Farming))",
+"new": "tonumber((call(actor, \"getPerkLevel\", perks.Farming)))",
+"count": 1,
+"lines": [
+34
+]
+},
+{
+"file": "SolFarmAct.lua",
+"old": "tonumber(call(actor, \"getX\"))",
+"new": "tonumber((call(actor, \"getX\")))",
+"count": 1,
+"lines": [
+194
+]
+},
+{
+"file": "SolFarmAct.lua",
+"old": "tonumber(call(actor, \"getY\"))",
+"new": "tonumber((call(actor, \"getY\")))",
+"count": 1,
+"lines": [
+194
+]
+},
+{
+"file": "SolFarmAct.lua",
+"old": "tonumber(call(actor, \"getZ\"))",
+"new": "tonumber((call(actor, \"getZ\")))",
+"count": 1,
+"lines": [
+196
+]
+},
+{
+"file": "SolFarmKeeper.lua",
+"old": "tonumber(tcall(gu.characterStatValue, a, name, 0))",
+"new": "tonumber((tcall(gu.characterStatValue, a, name, 0)))",
+"count": 1,
+"lines": [
+32
+]
+},
+{
+"file": "SolFarmKeeper.lua",
+"old": "tonumber(call(worn, \"size\"))",
+"new": "tonumber((call(worn, \"size\")))",
+"count": 1,
+"lines": [
+39
+]
+},
+{
+"file": "SolFarmKeeper.lua",
+"old": "tonumber(call(item, \"getDirtiness\"))",
+"new": "tonumber((call(item, \"getDirtiness\")))",
+"count": 2,
+"lines": [
+49,
+60
+]
+},
+{
+"file": "SolFarmKeeper.lua",
+"old": "tonumber(call(item, \"getWetness\"))",
+"new": "tonumber((call(item, \"getWetness\")))",
+"count": 2,
+"lines": [
+49,
+60
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(c, \"getPrecipitationIntensity\"))",
+"new": "tonumber((call(c, \"getPrecipitationIntensity\")))",
+"count": 1,
+"lines": [
+54
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(t, \"getMonth\"))",
+"new": "tonumber((call(t, \"getMonth\")))",
+"count": 1,
+"lines": [
+58
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(t, \"getTimeOfDay\"))",
+"new": "tonumber((call(t, \"getTimeOfDay\")))",
+"count": 1,
+"lines": [
+72
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(who, \"getX\"))",
+"new": "tonumber((call(who, \"getX\")))",
+"count": 1,
+"lines": [
+117
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(who, \"getY\"))",
+"new": "tonumber((call(who, \"getY\")))",
+"count": 1,
+"lines": [
+117
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(who, \"getZ\"))",
+"new": "tonumber((call(who, \"getZ\")))",
+"count": 1,
+"lines": [
+119
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(f())",
+"new": "tonumber((f()))",
+"count": 1,
+"lines": [
+178
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(list, \"size\"))",
+"new": "tonumber((call(list, \"size\")))",
+"count": 2,
+"lines": [
+231,
+546
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(fc, \"getAmount\"))",
+"new": "tonumber((call(fc, \"getAmount\")))",
+"count": 1,
+"lines": [
+344
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(item, \"getCurrentUses\"))",
+"new": "tonumber((call(item, \"getCurrentUses\")))",
+"count": 1,
+"lines": [
+353
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(item, \"getDrainableUsesFloat\"))",
+"new": "tonumber((call(item, \"getDrainableUsesFloat\")))",
+"count": 1,
+"lines": [
+355
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(objs, \"size\"))",
+"new": "tonumber((call(objs, \"size\")))",
+"count": 2,
+"lines": [
+528,
+598
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(o, \"getContainerCount\"))",
+"new": "tonumber((call(o, \"getContainerCount\")))",
+"count": 1,
+"lines": [
+536
+]
+},
+{
+"file": "SolFarmView.lua",
+"old": "tonumber(call(o, \"getFluidAmount\"))",
+"new": "tonumber((call(o, \"getFluidAmount\")))",
+"count": 1,
+"lines": [
+599
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(tcall(gu.perkLevel, a, \"Farming\", 0))",
+"new": "tonumber((tcall(gu.perkLevel, a, \"Farming\", 0)))",
+"count": 1,
+"lines": [
+348
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(objects, \"size\"))",
+"new": "tonumber((call(objects, \"size\")))",
+"count": 1,
+"lines": [
+380
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(attached, \"size\"))",
+"new": "tonumber((call(attached, \"size\")))",
+"count": 1,
+"lines": [
+388
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(a, \"getX\"))",
+"new": "tonumber((call(a, \"getX\")))",
+"count": 2,
+"lines": [
+442,
+619
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(a, \"getY\"))",
+"new": "tonumber((call(a, \"getY\")))",
+"count": 2,
+"lines": [
+442,
+619
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(a, \"getZ\"))",
+"new": "tonumber((call(a, \"getZ\")))",
+"count": 1,
+"lines": [
+619
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(target, \"getX\"))",
+"new": "tonumber((call(target, \"getX\")))",
+"count": 1,
+"lines": [
+641
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(target, \"getY\"))",
+"new": "tonumber((call(target, \"getY\")))",
+"count": 1,
+"lines": [
+641
+]
+},
+{
+"file": "SolFarmWork.lua",
+"old": "tonumber(call(t, \"getWorldAgeHours\"))",
+"new": "tonumber((call(t, \"getWorldAgeHours\")))",
+"count": 1,
+"lines": [
+1048
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(fc, \"getAmount\"))",
+"new": "tonumber((call(fc, \"getAmount\")))",
+"count": 2,
+"lines": [
+120,
+539
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(fc, \"getCapacity\"))",
+"new": "tonumber((call(fc, \"getCapacity\")))",
+"count": 1,
+"lines": [
+120
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(veh, \"getPartCount\"))",
+"new": "tonumber((call(veh, \"getPartCount\")))",
+"count": 1,
+"lines": [
+135
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(who, \"getX\"))",
+"new": "tonumber((call(who, \"getX\")))",
+"count": 6,
+"lines": [
+207,
+413,
+553,
+564,
+571,
+578
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(who, \"getY\"))",
+"new": "tonumber((call(who, \"getY\")))",
+"count": 6,
+"lines": [
+207,
+413,
+553,
+564,
+571,
+578
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(s, \"getX\"))",
+"new": "tonumber((call(s, \"getX\")))",
+"count": 5,
+"lines": [
+241,
+260,
+369,
+393,
+636
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(s, \"getY\"))",
+"new": "tonumber((call(s, \"getY\")))",
+"count": 5,
+"lines": [
+241,
+260,
+369,
+393,
+636
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(veh, \"getX\"))",
+"new": "tonumber((call(veh, \"getX\")))",
+"count": 1,
+"lines": [
+289
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(veh, \"getY\"))",
+"new": "tonumber((call(veh, \"getY\")))",
+"count": 1,
+"lines": [
+289
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(f, \"x\"))",
+"new": "tonumber((call(f, \"x\")))",
+"count": 1,
+"lines": [
+292
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(f, \"z\"))",
+"new": "tonumber((call(f, \"z\")))",
+"count": 1,
+"lines": [
+292
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(cap, \"getX\"))",
+"new": "tonumber((call(cap, \"getX\")))",
+"count": 1,
+"lines": [
+293
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(cap, \"getY\"))",
+"new": "tonumber((call(cap, \"getY\")))",
+"count": 1,
+"lines": [
+293
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(part, \"getContainerContentAmount\"))",
+"new": "tonumber((call(part, \"getContainerContentAmount\")))",
+"count": 1,
+"lines": [
+341
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(part, \"getContainerCapacity\"))",
+"new": "tonumber((call(part, \"getContainerCapacity\")))",
+"count": 1,
+"lines": [
+341
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(sq, \"getX\"))",
+"new": "tonumber((call(sq, \"getX\")))",
+"count": 2,
+"lines": [
+351,
+372
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(sq, \"getY\"))",
+"new": "tonumber((call(sq, \"getY\")))",
+"count": 2,
+"lines": [
+351,
+372
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(spot, \"getX\"))",
+"new": "tonumber((call(spot, \"getX\")))",
+"count": 1,
+"lines": [
+355
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(spot, \"getY\"))",
+"new": "tonumber((call(spot, \"getY\")))",
+"count": 1,
+"lines": [
+355
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(c, \"getX\"))",
+"new": "tonumber((call(c, \"getX\")))",
+"count": 1,
+"lines": [
+413
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(c, \"getY\"))",
+"new": "tonumber((call(c, \"getY\")))",
+"count": 1,
+"lines": [
+413
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(job.part, \"getContainerContentAmount\"))",
+"new": "tonumber((call(job.part, \"getContainerContentAmount\")))",
+"count": 2,
+"lines": [
+492,
+526
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(job.pump, \"getPipedFuelAmount\"))",
+"new": "tonumber((call(job.pump, \"getPipedFuelAmount\")))",
+"count": 1,
+"lines": [
+493
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(j.part, \"getContainerContentAmount\"))",
+"new": "tonumber((call(j.part, \"getContainerContentAmount\")))",
+"count": 1,
+"lines": [
+534
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(p, \"getX\"))",
+"new": "tonumber((call(p, \"getX\")))",
+"count": 1,
+"lines": [
+636
+]
+},
+{
+"file": "SolFuel.lua",
+"old": "tonumber(call(p, \"getY\"))",
+"new": "tonumber((call(p, \"getY\")))",
+"count": 1,
+"lines": [
+636
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(api, \"getSymbolCount\"))",
+"new": "tonumber((call(api, \"getSymbolCount\")))",
+"count": 1,
+"lines": [
+36
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s, \"getWorldX\"))",
+"new": "tonumber((call(s, \"getWorldX\")))",
+"count": 1,
+"lines": [
+39
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s, \"getWorldY\"))",
+"new": "tonumber((call(s, \"getWorldY\")))",
+"count": 1,
+"lines": [
+39
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(anchor, \"getX\"))",
+"new": "tonumber((call(anchor, \"getX\")))",
+"count": 1,
+"lines": [
+98
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(anchor, \"getY\"))",
+"new": "tonumber((call(anchor, \"getY\")))",
+"count": 1,
+"lines": [
+98
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(v, \"getX\"))",
+"new": "tonumber((call(v, \"getX\")))",
+"count": 1,
+"lines": [
+108
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(v, \"getY\"))",
+"new": "tonumber((call(v, \"getY\")))",
+"count": 1,
+"lines": [
+108
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(pl, \"getX\"))",
+"new": "tonumber((call(pl, \"getX\")))",
+"count": 2,
+"lines": [
+177,
+699
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(pl, \"getY\"))",
+"new": "tonumber((call(pl, \"getY\")))",
+"count": 2,
+"lines": [
+177,
+699
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(q, \"getX\"))",
+"new": "tonumber((call(q, \"getX\")))",
+"count": 1,
+"lines": [
+184
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(q, \"getY\"))",
+"new": "tonumber((call(q, \"getY\")))",
+"count": 1,
+"lines": [
+184
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(sq, \"getX\"))",
+"new": "tonumber((call(sq, \"getX\")))",
+"count": 1,
+"lines": [
+314
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(sq, \"getY\"))",
+"new": "tonumber((call(sq, \"getY\")))",
+"count": 1,
+"lines": [
+314
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(q2, \"getX\"))",
+"new": "tonumber((call(q2, \"getX\")))",
+"count": 1,
+"lines": [
+327
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(q2, \"getY\"))",
+"new": "tonumber((call(q2, \"getY\")))",
+"count": 1,
+"lines": [
+327
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(p0, \"getX\"))",
+"new": "tonumber((call(p0, \"getX\")))",
+"count": 1,
+"lines": [
+398
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s, \"getX\"))",
+"new": "tonumber((call(s, \"getX\")))",
+"count": 1,
+"lines": [
+398
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(p0, \"getY\"))",
+"new": "tonumber((call(p0, \"getY\")))",
+"count": 1,
+"lines": [
+399
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s, \"getY\"))",
+"new": "tonumber((call(s, \"getY\")))",
+"count": 1,
+"lines": [
+399
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(veh, \"getX\"))",
+"new": "tonumber((call(veh, \"getX\")))",
+"count": 1,
+"lines": [
+448
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(veh, \"getY\"))",
+"new": "tonumber((call(veh, \"getY\")))",
+"count": 1,
+"lines": [
+448
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(veh, \"getCurrentSpeedKmHour\"))",
+"new": "tonumber((call(veh, \"getCurrentSpeedKmHour\")))",
+"count": 1,
+"lines": [
+450
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(gas, \"getContainerContentAmount\"))",
+"new": "tonumber((call(gas, \"getContainerContentAmount\")))",
+"count": 1,
+"lines": [
+452
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(gas, \"getContainerCapacity\"))",
+"new": "tonumber((call(gas, \"getContainerCapacity\")))",
+"count": 1,
+"lines": [
+452
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(o, \"getX\"))",
+"new": "tonumber((call(o, \"getX\")))",
+"count": 1,
+"lines": [
+567
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(o, \"getY\"))",
+"new": "tonumber((call(o, \"getY\")))",
+"count": 1,
+"lines": [
+567
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s0, \"getX\"))",
+"new": "tonumber((call(s0, \"getX\")))",
+"count": 1,
+"lines": [
+1010
+]
+},
+{
+"file": "SolGPS.lua",
+"old": "tonumber(call(s0, \"getY\"))",
+"new": "tonumber((call(s0, \"getY\")))",
+"count": 1,
+"lines": [
+1010
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(sq, \"getZ\"))",
+"new": "tonumber((call(sq, \"getZ\")))",
+"count": 1,
+"lines": [
+21
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(actor, \"getSurroundingAttackingZombies\"))",
+"new": "tonumber((call(actor, \"getSurroundingAttackingZombies\")))",
+"count": 1,
+"lines": [
+31
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(src, \"getX\"))",
+"new": "tonumber((call(src, \"getX\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(src, \"getY\"))",
+"new": "tonumber((call(src, \"getY\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(goal, \"getX\"))",
+"new": "tonumber((call(goal, \"getX\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(goal, \"getY\"))",
+"new": "tonumber((call(goal, \"getY\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(square, \"getX\"))",
+"new": "tonumber((call(square, \"getX\")))",
+"count": 1,
+"lines": [
+91
+]
+},
+{
+"file": "SolLadders.lua",
+"old": "tonumber(call(square, \"getY\"))",
+"new": "tonumber((call(square, \"getY\")))",
+"count": 1,
+"lines": [
+91
+]
+},
+{
+"file": "SolLife.lua",
+"old": "tonumber(call(a, \"getX\"))",
+"new": "tonumber((call(a, \"getX\")))",
+"count": 2,
+"lines": [
+107,
+140
+]
+},
+{
+"file": "SolLife.lua",
+"old": "tonumber(call(a, \"getY\"))",
+"new": "tonumber((call(a, \"getY\")))",
+"count": 2,
+"lines": [
+107,
+140
+]
+},
+{
+"file": "SolLife.lua",
+"old": "tonumber(call(v, \"getX\"))",
+"new": "tonumber((call(v, \"getX\")))",
+"count": 1,
+"lines": [
+144
+]
+},
+{
+"file": "SolLife.lua",
+"old": "tonumber(call(v, \"getY\"))",
+"new": "tonumber((call(v, \"getY\")))",
+"count": 1,
+"lines": [
+144
+]
+},
+{
+"file": "SolNavLeg.lua",
+"old": "tonumber(call(f, \"x\"))",
+"new": "tonumber((call(f, \"x\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolNavLeg.lua",
+"old": "tonumber(call(f, \"z\"))",
+"new": "tonumber((call(f, \"z\")))",
+"count": 1,
+"lines": [
+35
+]
+},
+{
+"file": "SolNavLeg.lua",
+"old": "tonumber(call(v, \"getX\"))",
+"new": "tonumber((call(v, \"getX\")))",
+"count": 3,
+"lines": [
+48,
+91,
+102
+]
+},
+{
+"file": "SolNavLeg.lua",
+"old": "tonumber(call(v, \"getY\"))",
+"new": "tonumber((call(v, \"getY\")))",
+"count": 3,
+"lines": [
+48,
+91,
+102
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(me:getX())",
+"new": "tonumber((me:getX()))",
+"count": 1,
+"lines": [
+118
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(me:getY())",
+"new": "tonumber((me:getY()))",
+"count": 1,
+"lines": [
+118
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(z:getX())",
+"new": "tonumber((z:getX()))",
+"count": 1,
+"lines": [
+128
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(z:getY())",
+"new": "tonumber((z:getY()))",
+"count": 1,
+"lines": [
+128
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(o:getX())",
+"new": "tonumber((o:getX()))",
+"count": 1,
+"lines": [
+279
+]
+},
+{
+"file": "SolOrders.lua",
+"old": "tonumber(o:getY())",
+"new": "tonumber((o:getY()))",
+"count": 1,
+"lines": [
+279
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(call(actor, \"getPerkLevel\", perk))",
+"new": "tonumber((call(actor, \"getPerkLevel\", perk)))",
+"count": 1,
+"lines": [
+93
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(call(xpObj, \"getXP\", perk))",
+"new": "tonumber((call(xpObj, \"getXP\", perk)))",
+"count": 1,
+"lines": [
+94
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(call(perk, \"getTotalXpForLevel\", level + 1))",
+"new": "tonumber((call(perk, \"getTotalXpForLevel\", level + 1)))",
+"count": 1,
+"lines": [
+95
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(rowVal(\"loadWeight\"))",
+"new": "tonumber((rowVal(\"loadWeight\")))",
+"count": 1,
+"lines": [
+471
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(rowVal(\"loadCapacity\"))",
+"new": "tonumber((rowVal(\"loadCapacity\")))",
+"count": 1,
+"lines": [
+471
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(rowVal(\"loadRatio\"))",
+"new": "tonumber((rowVal(\"loadRatio\")))",
+"count": 1,
+"lines": [
+471
+]
+},
+{
+"file": "SolPages.lua",
+"old": "tonumber(rowVal(\"timeTogetherHours\"))",
+"new": "tonumber((rowVal(\"timeTogetherHours\")))",
+"count": 1,
+"lines": [
+521
+]
+},
+{
+"file": "SolPlace.lua",
+"old": "tonumber(call(a, \"getX\"))",
+"new": "tonumber((call(a, \"getX\")))",
+"count": 2,
+"lines": [
+365,
+381
+]
+},
+{
+"file": "SolPlace.lua",
+"old": "tonumber(call(a, \"getY\"))",
+"new": "tonumber((call(a, \"getY\")))",
+"count": 2,
+"lines": [
+365,
+381
+]
+},
+{
+"file": "SolPlace.lua",
+"old": "tonumber(call(zb, \"getX\"))",
+"new": "tonumber((call(zb, \"getX\")))",
+"count": 1,
+"lines": [
+370
+]
+},
+{
+"file": "SolPlace.lua",
+"old": "tonumber(call(zb, \"getY\"))",
+"new": "tonumber((call(zb, \"getY\")))",
+"count": 1,
+"lines": [
+370
+]
+},
+{
+"file": "SolPlace.lua",
+"old": "tonumber(call(a, \"getZ\"))",
+"new": "tonumber((call(a, \"getZ\")))",
+"count": 1,
+"lines": [
+381
+]
+},
+{
+"file": "SolPlanner.lua",
+"old": "tonumber(mcall(o, \"getX\"))",
+"new": "tonumber((mcall(o, \"getX\")))",
+"count": 1,
+"lines": [
+20
+]
+},
+{
+"file": "SolPlanner.lua",
+"old": "tonumber(mcall(o, \"getY\"))",
+"new": "tonumber((mcall(o, \"getY\")))",
+"count": 1,
+"lines": [
+20
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(recipe, \"getRequiredSkillCount\"))",
+"new": "tonumber((call(recipe, \"getRequiredSkillCount\")))",
+"count": 1,
+"lines": [
+31
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(rs, \"getLevel\"))",
+"new": "tonumber((call(rs, \"getLevel\")))",
+"count": 1,
+"lines": [
+37
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(inputs, \"size\"))",
+"new": "tonumber((call(inputs, \"size\")))",
+"count": 1,
+"lines": [
+42
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(items, \"size\"))",
+"new": "tonumber((call(items, \"size\")))",
+"count": 2,
+"lines": [
+48,
+112
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(inp, \"getAmount\"))",
+"new": "tonumber((call(inp, \"getAmount\")))",
+"count": 1,
+"lines": [
+55
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(all, \"size\"))",
+"new": "tonumber((call(all, \"size\")))",
+"count": 1,
+"lines": [
+67
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(learned, \"size\"))",
+"new": "tonumber((call(learned, \"size\")))",
+"count": 2,
+"lines": [
+120,
+130
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(it, \"getNumberOfPages\"))",
+"new": "tonumber((call(it, \"getNumberOfPages\")))",
+"count": 1,
+"lines": [
+121
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(it, \"getAlreadyReadPages\"))",
+"new": "tonumber((call(it, \"getAlreadyReadPages\")))",
+"count": 1,
+"lines": [
+122
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(actor, \"getPerkLevel\", sb.perk))",
+"new": "tonumber((call(actor, \"getPerkLevel\", sb.perk)))",
+"count": 1,
+"lines": [
+124
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(it, \"getLvlSkillTrained\"))",
+"new": "tonumber((call(it, \"getLvlSkillTrained\")))",
+"count": 1,
+"lines": [
+125
+]
+},
+{
+"file": "SolSkills.lua",
+"old": "tonumber(call(it, \"getMaxLevelTrained\"))",
+"new": "tonumber((call(it, \"getMaxLevelTrained\")))",
+"count": 1,
+"lines": [
+125
+]
+}
+]

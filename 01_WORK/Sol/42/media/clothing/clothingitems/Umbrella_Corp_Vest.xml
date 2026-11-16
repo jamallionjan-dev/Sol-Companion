@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/Umbrella/vest/M_Umbrella_Corp_Vest_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/Umbrella/vest/F_Umbrella_Corp_Vest_tombfit</m_FemaleModel>
+	<m_GUID>d0710bb4-e4e1-4b6f-b3d9-2cb50953df7c</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>Clothes\Military\BulletproofVests\Umbrella_Corp_Vest</textureChoices>
+</clothingItem>

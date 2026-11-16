@@ -1,0 +1,26 @@
+SOL LAST KNOWN RUNTIME-PROVEN BASELINE
+Snapshot date: 2026-10-22
+Source: 01_WORK\Sol
+
+PROVEN IN RUNTIME BEFORE LATER CLOTHING/ZOMBIE FAILURE:
+- Sol spawned and operated as Living Fellows companion.
+- VSGirl female body visible.
+- VSGirl secondary physics visible.
+- Grace Ashcroft voice working on Sol.
+- Sol rendered inside vehicle.
+
+KNOWN LATER UNRESOLVED ISSUE:
+- Later session produced zombie outfit exception in HumanVisual.addClothingItem / dressInOutfit.
+- Sol was subsequently reported absent from the scene.
+- This snapshot preserves the last-known code identity; it does NOT mark the later clothing/zombie issue as solved.
+
+IDENTITY:
+SolCombined.jar SHA256=
+45CAFC1D95460F45CBF73F12D331478B8C00455EE1DEFB65F44E2C51AE9F0F97
+SCActor.lua SHA256=
+AE102B13A216B921481D2A78BA070199ABF3F2BA5131851767CDA652DCA21C2E
+
+POLICY:
+Do not develop directly in this directory.
+All new clothing/body integration happens in 01_WORK first.
+Promote a newer stable only after integrated runtime validation.

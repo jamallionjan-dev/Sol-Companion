@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/KATTAJ1/Armor/M_BulletproofVest_Defender_Medium_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/KATTAJ1/Armor/F_BulletproofVest_Defender_Medium_tombfit</m_FemaleModel>
+	<m_GUID>1d55b752-0ad6-47cc-8705-e795e2baa6f9</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<textureChoices>Clothes\Military\BulletproofVest\Military_BulletproofVest_Defender_Medium-Black</textureChoices>
+	<textureChoices>Clothes\Military\BulletproofVest\Military_BulletproofVest_Defender_Medium-BlackPlain</textureChoices>
+</clothingItem>

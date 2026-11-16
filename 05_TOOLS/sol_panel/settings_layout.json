@@ -1,0 +1,9 @@
+{"W": 600, "H": 800,
+ "chips": {"y": 136, "w": 104, "h": 38, "gap": 9, "order": ["api", "local", "bridge", "manual", "none"]},
+ "lblProvider": [22, 190, 556, 24], "keyPageBtn": [22, 216, 128, 42], "providerField": [158, 216, 420, 42],
+ "lblKey": [22, 262, 556, 24], "fetchBtn": [22, 288, 120, 42], "pasteBtn": [150, 288, 64, 42], "keyField": [222, 288, 356, 42],
+ "lblModels": [22, 336, 556, 24], "list": [22, 362, 556, 230], "rowH": 44, "rows": 5,
+ "warnLine": [22, 598, 556, 22], "lblFallback": [22, 622, 556, 24], "fallbackField": [22, 648, 556, 42],
+ "info": [22, 200, 556, 120], "divider": 700, "statusText": [22, 708, 520, 30], "statusDot": [564, 716, 14, 14],
+ "saveBtn": [22, 748, 110, 40], "testBtn": [140, 748, 110, 40],
+ "dropdown": [22, 258, 556, 458], "ddRowH": 44, "getKeyBtn": [392, 4, 150, 32]}

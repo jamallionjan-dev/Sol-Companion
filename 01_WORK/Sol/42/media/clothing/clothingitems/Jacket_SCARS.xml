@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/TLOU/clothes/M_SCARJacket_M_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/TLOU/clothes/F_SCARJacket_F_tombfit</m_FemaleModel>
+	<m_GUID>687a3045-2cd2-4cf7-b70b-50f170a9ab82</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_HatCategory>nohair</m_HatCategory>
+	<m_Masks>12</m_Masks>
+	<m_Masks>13</m_Masks>
+	<m_Masks>14</m_Masks>
+	<m_Masks>3</m_Masks>
+	<m_Masks>5</m_Masks>
+	<m_MasksFolder>media/textures/Clothes/Jacket/Masks</m_MasksFolder>
+	<m_UnderlayMasksFolder>media/textures/Clothes/Jacket/Masks</m_UnderlayMasksFolder>
+	<textureChoices>clothes\FedraClothing\SCARJacket</textureChoices>
+	<textureChoices>clothes\FedraClothing\SCARJacket2</textureChoices>
+	<textureChoices>clothes\FedraClothing\SCARJacket3</textureChoices>
+	<textureChoices>clothes\FedraClothing\SCARJacket4</textureChoices>
+	<textureChoices>clothes\FedraClothing\SCARJacket5</textureChoices>
+</clothingItem>

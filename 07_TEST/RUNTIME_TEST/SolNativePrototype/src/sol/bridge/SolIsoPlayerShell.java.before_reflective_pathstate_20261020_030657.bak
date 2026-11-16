@@ -1,0 +1,108 @@
+package sol.bridge;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+import zombie.ai.states.PathFindState;
+import zombie.characters.IsoGameCharacter;
+import zombie.characters.IsoPlayer;
+import zombie.characters.SurvivorDesc;
+import zombie.iso.IsoCell;
+
+public final class SolIsoPlayerShell extends IsoPlayer {
+    private static final Method GENERIC_CHARACTER_UPDATE = resolveGenericCharacterUpdate();
+
+    private boolean solPathActive = false;
+
+    private static Method resolveGenericCharacterUpdate() {
+        try {
+            Method method = IsoGameCharacter.class.getDeclaredMethod("updateInternal");
+ method.setAccessible(true);
+ return method;
+ } catch (ReflectiveOperationException | RuntimeException failure) {
+ return null;
+ }
+ }
+
+ private void updateGenericCharacter() {
+ if (GENERIC_CHARACTER_UPDATE == null) {
+            throw new IllegalStateException("generic IsoGameCharacter update is unavailable");
+ }
+ try {
+ GENERIC_CHARACTER_UPDATE.invoke(this);
+ } catch (IllegalAccessException failure) {
+            throw new IllegalStateException("generic IsoGameCharacter update is inaccessible", failure);
+ } catch (InvocationTargetException failure) {
+ Throwable cause = failure.getCause();
+ if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+ if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("generic IsoGameCharacter update failed", cause);
+ }
+ }
+
+    public SolIsoPlayerShell(IsoCell cell, SurvivorDesc descriptor, int x, int y, int z, boolean remote) {
+        super(cell, descriptor, x, y, z, remote);
+    }
+
+    @Override
+    public boolean isLocalPlayer() {
+        return false;
+    }
+
+    @Override
+    public void updateLOS() {
+        // Non-local companions must never own or write a local-player LOS channel.
+    }
+
+    @Override
+    public boolean isPlayerMoving() {
+        return solPathActive;
+    }
+
+    @Override
+    public void setMoving(boolean moving) {
+        if (!moving) {
+            solPathActive = false;
+            try { setVariable("bPathfind", false); } catch (RuntimeException ignored) {}
+        }
+        super.setMoving(moving);
+    }
+
+    private void forceSolPathOwner() {
+        solPathActive = true;
+        setVariable("bPathfind", true);
+        super.setMoving(false);
+    }
+
+    @Override
+    public void pathToLocationF(float x, float y, float z) {
+        super.pathToLocationF(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToLocation(int x, int y, int z) {
+        super.pathToLocation(x, y, z);
+        forceSolPathOwner();
+    }
+
+    @Override
+    public void pathToCharacter(IsoGameCharacter target) {
+        super.pathToCharacter(target);
+        if (target != null) forceSolPathOwner();
+    }
+
+ @Override
+ public void update() {
+ IsoPlayer local = IsoPlayer.getInstance();
+ try {
+ updateGenericCharacter();
+ if (solPathActive && getVehicle() == null) {
+ PathFindState.instance().execute(this);
+ }
+ setAlphaAndTarget(1.0f);
+ } finally {
+ IsoPlayer.setInstance(local);
+ }
+ }
+}

@@ -1,0 +1,303 @@
+﻿SOURCE=C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile\Zomboid\Logs\2026-10-20_20-54_DebugLog.txt
+LAST_WRITE=2026-10-20T20:56:37.6437891+02:00
+
+[20-10-26 20:54:43.584] LOG  : General      f:0> 20-10-2026 20:54:43.
+[20-10-26 20:54:43.585] LOG  : General      f:0> [pzopt] user folder C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile\Zomboid (options C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile\Zomboid\pzopt\options.ini).
+[20-10-26 20:54:43.619] LOG  : General      f:0> SLF4J(I): Attempting to load provider "zombie.core.logger.Slf4jBridge" specified via "slf4j.provider" system property.
+[20-10-26 20:54:43.865] LOG  : General      f:0> ===== System specs =====.
+[20-10-26 20:54:43.865] LOG  : General      f:0> CPU: AMD Ryzen 7 5800X 8-Core Processor             , vendor: AuthenticAMD, cores: 8, threads: 16
+.
+[20-10-26 20:54:43.872] LOG  : General      f:0> RAM: 32697 Mb
+.
+[20-10-26 20:54:43.886] LOG  : General      f:0> Base board: N7 B550, vendor: NZXT
+.
+[20-10-26 20:54:43.890] LOG  : General      f:0> GPU: NVIDIA GeForce RTX 3070, vendor: NVIDIA, video memory: 8192 Mb, driver: 32.0.16.1742
+.
+[20-10-26 20:54:43.892] LOG  : General      f:0> Disk info: 930.52 Gb, free space: 194.59 Gb, usable space: 194.59 Gb
+.
+[20-10-26 20:54:44.022] LOG  : General      f:0> OS: Windows 11, version: 10.0, arch: amd64, build: 26300
+.
+[20-10-26 20:54:44.023] LOG  : General      f:0> JVM (free: 46 Mb, max: 4096 Mb, total available: 94 Mb)
+.
+[20-10-26 20:54:44.023] LOG  : General      f:0> ========================.
+[20-10-26 20:54:44.024] LOG  : General      f:0> java.specification.version=25.
+[20-10-26 20:54:44.024] LOG  : General      f:0> sun.cpu.isalist=amd64.
+[20-10-26 20:54:44.025] LOG  : General      f:0> sun.jnu.encoding=Cp1252.
+[20-10-26 20:54:44.025] LOG  : General      f:0> java.vm.vendor=Azul Systems, Inc..
+[20-10-26 20:54:44.025] LOG  : General      f:0> sun.arch.data.model=64.
+[20-10-26 20:54:44.025] LOG  : General      f:0> java.vendor.url=http://www.azul.com/.
+[20-10-26 20:54:44.026] LOG  : General      f:0> zomboid.steam=1.
+[20-10-26 20:54:44.026] LOG  : General      f:0> java.vm.specification.version=25.
+[20-10-26 20:54:44.026] LOG  : General      f:0> os.name=Windows 11.
+[20-10-26 20:54:44.027] LOG  : General      f:0> sun.java.launcher=SUN_STANDARD.
+[20-10-26 20:54:44.027] LOG  : General      f:0> zomboid.znetlog=1.
+[20-10-26 20:54:44.027] LOG  : General      f:0> sun.java.command=zombie.gameStates.MainScreenState -debug.
+[20-10-26 20:54:44.028] LOG  : General      f:0> slf4j.provider=zombie.core.logger.Slf4jBridge.
+[20-10-26 20:54:44.028] LOG  : General      f:0> jdk.debug=release.
+[20-10-26 20:54:44.029] LOG  : General      f:0> sun.cpu.endian=little.
+[20-10-26 20:54:44.029] LOG  : General      f:0> java.specification.vendor=Oracle Corporation.
+[20-10-26 20:54:44.029] LOG  : General      f:0> java.version.date=2025-10-21.
+[20-10-26 20:54:44.030] LOG  : General      f:0> java.home=C:\Program Files (x86)\Steam\steamapp....
+[20-10-26 20:54:44.030] LOG  : General      f:0> file.separator=\.
+[20-10-26 20:54:44.030] LOG  : General      f:0> java.vm.compressedOopsMode=Zero based.
+[20-10-26 20:54:44.030] LOG  : General      f:0> line.separator=
+.
+[20-10-26 20:54:44.031] LOG  : General      f:0> java.vm.specification.vendor=Oracle Corporation.
+[20-10-26 20:54:44.031] LOG  : General      f:0> java.specification.name=Java Platform API Specification.
+[20-10-26 20:54:44.031] LOG  : General      f:0> java.awt.headless=true.
+[20-10-26 20:54:44.032] LOG  : General      f:0> sun.management.compiler=HotSpot 64-Bit Tiered Compilers.
+[20-10-26 20:54:44.032] LOG  : General      f:0> java.runtime.version=25.0.1+8-LTS.
+[20-10-26 20:54:44.032] LOG  : General      f:0> stdout.encoding=Cp1252.
+[20-10-26 20:54:44.033] LOG  : General      f:0> os.version=10.0.
+[20-10-26 20:54:44.033] LOG  : General      f:0> jna.nosys=false.
+[20-10-26 20:54:44.034] LOG  : General      f:0> java.runtime.name=OpenJDK Runtime Environment.
+[20-10-26 20:54:44.034] LOG  : General      f:0> file.encoding=UTF-8.
+[20-10-26 20:54:44.034] LOG  : General      f:0> java.vm.name=OpenJDK 64-Bit Server VM.
+[20-10-26 20:54:44.035] LOG  : General      f:0> java.vendor.version=Zulu25.30+17-CA.
+[20-10-26 20:54:44.035] LOG  : General      f:0> jna.loaded=true.
+[20-10-26 20:54:44.035] LOG  : General      f:0> java.vendor.url.bug=http://www.azul.com/support/.
+[20-10-26 20:54:44.036] LOG  : General      f:0> java.version=25.0.1.
+[20-10-26 20:54:44.036] LOG  : General      f:0> os.arch=amd64.
+[20-10-26 20:54:44.036] LOG  : General      f:0> java.vm.specification.name=Java Virtual Machine Specification.
+[20-10-26 20:54:44.036] LOG  : General      f:0> sun.os.patch.level=.
+[20-10-26 20:54:44.037] LOG  : General      f:0> native.encoding=Cp1252.
+[20-10-26 20:54:44.037] LOG  : General      f:0> java.vm.info=mixed mode, sharing.
+[20-10-26 20:54:44.037] LOG  : General      f:0> stderr.encoding=Cp1252.
+[20-10-26 20:54:44.037] LOG  : General      f:0> java.vendor=Azul Systems, Inc..
+[20-10-26 20:54:44.037] LOG  : General      f:0> java.vm.version=25.0.1+8-LTS.
+[20-10-26 20:54:44.037] LOG  : General      f:0> stdin.encoding=cp437.
+[20-10-26 20:54:44.038] LOG  : General      f:0> sun.io.unicode.encoding=UnicodeLittle.
+[20-10-26 20:54:44.039] LOG  : General      f:0> java.class.version=69.0.
+[20-10-26 20:54:44.039] LOG  : General      f:0> -----.
+[20-10-26 20:54:44.063] LOG  : General      f:0> version=42.21.0 4a0e9546ec demo=false.
+[20-10-26 20:54:44.064] LOG  : General      f:0> revision=4a0e9546ec pzbullet=1.0.0.28.
+[20-10-26 20:54:44.111] LOG  : General      f:0> You can setup the log levels in the debuglog.cfg file.
+[20-10-26 20:54:44.112] LOG  : General      f:0> Logs configuration:.
+[20-10-26 20:54:44.114] LOG  : General      f:0>      General: General.
+[20-10-26 20:54:44.115] LOG  : General      f:0>      Network: General.
+[20-10-26 20:54:44.115] LOG  : General      f:0>          Lua: General.
+[20-10-26 20:54:44.115] LOG  : General      f:0>          Mod: General.
+[20-10-26 20:54:44.116] LOG  : General      f:0>  Multiplayer: General.
+[20-10-26 20:54:44.116] LOG  : General      f:0> ClientCommand: General.
+[20-10-26 20:54:44.116] LOG  : General      f:0>      Default: General.
+[20-10-26 20:54:44.133] LOG  : General      f:0> [ZB] patching zombie.GameWindow.init with 1 advice(s).
+[20-10-26 20:54:44.153] LOG  : General      f:0> [ZB] hasMultipleSignatures: false, hasAllArguments: false, hasNoParamMethod: true, inferredTypes: null.
+[20-10-26 20:54:44.155] LOG  : General      f:0> [ZB] patching zombie.GameWindow.DoLoadingText with 1 advice(s).
+[20-10-26 20:54:44.173] LOG  : General      f:0> [ZB] hasMultipleSignatures: false, hasAllArguments: false, hasNoParamMethod: false, inferredTypes: [class java.lang.String].
+[20-10-26 20:54:44.183] LOG  : General      f:0> [ZB] Transformed: zombie.GameWindow (new load).
+[20-10-26 20:54:44.197] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoWorld (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:54:44.197] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoMetaGrid (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:54:44.197] LOG  : General      f:0> [pzopt] loaded override zombie.network.statistics.data.PerformanceStatistic (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:54:44.198] LOG  : General      f:0> [pzopt] loaded override zombie.fileSystem.FileSystemImpl (target revision 4a0e9546ec, active).
+[20-10-26 20:54:44.198] LOG  : General      f:0> [pzopt] mod compat: no Java mod patches a class we ship (report).
+[20-10-26 20:54:44.198] LOG  : General      f:0> [pzopt] mod compat: scan took 26 ms (modCompat=report).
+[20-10-26 20:54:44.208] LOG  : General      f:0> [pzopt] file system: 10 worker threads, 128 tasks in flight.
+[20-10-26 20:54:44.224] LOG  : General      f:0> [pzopt] loaded override zombie.Lua.LuaEventManager (target revision 4a0e9546ec, active).
+[20-10-26 20:54:44.267] LOG  : General      f:0> LightingFPS set to 15.
+[20-10-26 20:54:44.270] LOG  : General      f:0> [pzopt] loaded override zombie.MovingObjectUpdateScheduler (target revision 4a0e9546ec, active).
+[20-10-26 20:54:44.271] LOG  : General      f:0> [pzopt] loaded override zombie.MovingObjectUpdateSchedulerUpdateBucket (target revision 4a0e9546ec, active).
+[20-10-26 20:54:44.966] LOG  : General      f:0> [ZB] Running callbacks for onDisplayCreate.
+[20-10-26 20:54:44.969] LOG  : General      f:0> [ZB] Running callbacks for onDisplayCreate.
+[20-10-26 20:54:44.969] LOG  : General      f:0> GraphicsCard: NVIDIA Corporation NVIDIA GeForce RTX 3070/PCIe/SSE2.
+[20-10-26 20:54:44.970] LOG  : General      f:0> OpenGL version: 4.6.0 NVIDIA 617.42.
+[20-10-26 20:54:44.970] LOG  : General      f:0> Desktop resolution 2560x1440.
+[20-10-26 20:54:44.971] LOG  : General      f:0> Initial resolution 2560x1421 fullScreen=false.
+[20-10-26 20:54:44.972] LOG  : General      f:0> [pzopt] loaded override zombie.core.VBO.GLVertexBufferObject (target revision 4a0e9546ec, active).
+[20-10-26 20:54:44.973] LOG  : General      f:0> OpenGL 1.5 buffer objects supported.
+[20-10-26 20:54:44.974] LOG  : General      f:0> VSync: OFF.
+[20-10-26 20:54:44.982] LOG  : General      f:0> [pzopt] frame cap: game 165 fps (uncappedFps=auto), menu same as game.
+[20-10-26 20:54:45.541] LOG  : General      f:0> [pzopt] loaded override zombie.iso.PlayerCamera (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:54:45.541] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.model.AnimationAssetManager (target revision 4a0e9546ec, active).
+[20-10-26 20:54:45.548] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.model.Model (target revision 4a0e9546ec, active).
+[20-10-26 20:54:45.552] LOG  : General      f:0> [pzopt] loaded override zombie.core.textures.TextureIDAssetManager (target revision 4a0e9546ec, active).
+[20-10-26 20:54:45.578] LOG  : General      f:0> C:\Users\JAMAL\Desktop\Sol\08_RUNTIME_TEST\profile\Zomboid\debug-options.ini:1030 [DebugScenario].
+[20-10-26 20:54:45.606] LOG  : General      f:0> 1792522485605 fmod: Java loging: OK.
+[20-10-26 20:54:45.622] LOG  : General      f:0> 1792522485621 fmod: FMOD::Studio::System::create() result: No errors..
+[20-10-26 20:54:45.623] LOG  : General      f:0> 1792522485622 fmod: FMOD::Studio::System::getCoreSystem() result: No errors..
+[20-10-26 20:54:45.623] LOG  : General      f:0> 1792522485623 fmod: FMOD_System_GetVersion() result: No errors..
+[20-10-26 20:54:45.623] LOG  : General      f:0> 1792522485623 fmod: fmodintegration built with version 20309, fmod shared library version 20309.
+[20-10-26 20:54:45.624] LOG  : General      f:0> 1792522485624 fmod: System Create: OK.
+[20-10-26 20:54:45.625] LOG  : General      f:0> 1792522485625 fmod: FMOD_System_SetSoftwareFormat() result: No errors..
+[20-10-26 20:54:45.689] LOG  : General      f:0> 1792522485689 fmod: FMOD::Studio::System::Initialize() result: No errors..
+[20-10-26 20:54:45.690] LOG  : General      f:0> 1792522485689 fmod: Creating DSP for capture sound.
+[20-10-26 20:54:45.690] LOG  : General      f:0> 1792522485690 fmod: FMOD_System_CreateDSP() result: No errors..
+[20-10-26 20:54:45.690] LOG  : General      f:0> 1792522485690 fmod: FMOD_DSP_SetBypass() result: No errors..
+[20-10-26 20:54:45.691] LOG  : General      f:0> 1792522485690 fmod: FMOD_System_GetMasterChannelGroup() result: No errors..
+[20-10-26 20:54:45.691] LOG  : General      f:0> 1792522485691 fmod: FMOD_ChannelGroup_AddDSP() result: No errors..
+[20-10-26 20:54:45.691] LOG  : General      f:0> 1792522485691 fmod: FMOD_System_Set3DSettings() result: No errors..
+[20-10-26 20:54:53.748] LOG  : General      f:0> [pzopt] boot pump started (file pool 10 wide until the load starts).
+[20-10-26 20:54:53.751] LOG  : General      f:0> [pzopt] update check: no complete Steam Workshop copy for 4a0e9546ec next to the game.
+[20-10-26 20:54:53.833] LOG  : General      f:0> [pzopt] loaded override zombie.scripting.ScriptParser (target revision 4a0e9546ec, active).
+[20-10-26 20:54:53.877] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/mainfont_0.png.
+[20-10-26 20:54:53.878] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/mainfont2_0.png.
+[20-10-26 20:54:53.888] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/fonts/zomboidDialogue.bmfc_0.png.
+[20-10-26 20:54:54.056] LOG  : General      f:0> [pzopt] loaded override zombie.core.textures.ImageData (target revision 4a0e9546ec, active).
+[20-10-26 20:54:54.408] LOG  : General      f:0> [pzopt] texCompress: staging buffer 128 MB mapped.
+[20-10-26 20:54:54.495] LOG  : General      f:0> [pzopt] update available (api 200): b42.21-20261019-0042-d1bbdcf (published 2026-10-19T00:42:16Z), this build is f964083c (749 ms after the check started).
+[20-10-26 20:54:54.507] LOG  : General      f:0> Loading networking libraries....
+[20-10-26 20:54:54.507] LOG  : General      f:0> Loading steam_api64....
+[20-10-26 20:54:54.516] LOG  : General      f:0> Loading RakNet64....
+[20-10-26 20:54:54.528] LOG  : General      f:0> Loading ZNetJNI64....
+[20-10-26 20:54:54.561] LOG  : General      f:0> [pzopt] texCompress: fitting to this GPU's measured BC3 decode, 153.1 ms.
+[20-10-26 20:54:54.563] LOG  : General      f:0> [pzopt] texCompress=auto (worker true, gpu true, hq true, s3tc true).
+[20-10-26 20:54:54.828] LOG  : General      f:0> SteamUtils initialised successfully.
+[20-10-26 20:54:54.834] LOG  : General      f:0> [pzopt] loaded override zombie.iso.LightingJNI (target revision 4a0e9546ec, active).
+[20-10-26 20:54:54.837] LOG  : General      f:0> [pzopt] loaded override zombie.popman.ZombiePopulationManager (target revision 4a0e9546ec, active).
+[20-10-26 20:54:54.917] LOG  : General      f:0> Loading Mods.
+[20-10-26 20:54:54.921] LOG  : General      f:0> [ZB] ZomboidFileSystem.loadMods(0 mods) ....
+[20-10-26 20:54:54.922] LOG  : General      f:0> [ZB] java mod list to load:.
+[20-10-26 20:54:55.967] LOG  : General      f:0> [pzopt] update prefetch of b42.21-20261019-0042-d1bbdcf: delta, 253 of 1232 files, 4612940 of 67396006 bytes (http 53 requests, 4880145 bytes) in 1473 ms.
+[20-10-26 20:54:56.634] LOG  : General      f:0> [pzopt] lua precompile: 1430 files queued on 14 threads (1540 ms to list).
+[20-10-26 20:54:56.635] LOG  : General      f:0> Loading Translations.
+[20-10-26 20:55:05.112] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/mainfont_0.png.
+[20-10-26 20:55:05.113] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/mainfont2_0.png.
+[20-10-26 20:55:05.121] ERROR: General      f:0 at AngelCodeFont.parseFnt              > AngelCodeFont failed to load page 0 texture C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/fonts/zomboidDialogue.bmfc_0.png.
+[20-10-26 20:55:05.451] LOG  : General      f:0> [pzopt] loaded override se.krka.kahlua.luaj.compiler.LuaCompiler (target revision 4a0e9546ec, active).
+[20-10-26 20:55:05.574] LOG  : General      f:0> [ZB] patching zombie.gameStates.GameLoadingState.exit with 1 advice(s).
+[20-10-26 20:55:05.603] LOG  : General      f:0> [ZB] hasMultipleSignatures: false, hasAllArguments: false, hasNoParamMethod: true, inferredTypes: null.
+[20-10-26 20:55:05.610] LOG  : General      f:0> [ZB] Transformed: zombie.gameStates.GameLoadingState (new load).
+[20-10-26 20:55:05.808] LOG  : General      f:0> [pzopt] loaded override zombie.buildingRooms.BuildingRoomsEditor (target revision 4a0e9546ec, active).
+[20-10-26 20:55:05.899] LOG  : General      f:0> [pzopt] loaded override zombie.scripting.objects.Item (target revision 4a0e9546ec, active).
+[20-10-26 20:55:05.904] LOG  : General      f:0> [pzopt] loaded override zombie.characters.ecs.ECSEntity (target revision 4a0e9546ec, active).
+[20-10-26 20:55:05.906] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoMovingObject (target revision 4a0e9546ec, active).
+[20-10-26 20:55:05.922] LOG  : General      f:0> [pzopt] loaded override zombie.core.properties.PropertyContainer (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.013] LOG  : General      f:0> [pzopt] loaded override zombie.characters.IsoGameCharacter (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.015] LOG  : General      f:0> [pzopt] loaded override zombie.characters.IsoPlayer (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.255] LOG  : General      f:0> [pzopt] loaded override zombie.iso.objects.IsoLightSwitch (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.264] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoChunk (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.297] LOG  : General      f:0> [pzopt] loaded override zombie.GameTime (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:06.298] LOG  : General      f:0> [pzopt] loaded override zombie.characters.animals.IsoAnimal (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.318] LOG  : General      f:0> [pzopt] loaded override zombie.characters.IsoZombie (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.329] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoChunkMap (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.430] LOG  : General      f:0> [pzopt] loaded override zombie.ai.State (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:06.431] LOG  : General      f:0> [pzopt] loaded override zombie.ai.states.WalkTowardState (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.481] LOG  : General      f:0> [pzopt] loaded override zombie.gameStates.GameLoadingState (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.523] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoPuddles (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.707] LOG  : General      f:0> [ZB] Exposing class to Lua: ZombieBuddy.
+[20-10-26 20:55:06.708] LOG  : General      f:0> [ZB] Exposing class to Lua: Patch_GameLoadingState as ZombieBuddy.Patches.GameLoadingState.
+[20-10-26 20:55:06.709] LOG  : General      f:0> texturepack: loading UI.
+[20-10-26 20:55:06.709] LOG  : General      f:0> Loading UI texture pack.
+[20-10-26 20:55:06.711] LOG  : General      f:0> [pzopt] loaded override zombie.iso.IsoCamera (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:06.711] LOG  : General      f:0> [pzopt] loaded override zombie.iso.worldgen.WorldGenUtils (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:06.711] LOG  : General      f:0> [pzopt] loaded override zombie.VirtualZombieManager (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:06.711] LOG  : General      f:0> [pzopt] loaded override zombie.fileSystem.TexturePackDevice (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.721] LOG  : General      f:0> texturepack: loading UI2.
+[20-10-26 20:55:06.721] LOG  : General      f:0> Loading UI2 texture pack.
+[20-10-26 20:55:06.736] LOG  : General      f:0> texturepack: loading IconsMoveables.
+[20-10-26 20:55:06.736] LOG  : General      f:0> Loading IconsMoveables texture pack.
+[20-10-26 20:55:06.738] LOG  : General      f:0> texturepack: loading RadioIcons.
+[20-10-26 20:55:06.738] LOG  : General      f:0> Loading RadioIcons texture pack.
+[20-10-26 20:55:06.740] LOG  : General      f:0> texturepack: loading ApComUI.
+[20-10-26 20:55:06.740] LOG  : General      f:0> Loading ApComUI texture pack.
+[20-10-26 20:55:06.742] LOG  : General      f:0> texturepack: loading Mechanics.
+[20-10-26 20:55:06.742] LOG  : General      f:0> Loading Mechanics texture pack.
+[20-10-26 20:55:06.745] LOG  : General      f:0> texturepack: loading WeatherFx.
+[20-10-26 20:55:06.746] LOG  : General      f:0> Loading WeatherFx texture pack.
+[20-10-26 20:55:06.771] LOG  : General      f:0> Loading Scripts.
+[20-10-26 20:55:06.772] LOG  : General      f:0> [pzopt] fmod init on its own thread: 21.21 s total, main thread waited 0.00 s for it.
+[20-10-26 20:55:06.774] WARN : General      f:0 at Log.warn                            > [pzopt] audio limiter: no FMOD core library under natives/.
+[20-10-26 20:55:06.776] LOG  : General      f:0> [pzopt] loaded override zombie.audio.parameters.ParameterZone (target revision 4a0e9546ec, active).
+[20-10-26 20:55:06.778] LOG  : General      f:0> [pzopt] fmod global parameters registered after the join (MusicState found).
+[20-10-26 20:55:08.191] ERROR: General      f:0 at FluidContainerScript.load           > Sanitizing container name 'Large Bucket', name may not contain whitespaces..
+[20-10-26 20:55:08.547] ERROR: General      f:0 at FluidContainerScript.load           > Sanitizing container name 'Fuel Pump', name may not contain whitespaces..
+[20-10-26 20:55:08.620] WARN : General      f:0 at XuiSkin$EntityUiStyle.Load          > Could not find icon: Build_AnvilStone, script = Stone Anvil.
+[20-10-26 20:55:08.620] WARN : General      f:0 at XuiSkin$EntityUiStyle.LoadComponentInfo> Could not find icon: Build_AnvilStone.
+[20-10-26 20:55:08.622] WARN : General      f:0 at XuiSkin$EntityUiStyle.Load          > Could not find icon: Build_AnvilStone, script = Stone Anvil.
+[20-10-26 20:55:08.623] WARN : General      f:0 at XuiSkin$EntityUiStyle.LoadComponentInfo> Could not find icon: Build_AnvilStone.
+[20-10-26 20:55:08.624] WARN : General      f:0 at XuiSkin$EntityUiStyle.Load          > Could not find icon: Build_AnvilStone, script = Stone Anvil.
+[20-10-26 20:55:08.626] WARN : General      f:0 at XuiSkin$EntityUiStyle.LoadComponentInfo> Could not find icon: Build_AnvilStone.
+[20-10-26 20:55:08.627] WARN : General      f:0 at XuiSkin$EntityUiStyle.Load          > Could not find icon: Build_AnvilStone, script = Stone Anvil.
+[20-10-26 20:55:08.628] WARN : General      f:0 at XuiSkin$EntityUiStyle.LoadComponentInfo> Could not find icon: Build_AnvilStone.
+[20-10-26 20:55:08.671] WARN : General      f:0 at TaggedObjectManager.createTagBits   > manager-> new tag discovered that was not preprocessed, tag: keyduplicator.
+[20-10-26 20:55:08.672] WARN : General      f:0 at TaggedObjectManager.createTagBits   > manager-> new tag discovered that was not preprocessed, tag: choppingblock.
+[20-10-26 20:55:08.720] WARN : General      f:0 at SoundManager.debugScriptSound       > no such sound "CorpseDrop" in item Base.CorpseFemale.
+[20-10-26 20:55:08.721] WARN : General      f:0 at SoundManager.debugScriptSound       > no such sound "CorpseDrop" in item Base.CorpseMale.
+[20-10-26 20:55:08.776] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.ModelManager (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:08.776] LOG  : General      f:0> [pzopt] loaded override zombie.core.textures.TextureDraw (target revision 4a0e9546ec, active).
+[20-10-26 20:55:08.778] LOG  : General      f:0> [ZB] Exposing class to Lua: Watermark as ZombieBuddy.Watermark.
+[20-10-26 20:55:08.809] LOG  : General      f:0> [pzopt] gpuPstate: no amdgpu render node; off.
+[20-10-26 20:55:08.814] LOG  : General      f:0> [pzopt] upscaler: off.
+[20-10-26 20:55:08.829] LOG  : General      f:0> [pzopt] persistent VBO mapping active (GL_ARB_buffer_storage), 4 slot(s) per buffer.
+[20-10-26 20:55:08.875] LOG  : General      f:0> [pzopt] pacing: presentPacing=auto -> auto (gpu) (GL timestamps yes, p90 + 200 us).
+[20-10-26 20:55:09.882] LOG  : General      f:0> [pzopt] entity shadows: sun shadows off at launch, the model shaders stay stock.
+[20-10-26 20:55:10.068] LOG  : General      f:0> Loading Clothing.
+[20-10-26 20:55:10.078] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.advancedanimation.AnimationSet (target revision 4a0e9546ec, active).
+[20-10-26 20:55:11.124] LOG  : General      f:0> .
+[20-10-26 20:55:11.503] LOG  : General      f:0> texturepack: loading Tiles2x.
+[20-10-26 20:55:11.503] LOG  : General      f:0> Loading Tiles2x texture pack.
+[20-10-26 20:55:11.672] LOG  : General      f:0> texturepack: loading Overlays2x.
+[20-10-26 20:55:11.673] LOG  : General      f:0> Loading Overlays2x texture pack.
+[20-10-26 20:55:11.678] LOG  : General      f:0> texturepack: loading JumboTrees2x.
+[20-10-26 20:55:11.679] LOG  : General      f:0> Loading JumboTrees2x texture pack.
+[20-10-26 20:55:11.684] LOG  : General      f:0> texturepack: loading JumboTreesBigs2x.
+[20-10-26 20:55:11.684] LOG  : General      f:0> Loading JumboTreesBigs2x texture pack.
+[20-10-26 20:55:11.730] LOG  : General      f:0> texturepack: loading Tiles2x.floor.
+[20-10-26 20:55:11.730] LOG  : General      f:0> Loading Tiles2x.floor texture pack.
+[20-10-26 20:55:11.742] LOG  : General      f:0> texturepack: loading B42ChunkCaching2x.
+[20-10-26 20:55:11.743] LOG  : General      f:0> Loading B42ChunkCaching2x texture pack.
+[20-10-26 20:55:11.744] LOG  : General      f:0> texturepack: loading B42ChunkCaching2x.floor.
+[20-10-26 20:55:11.745] LOG  : General      f:0> Loading B42ChunkCaching2x.floor texture pack.
+[20-10-26 20:55:11.746] LOG  : General      f:0> texturepack: loading Clock2x.
+[20-10-26 20:55:11.747] LOG  : General      f:0> Loading Clock2x texture pack.
+[20-10-26 20:55:11.752] LOG  : General      f:0> [pzopt] loaded override zombie.tileDepth.TileDepthTextures (target revision 4a0e9546ec, active).
+[20-10-26 20:55:12.061] LOG  : General      f:0> Loading Lua.
+[20-10-26 20:55:12.494] LOG  : General      f:0> [pzopt] glState: 42 recorded, 213 driver fallbacks, 0 dev checks, 0 mismatches.
+[20-10-26 20:55:13.368] WARN : Lua          f:0 at Lua(Vanilla).corpseStorageCheck     > require("ISUI/ISInventoryPaneContextMenu") failed.
+[20-10-26 20:55:13.369] WARN : Lua          f:0 at Lua(Vanilla).corpseStorageCheck     > require("ISUI/ISVehicleMenu") failed.
+[20-10-26 20:55:13.370] WARN : Lua          f:0 at Lua(Vanilla).corpseStorageCheck     > require("ISUI/ISContextMenu") failed.
+[20-10-26 20:55:13.393] WARN : Lua          f:0 at Lua(Vanilla).ISCampingMenu          > require("Camping/CCampfireSystem") failed.
+[20-10-26 20:55:13.694] LOG  : General      f:0> [pzopt] glState: 298 recorded, 213 driver fallbacks, 0 dev checks, 0 mismatches.
+[20-10-26 20:55:14.380] WARN : Lua          f:0 at Lua(Vanilla).ISInventoryTransferUtil> require("TimedActions/ISInventoryTransferAction") failed.
+[20-10-26 20:55:14.383] WARN : Lua          f:0 at Lua(Vanilla).ISInventoryTransferUtil> require("ISUI/PlayerData/ISPlayerData") failed.
+[20-10-26 20:55:14.742] LOG  : General      f:0> [pzopt] anim sets preloaded in 4.67 s.
+[20-10-26 20:55:16.282] WARN : Lua          f:0 at Lua(Vanilla).ISAnimalContextMenu    > require("BuildingObjects/ISAnimalPickMateCursor") failed.
+[20-10-26 20:55:16.406] WARN : Lua          f:0 at Lua(Vanilla).TakeSameType           > require("ISUI/InventoryWindow/ISLootWindowControlHandler") failed.
+[20-10-26 20:55:16.410] WARN : Lua          f:0 at Lua(Vanilla).FloorTakeSameType      > require("ISUI/InventoryWindow/ISLootWindowControlHandler") failed.
+[20-10-26 20:55:16.842] WARN : Lua          f:0 at Lua(Vanilla).testUI                 > require("pzapi/ui/ui") failed.
+[20-10-26 20:55:17.018] LOG  : Lua          f:0> OnLoadSoundbanks.
+[20-10-26 20:55:17.020] LOG  : General      f:0> [ZB] Running callbacks for onGameInitComplete.
+[20-10-26 20:55:17.029] LOG  : General      f:0> Loading models and animations.
+[20-10-26 20:55:17.094] LOG  : General      f:0> 1792522517093 fmod: globalSystem = 0xDF616ED8.
+[20-10-26 20:55:17.094] LOG  : General      f:0> 1792522517094 fmod: FMOD_System_GetRecordDriverInfo: nativeRate = 48000, nativeChannels = 2.
+[20-10-26 20:55:17.097] LOG  : General      f:0> 1792522517097 fmod: System create record sound: OK.
+[20-10-26 20:55:17.099] LOG  : General      f:0> 1792522517098 fmod: Create resampler: OK.
+[20-10-26 20:55:17.100] LOG  : General      f:0> 1792522517100 fmod: Create acoustic echo canceller: OK.
+[20-10-26 20:55:17.361] LOG  : General      f:0> 1792522517361 fmod: GetRecordNumDrivers id = 0, sound = 0x74035c88 loop=1.
+[20-10-26 20:55:17.363] LOG  : General      f:0> Game booting.
+[20-10-26 20:55:17.425] LOG  : General      f:0> [pzopt] boot pump stopped after 23.68 s; file system idle.
+[20-10-26 20:55:17.427] LOG  : General      f:0> [pzopt] file tasks so far: Task=446/25.1s LoadTask=216/17.8s CachedAnimationTask=2161/13.3s waitFileTask(sleep)=41/11.0s FileTask_LoadMesh=79/1.4s FileTask_LoadPackImage=17/1.3s FileTask_ParseXML=1708/1.2s FileTask_LoadImageData=17/0.7s.
+[20-10-26 20:55:17.427] LOG  : General      f:0> [pzopt] model shaders: 1 cached, 1 render-thread round trips (0.035 s waited), 3 served from the cache.
+[20-10-26 20:55:17.429] LOG  : General      f:0> [pzopt] anim clip cache: hits=2161 misses=0 written=0 bad=0 pendingWrites=0.
+[20-10-26 20:55:17.440] LOG  : General      f:0> [pzopt] randPerWorker: the frame workers draw from their own generators (CellularAutomatonRNG wrapped).
+[20-10-26 20:55:17.566] LOG  : General      f:0> [pzopt] loaded override zombie.characters.ecs.ECSComponent (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.624] LOG  : General      f:0> [pzopt] loaded override zombie.MapCollisionData (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.637] LOG  : General      f:0> STATE: exit zombie.gameStates.TermsOfServiceState.
+[20-10-26 20:55:17.735] LOG  : Lua          f:0> [pzopt] options screen: build deferred until it is opened (key bindings loaded).
+[20-10-26 20:55:17.739] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.advancedanimation.AnimatedModel (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.741] LOG  : General      f:0> [pzopt] loaded override zombie.characters.action.ActionContext (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.754] LOG  : General      f:0> [pzopt] loaded override zombie.ai.StateMachine (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:17.754] LOG  : General      f:0> [pzopt] loaded override zombie.characters.Stats (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:17.754] LOG  : General      f:0> [pzopt] loaded override zombie.pathfind.PathFindBehavior2 (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.755] LOG  : General      f:0> [pzopt] loaded override zombie.util.FrameDelay (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.807] LOG  : General      f:0> [pzopt] loaded override zombie.characters.AttachedItems.AttachedItems (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.810] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.animation.AnimationPlayer (target revision 4a0e9546ec, active).
+[20-10-26 20:55:17.816] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.animation.AnimationMultiTrack (target revision 4a0e9546ec, active, logged late).
+[20-10-26 20:55:17.816] LOG  : General      f:0> [pzopt] loaded override zombie.core.skinnedmodel.model.ModelInstance (target revision 4a0e9546ec, active).
+[20-10-26 20:55:18.100] LOG  : General      f:0> binkId: 1.
+[20-10-26 20:55:18.187] WARN : Lua          f:0 at Lua(Vanilla).namedColorToTable      > env.lua-> namedColorToTable color not found: ProgressYellow.
+[20-10-26 20:55:20.448] LOG  : Lua          f:0> [pzopt] overlay item: added to the main menu.
+[20-10-26 20:55:20.449] LOG  : Lua          f:0> [pzopt] update: main menu item added.
+[20-10-26 20:55:20.472] LOG  : General      f:0> binkId: 2.
+[20-10-26 20:55:20.504] LOG  : Lua          f:0> [pzopt] update: main menu item enabled (available, b42.21-20261019-0042-d1bbdcf).
+[20-10-26 20:55:20.582] LOG  : General      f:0> [pzopt] cutaway mask media/mask_transparency_player.png: marked texels 97..927 x 284..742 of 1024 x 1024.
+[20-10-26 20:55:20.588] LOG  : General      f:0> [pzopt] cutaway mask media/mask_transparency_cursor.png: marked texels 8..505 x 8..503 of 512 x 512.
+[20-10-26 20:55:27.619] LOG  : General      f:0> [pzopt] input latch: 1148 frames (276 latched), gate 0.000 ms/frame, latch wait 0.012 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:55:34.417] WARN : General      f:0 at Log.warn                            > [pzopt] aot: java.nio.file.AccessDeniedException: C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\pzopt\aot\pzopt.jar.tmp -> C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid\pzopt\aot\pzopt.jar.
+[20-10-26 20:55:34.438] LOG  : General      f:0> [pzopt] gc: running G1 Young Generation, G1 Concurrent GC, G1 Old Generation; gcMode=g1 gcPauseMs=0 (16 cores) -> next launch G1; heap now 4096 MB max, gcHeap=auto (0 mods) -> 4096 MB gcHeapFixed=false gcPreTouch=false (launcher JSON updated).
+[20-10-26 20:55:37.618] LOG  : General      f:0> [pzopt] input latch: 1649 frames (1553 latched), gate 0.000 ms/frame, latch wait 0.028 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:55:47.624] LOG  : General      f:0> [pzopt] input latch: 1651 frames (1651 latched), gate 0.000 ms/frame, latch wait 0.027 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:55:57.630] LOG  : General      f:0> [pzopt] input latch: 1651 frames (1645 latched), gate 0.000 ms/frame, latch wait 0.028 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:56:07.637] LOG  : General      f:0> [pzopt] input latch: 1651 frames (1115 latched), gate 0.000 ms/frame, latch wait 0.025 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:56:17.642] LOG  : General      f:0> [pzopt] input latch: 1531 frames (18 latched), gate 0.000 ms/frame, latch wait 0.010 ms/frame, 5 not served in 1500 us.
+[20-10-26 20:56:27.643] LOG  : General      f:0> [pzopt] input latch: 1650 frames (1254 latched), gate 0.000 ms/frame, latch wait 0.020 ms/frame, 0 not served in 1500 us.
+[20-10-26 20:56:37.643] LOG  : General      f:0> [pzopt] input latch: 1639 frames (1208 latched), gate 0.000 ms/frame, latch wait 0.027 ms/frame, 3 not served in 1500 us.

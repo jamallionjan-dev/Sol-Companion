@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/RiotArmor/shoulder_eliteriot_l_M_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/RiotArmor/shoulder_eliteriot_l_F_tombfit</m_FemaleModel>
+	<m_GUID>724f6066-3cd3-4b9d-957b-4746d5fa9eb0</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<textureChoices>clothes\shoulder\shoulders_eliteriot</textureChoices>
+</clothingItem>

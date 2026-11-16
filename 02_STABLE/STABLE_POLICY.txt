@@ -1,0 +1,1 @@
+SOL STABLE`r`nOnly a runtime-proven build may be promoted into this directory.`r`nDo not develop directly in this directory.`r`nCurrent stable snapshot selection is pending hash/source verification against the previously runtime-proven body + physics + Grace voice + vehicle build.`r`n

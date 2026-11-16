@@ -1,0 +1,10 @@
+SOL MOD BASELINE
+Imported from Steam Workshop 3805760339
+Source: Living Fellows: Companion
+Source version: 0.26.40
+Target PZ: 42.21.0
+Active mod name: Sol
+Active mod id: Sol
+Dependency retained: ZombieBuddy >= 2.3.3
+Internal SurvivorCompanion namespaces retained temporarily to avoid breaking dependencies during reduction.
+MIT LICENSE and THIRD_PARTY_ASSETS retained.

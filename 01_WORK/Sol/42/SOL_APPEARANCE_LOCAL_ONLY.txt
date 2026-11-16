@@ -1,0 +1,21 @@
+SOL APPEARANCE BUNDLE — LOCAL USE ONLY
+
+Target: use VSGirlBodyExtension's female body for Sol alone, while preserving Sol's existing companion behavior and interface and leaving other female actors on their normal models. This integration is private/local; permission to redistribute third-party-derived assets has not been established.
+
+Body and scope:
+- VSGirlBodyExtension's `LocalPlayerVSGirl` body models, size variants, textures, head/detail maps, and model scripts are bundled under their dedicated asset paths.
+- Do not include Tomb's global `media/models_X/Skinned/FemaleBody.fbx` or root `media/textures/Body/FemaleBody01-05.png`; those paths replace shared female assets and would affect actors beyond Sol.
+- `SCActor.lua` marks only the companion spawned with identity `forename=Sol` using `SolAppearanceVSGirlBody`, and sets VSGirl's per-actor keys `LocalPlayerVSGirlBody=true`, `LocalPlayerVSGirlBodySize=L`, and `LocalPlayerVSGirlNativeHead=false` before reveal.
+- SolCombined.jar contains a narrow patch to `PlayerBodyModels.controlled`: only `SCNativeCompanion` actors carrying the private Sol marker pass the existing NPC-excluding appearance gate. The original behavior remains for other players and actors. Do not load VSGirlBodyExtension.jar beside SolCombined.jar; both use `localplayerbody` and overlap classes.
+- Sol's required `ZombieBuddy` dependency remains in `mod.info`. Do not enable the full VSGirlBodyExtension mod for the Sol-only package.
+
+Supporting appearance resources:
+- VSGirl Hair VS: the remade-hair models, common-hair models, shared hair texture, female hairstyle definitions, and localization used by Sol's integrated hair routes.
+- Fluffy Hair / Tomb's Goth Hair: only the referenced female model family and atlas/style support. The full unrelated clothing and male hair payloads are excluded.
+- SPNCC and Tomb face/detail assets remain available for Sol's appearance selection. Their character-creation UI is not bundled; Sol's existing UI remains authoritative.
+- Clothing fitting assets are limited to the definitions/resources currently selected for Sol. The full 1.54 GB VSGirl clothing-compatibility collection is not copied; add individual patches only when Sol's outfit is shown to need them.
+- The VSGirl bathing/shower fix is a separate interaction patch, not a body dependency; it is excluded unless the user requests that behavior.
+
+Source notes: VSGirlBodyExtension Workshop ID 3820897273; its full source mod is not copied. The Java patch is built reproducibly by `05_TOOLS/sol_appearance/ScopeVSGirlBodyToSol.java` using the locally installed ZombieBuddy shaded ASM library. Backups of the prior SolCombined.jar files and the removed shared Tomb body files are under `03_BACKUPS/appearance_vsgirl_scope_20261029/`.
+
+Validation gate: in the isolated test save, confirm Sol's body, face, hair, and outfit; confirm an ordinary female NPC remains unchanged; confirm Sol's own UI and controls still appear; then review fresh Java/Lua logs. This source bundle and release candidate are not runtime-proven until those checks pass.

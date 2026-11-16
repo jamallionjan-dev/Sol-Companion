@@ -1,0 +1,369 @@
+"""Sol Link: ChatGPT in the browser as Sol's mind (text, and voice through ChatGPT's own "read aloud").
+
+    game -> Sol Mind -> http://127.0.0.1:8790 (own token) <- "Sol Link" userscript -> ONE ChatGPT chat chosen by the player
+
+Safety by construction: this server only passes text. It has no endpoint that runs anything, the userscript has no
+code that runs anything, and code blocks in ChatGPT's replies are dropped. It is separate from the command bridges.
+Endpoints (all need the X-Sol-Link-Token header):
+    GET  /ping   -> {"ok": true, "waiting": bool}
+    GET  /next   -> {"id": n, "text": "...", "speak": bool} or {"id": 0}
+    POST /reply  {"id": n, "text": "..."} -> {"ok": true}
+"""
+import glob, json, os, secrets, subprocess, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+PORT = 8790
+MAX_BODY = 64 * 1024
+TOKEN_ID = "sol_link_token_v3"     # v1 pasted into a ChatGPT chat (2026-10-24); v2 was in the git history (2026-11-16): both replaced
+
+def _secret():
+    import secret_store as S
+    t = S.get(TOKEN_ID)
+    if not t:
+        t = secrets.token_urlsafe(24)
+        S.put(TOKEN_ID, t)
+    return t
+
+class Link:
+    def __init__(self, log=print, port=PORT, token=None, script_dir=None):
+        self.log, self.port = log, port
+        self.token = token or _secret()
+        self.lock = threading.Lock()
+        self.pending = None          # {"id", "text", "speak"}
+        self.replies = {}            # id -> text
+        self.event = threading.Event()
+        self.next_id = 1
+        self.last_seen = 0.0         # last time the userscript called us
+        self.server = None
+        self.script_dir = script_dir
+        self.chat_path = self._load_chat()
+        self.opened_at = 0.0
+        self.commands = []            # for the userscript: "dictate_start" / "dictate_stop"
+        self.on_heard = None          # callback(text) for dictated speech
+
+    # ---------------------------------------------------------------- server
+    def start(self):
+        if self.server: return self
+        link = self
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def _send(self, code, obj):
+                b = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+                self.send_response(code); self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+            def _auth(self):
+                if not secrets.compare_digest(self.headers.get("X-Sol-Link-Token", ""), link.token):
+                    self._send(401, {"ok": False, "error": "token"}); return False
+                link.last_seen = time.time()
+                path = self.headers.get("X-Sol-Link-Chat", "")
+                if path.startswith("/c/") and len(path) < 120 and path != link.chat_path: link._save_chat(path)
+                return True
+            def do_GET(self):
+                if not self._auth(): return
+                if self.path == "/ping":
+                    with link.lock: w = link.pending is not None
+                    return self._send(200, {"ok": True, "waiting": w})
+                if self.path == "/next":
+                    with link.lock:
+                        if link.commands: return self._send(200, {"id": 0, "cmd": link.commands.pop(0)})
+                        p = link.pending
+                        if p and not p.get("sent"): p["sent"] = time.time(); return self._send(200, {"id": p["id"], "text": p["text"], "speak": p["speak"]})
+                    return self._send(200, {"id": 0})
+                self._send(404, {"ok": False})
+            def do_POST(self):
+                if not self._auth(): return
+                n = int(self.headers.get("Content-Length") or 0)
+                if n <= 0 or n > MAX_BODY: return self._send(413, {"ok": False})
+                try: body = json.loads(self.rfile.read(n).decode("utf-8"))
+                except ValueError: return self._send(400, {"ok": False})
+                if self.path == "/heard":                 # ChatGPT's dictation turned the player's voice into text
+                    text = str(body.get("text") or "").strip()[:1000]
+                    if body.get("diag"): link.log("sol link: dictation report: %s" % json.dumps(body.get("diag"), ensure_ascii=False)[:400])
+                    if text and link.on_heard: threading.Thread(target=link.on_heard, args=(text,), daemon=True).start()
+                    return self._send(200, {"ok": True, "heard": bool(text)})
+                if self.path == "/reply":
+                    rid, text = int(body.get("id") or 0), str(body.get("text") or "")
+                    # SOL_LINK_EMPTY_GUARD_V151
+                    if not text.strip():
+                        payload = b'{"ok":false,"error":"empty_reply"}'
+                        self.send_response(422)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_header("Content-Length", str(len(payload)))
+                        self.end_headers()
+                        self.wfile.write(payload)
+                        return
+                    if body.get("diag"): link.log("sol link: page report: %s" % json.dumps(body.get("diag"), ensure_ascii=False)[:400])
+                    with link.lock:
+                        if not link.pending or link.pending["id"] != rid: return self._send(409, {"ok": False, "error": "not_waiting"})
+                        link.replies[rid] = text[:8000]; link.pending = None
+                    link.event.set()
+                    return self._send(200, {"ok": True})
+                self._send(404, {"ok": False})
+        self.server = ThreadingHTTPServer(("127.0.0.1", self.port), H)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.log("sol link: listening on 127.0.0.1:%d" % self.port)
+        if self.script_dir: self.write_userscript(self.script_dir)
+        threading.Thread(target=self._keep_browser, daemon=True).start()
+        return self
+
+    # ---------------------------------------------------------------- Sol's chat opens by itself (Firefox, profile "Sol")
+    def _chat_file(self): return os.path.join(self.script_dir, "sol_chat.txt") if self.script_dir else None
+    def _load_chat(self):
+        f = self._chat_file()
+        try:
+            with open(f, encoding="ascii") as h: return h.read().strip() or None
+        except (OSError, TypeError): return None
+    def _save_chat(self, path):
+        self.chat_path = path
+        f = self._chat_file()
+        if f:
+            try:
+                with open(f, "w", encoding="ascii") as h: h.write(path)
+            except OSError: pass
+    @staticmethod
+    def firefox():
+        for root in (os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")):
+            p = os.path.join(root, "Mozilla Firefox", "firefox.exe")
+            if os.path.isfile(p): return p
+        return None
+    @staticmethod
+    def sol_profile_running():
+        if os.name != "nt": return False
+        ps = "Get-CimInstance Win32_Process -Filter \"Name='firefox.exe'\" | ForEach-Object { $_.CommandLine }"
+        try:
+            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=20,
+                                 creationflags=0x08000000).stdout.lower()
+        except Exception: return False
+        return " -p sol" in out or ".sol\"" in out or ".sol " in out or "\\profiles\\sol" in out
+    def open_chat(self):
+        exe = self.firefox()
+        if not exe or not self.chat_path: return False
+        url = "https://chatgpt.com" + self.chat_path
+        try:
+            subprocess.Popen([exe, "-no-remote", "-P", "Sol", url], close_fds=True)
+            self.opened_at = time.time(); self.log("sol link: opened Sol's chat in Firefox (profile Sol)"); return True
+        except OSError as e:
+            self.log("sol link: could not open Firefox: %s" % e); return False
+    def _keep_browser(self):
+        time.sleep(20)                                   # the page may already be open and connecting
+        while self.server:
+            if not self.connected(30) and time.time() - self.opened_at > 120 and self.chat_path and not self.sol_profile_running():
+                self.open_chat()
+            time.sleep(30)
+
+    def stop(self):
+        if self.server: self.server.shutdown(); self.server.server_close(); self.server = None
+
+    def connected(self, within=10): return time.time() - self.last_seen <= within
+    def command(self, cmd):
+        with self.lock: self.commands.append(cmd)
+
+    # ---------------------------------------------------------------- ask ChatGPT
+    def ask(self, text, speak=True, timeout=150):
+        with self.lock:
+            rid = self.next_id; self.next_id += 1
+            self.pending = {"id": rid, "text": text, "speak": bool(speak)}
+            self.event.clear()
+        end = time.time() + timeout
+        while time.time() < end:
+            if self.event.wait(0.5):
+                with self.lock:
+                    if rid in self.replies: return self.replies.pop(rid)
+                self.event.clear()
+        with self.lock:
+            if self.pending and self.pending["id"] == rid: self.pending = None
+        raise TimeoutError("chatgpt_link_timeout" if self.connected(30) else "chatgpt_link_not_connected")
+
+    # ---------------------------------------------------------------- the userscript (token and port filled in)
+    def write_userscript(self, folder):
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, "Sol_Link.user.js")
+        js = USERSCRIPT.replace("__PORT__", str(self.port)).replace("__TOKEN__", self.token)
+        with open(path, "w", encoding="utf-8", newline="\n") as f: f.write(js)
+        self.log("sol link: userscript written to %s" % path)
+        return path
+
+_link = None
+def get(log=print, script_dir=None):
+    global _link
+    if _link is None: _link = Link(log=log, script_dir=script_dir).start()
+    return _link
+
+USERSCRIPT = r"""// ==UserScript==
+// @name         Sol Link (ChatGPT as Sol's mind)
+// @namespace    jamal.sol.link
+// @version      1.5.2
+// @description  Passes text between Sol Mind (Project Zomboid) and ONE ChatGPT chat you choose. Runs nothing on your PC.
+// @match        https://chatgpt.com/*
+// @grant        GM_xmlhttpRequest
+// @connect      127.0.0.1
+// @run-at       document-idle
+// @noframes
+// ==/UserScript==
+// SAFETY: this script only types text, reads text and presses ChatGPT's own buttons. It has no code that runs
+// commands, it ignores code blocks in replies, and it is active only in the one chat you mark as Sol's chat.
+// Use it in a browser profile WITHOUT the command-bridge userscript.
+(function () {
+  "use strict";
+  const SERVER = "http://127.0.0.1:__PORT__";
+  const TOKEN = "__TOKEN__";
+  const KEY_CHAT = "sollink_chat", KEY_VOICE = "sollink_voice";
+  let busy = false;
+
+  function req(method, path, body) {
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({ method, url: SERVER + path, timeout: 8000, data: body ? JSON.stringify(body) : undefined,
+        headers: { "X-Sol-Link-Token": TOKEN, "Content-Type": "application/json", "X-Sol-Link-Chat": isSolChat() ? location.pathname : "" },
+        onload: (r) => { try { resolve({ status: r.status, data: JSON.parse(r.responseText || "{}") }); } catch (_) { resolve({ status: r.status, data: {} }); } },
+        onerror: () => resolve({ status: 0, data: {} }), ontimeout: () => resolve({ status: 0, data: {} }) });
+    });
+  }
+  const isSolChat = () => localStorage.getItem(KEY_CHAT) === location.pathname;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // only ChatGPT's own stop-generating button (other buttons also say "Stop": read aloud, voice...)
+  const streaming = () => !!document.querySelector('button[data-testid="stop-button"]');
+  // ChatGPT's replies: several ways to find them (in Firefox on 2026-10-24 none of the first two existed)
+  const assistantNodes = () => {
+    let n = [...document.querySelectorAll('[data-markdown-text-style="assistant-message"]')];
+    if (!n.length) n = [...document.querySelectorAll('[data-content-search-unit-key$=":assistant"]')];
+    if (!n.length) n = [...document.querySelectorAll('[data-message-author-role="assistant"]')];
+    if (!n.length) n = [...document.querySelectorAll(".markdown")];                   // replies are rendered as markdown
+    if (!n.length) n = [...document.querySelectorAll('[class*="markdown"]')];
+    if (!n.length) n = [...document.querySelectorAll("article")].filter((a) => !a.querySelector('[data-message-author-role="user"]'));
+    // SOL_LINK_DOM_V152
+    if (!n.length) n = [...document.querySelectorAll("main section")].filter((s) => !s.querySelector('#prompt-textarea,[data-message-author-role="user"]') && (s.innerText || s.textContent || "").trim());
+    if (!n.length) n = [...document.querySelectorAll('main [class*="prose"]')].filter((s) => (s.innerText || s.textContent || "").trim());
+    return n.filter((e) => !e.closest("#sollink"));
+  };
+  const pageReport = () => ({ top: window.top === window, roleAssistant: document.querySelectorAll('[data-message-author-role="assistant"]').length,
+    roleAny: document.querySelectorAll("[data-message-author-role]").length, markdown: document.querySelectorAll(".markdown").length,
+    markdownLike: document.querySelectorAll('[class*="markdown"]').length, prose: document.querySelectorAll('[class*="prose"]').length,
+    turns: document.querySelectorAll('[data-testid^="conversation-turn"]').length, articles: document.querySelectorAll("article").length,
+    sections: document.querySelectorAll("section").length, main: !!document.querySelector("main"),
+    testids: [...new Set([...document.querySelectorAll("[data-testid]")].map((e) => e.getAttribute("data-testid").replace(/[0-9]+/g, "#")))].slice(0, 25) });
+
+  function panel() {
+    if (document.getElementById("sollink")) return;
+    const p = document.createElement("div");
+    p.id = "sollink";
+    p.style.cssText = "position:fixed;bottom:16px;left:16px;z-index:2147483647;background:#0b1a26;color:#e8f0f6;border:1px solid #2f8fd8;border-radius:12px;padding:8px 10px;font:12px sans-serif;direction:rtl;min-width:220px";
+    p.innerHTML = '<b>Sol Link</b> <span id="sl_s" style="color:#9fb3c4"></span><br>' +
+      '<button id="sl_mark" style="margin-top:6px;width:100%;background:#1a5f99;color:#fff;border:0;border-radius:8px;padding:6px;cursor:pointer"></button>' +
+      '<label style="display:block;margin-top:6px;cursor:pointer"><input type="checkbox" id="sl_voice"> \u0635\u0648\u062a \u0633\u0648\u0644 (\u0642\u0631\u0627\u0621\u0629 \u0628\u0635\u0648\u062a \u0639\u0627\u0644\u064d)</label>';
+    document.body.appendChild(p);
+    const mark = p.querySelector("#sl_mark"), voice = p.querySelector("#sl_voice");
+    voice.checked = localStorage.getItem(KEY_VOICE) !== "0";
+    voice.onchange = () => localStorage.setItem(KEY_VOICE, voice.checked ? "1" : "0");
+    const render = () => { mark.textContent = isSolChat() ? "\u0647\u0630\u0647 \u0645\u062d\u0627\u062f\u062b\u0629 \u0633\u0648\u0644 \u2713 (\u0625\u0644\u063a\u0627\u0621)" : "\u0627\u062c\u0639\u0644 \u0647\u0630\u0647 \u0645\u062d\u0627\u062f\u062b\u0629 \u0633\u0648\u0644"; };
+    mark.onclick = () => { if (isSolChat()) localStorage.removeItem(KEY_CHAT); else localStorage.setItem(KEY_CHAT, location.pathname); render(); };
+    render();
+  }
+  const say = (t) => { const s = document.getElementById("sl_s"); if (s) s.textContent = t; };
+
+  function typeAndSend(text) {
+    const editor = document.querySelector("#prompt-textarea") || document.querySelector('div[contenteditable="true"]');
+    if (!editor) return false;
+    editor.focus();
+    if (editor.tagName === "TEXTAREA") { editor.value = text; editor.dispatchEvent(new Event("input", { bubbles: true })); }
+    else {
+      editor.innerHTML = "";
+      text.split("\n").forEach((line) => { const pp = document.createElement("p"); pp.textContent = line || "\u00a0"; editor.appendChild(pp); });
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+    }
+    setTimeout(() => {
+      const b = document.querySelector('button[data-testid="send-button"]') || document.querySelector('button[aria-label*="Send"]');
+      if (b && !b.disabled) b.click();
+    }, 400);
+    return true;
+  }
+  function replyText(node) {
+    const c = node.cloneNode(true);
+    c.querySelectorAll("pre, code, script, style, button").forEach((e) => e.remove());   // never pass code on
+    return (c.innerText || "").trim();
+  }
+  async function readAloud(node) {
+    const turn = node.closest("article") || node.closest('[data-testid^="conversation-turn"]') || node.parentElement;
+    const find = () => turn && (turn.querySelector('button[data-testid="voice-play-turn-action-button"]') ||
+      [...turn.querySelectorAll("button")].find((b) => /read aloud|\u0642\u0631\u0627\u0621\u0629|\u0627\u0642\u0631\u0623/i.test(b.getAttribute("aria-label") || "")));
+    let b = find();
+    if (!b && turn) {                                      // newer layout: inside the "more actions" menu
+      const more = [...turn.querySelectorAll("button")].find((x) => /more|\u0627\u0644\u0645\u0632\u064a\u062f/i.test(x.getAttribute("aria-label") || ""));
+      if (more) { more.click(); await sleep(300);
+        b = [...document.querySelectorAll('[role="menuitem"]')].find((x) => /read aloud|\u0642\u0631\u0627\u0621\u0629/i.test(x.textContent || "")); }
+    }
+    if (b) { b.click(); return true; }
+    return false;
+  }
+  // ---- the player's voice: ChatGPT's own dictation button (better speech-to-text than anything local)
+  const labelOf = (b) => ((b.getAttribute("aria-label") || "") + " " + (b.getAttribute("data-testid") || "") + " " + (b.title || "")).toLowerCase();
+  const findBtn = (rx) => [...document.querySelectorAll("button")].find((b) => rx.test(labelOf(b)) && !b.disabled);
+  const editorEl = () => document.querySelector("#prompt-textarea") || document.querySelector('div[contenteditable="true"]');
+  const editorText = () => { const e = editorEl(); return e ? ((e.tagName === "TEXTAREA" ? e.value : e.innerText) || "").trim() : ""; };
+  const clearEditor = () => { const e = editorEl(); if (!e) return; if (e.tagName === "TEXTAREA") e.value = ""; else e.innerHTML = "<p><br></p>"; e.dispatchEvent(new Event("input", { bubbles: true })); };
+  const DICTATE = /dictat|\u0625\u0645\u0644\u0627\u0621|microphone|\u0645\u064a\u0643\u0631\u0648\u0641\u0648\u0646/;
+  const SUBMIT = /submit dictation|stop dictation|done|confirm|\u062a\u0645|\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0625\u0645\u0644\u0627\u0621|\u0625\u064a\u0642\u0627\u0641 \u0627\u0644\u0625\u0645\u0644\u0627\u0621/;
+  async function dictate(cmd) {
+    if (cmd === "dictate_start") {
+      clearEditor();
+      const b = findBtn(DICTATE);
+      if (!b) { await req("POST", "/heard", { text: "", diag: { step: "start", found: false, buttons: [...document.querySelectorAll("button")].map(labelOf).filter((x) => x.trim()).slice(-12) } }); say("\u0644\u0645 \u0623\u062c\u062f \u0632\u0631 \u0627\u0644\u0625\u0645\u0644\u0627\u0621"); return; }
+      b.click(); say("\u0623\u0633\u062a\u0645\u0639..."); return;
+    }
+    if (cmd === "dictate_stop") {
+      const b = findBtn(SUBMIT);
+      if (b) b.click();
+      say("\u064a\u062d\u0648\u0651\u0644 \u0627\u0644\u0635\u0648\u062a \u0625\u0644\u0649 \u0646\u0635...");
+      let text = "", last = "", since = Date.now(); const t0 = Date.now();
+      while (Date.now() - t0 < 20000) {                       // the transcription lands in the composer
+        await sleep(400);
+        const t = editorText();
+        if (t !== last) { last = t; since = Date.now(); continue; }
+        if (t && Date.now() - since >= 1200) { text = t; break; }
+      }
+      clearEditor();
+      await req("POST", "/heard", { text, diag: text ? null : { step: "stop", submitFound: !!b, composer: editorText().length } });
+      say(text ? "\u062a\u0645" : "\u0644\u0645 \u064a\u0635\u0644 \u0646\u0635");
+    }
+  }
+  async function cycle() {
+    panel();
+    if (busy) return;
+    if (!isSolChat()) { say("\u063a\u064a\u0631 \u0645\u0641\u0639\u0651\u0644 \u0647\u0646\u0627"); return; }
+    const r = await req("GET", "/next");
+    if (r.status === 401) { say("\u0627\u0644\u0631\u0645\u0632 \u063a\u064a\u0631 \u0635\u062d\u064a\u062d"); return; }
+    if (r.status !== 200) { say("Sol Mind \u063a\u064a\u0631 \u0645\u062a\u0635\u0644"); return; }
+    say("\u0645\u062a\u0635\u0644");
+    if (r.data.cmd) { busy = true; try { await dictate(r.data.cmd); } finally { busy = false; } return; }
+    if (!r.data.id) return;
+    busy = true;
+    try {
+      say("\u064a\u0631\u0633\u0644...");
+      const before = assistantNodes();
+      const prevNode = before[before.length - 1] || null, prevText = prevNode ? replyText(prevNode) : "";
+      if (!typeAndSend(r.data.text)) { say("\u0644\u0645 \u0623\u062c\u062f \u0645\u0631\u0628\u0639 \u0627\u0644\u0643\u062a\u0627\u0628\u0629"); return; }
+      // done = a NEW reply whose text has not changed for 2.5 s (works whatever ChatGPT's buttons look like)
+      const t0 = Date.now();
+      let last = null, text = "", lastText = "", stableSince = 0;
+      while (Date.now() - t0 < 120000) {
+        await sleep(600);
+        const nodes = assistantNodes();
+        const cur = nodes[nodes.length - 1];
+        if (!cur) continue;
+        const t = replyText(cur);
+        const isNew = (cur !== prevNode) || (t !== prevText);
+        if (!isNew || !t) continue;
+        if (t !== lastText) { lastText = t; stableSince = Date.now(); continue; }
+        if (Date.now() - stableSince >= 2500 && !streaming()) { last = cur; text = t; break; }
+      }
+      const diag = text ? null : Object.assign({ assistantNodes: assistantNodes().length, stopButton: streaming(), sawText: lastText.length, path: location.pathname }, pageReport());
+// SOL_LINK_NO_EMPTY_POST_V151
+    if (!text) { await req("POST", "/heard", { text: "", diag }); return; }
+    await req("POST", "/reply", { id: r.data.id, text, diag });
+      say("\u062a\u0645 \u0627\u0644\u0631\u062f");
+      if (text && r.data.speak && localStorage.getItem(KEY_VOICE) !== "0") { if (!(await readAloud(last))) say("\u0644\u0645 \u0623\u062c\u062f \u0632\u0631 \u0627\u0644\u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u0635\u0648\u062a\u064a\u0629"); }
+    } finally { busy = false; }
+  }
+  setInterval(cycle, 1500);
+})();
+"""

@@ -1,0 +1,7 @@
+# s118 Sol one-shot firearm hit (LAB only)
+
+Engineer: Build 42's inspected `CombatManager.processHit(HandWeapon, IsoGameCharacter, IsoGameCharacter)` resolves the targeted firearm-hit path. The installed s117 test logs matched head-part selection but several hits left health above zero. Verified API signature is `IsoGameCharacter.Kill(HandWeapon, IsoGameCharacter)`. The smallest fix is an OnExit kill for a living IsoZombie only when the exact SCNativeCompanion is the ranged attacker and the dedicated LAB switch is on.
+
+Devil's advocate: This deliberately bypasses remaining zombie health on any engine-resolved Sol firearm hit, including torso hits; it is stronger than tuning damage and can make armor/weapon balance irrelevant. It must not run on misses, player fire, melee, other actors, or non-zombies. Keep the feature separately switchable and confined to SOL_LAB.
+
+Strategist: Accept only as a gameplay test because the user explicitly asked for one bullet to kill. Preserve s117 weapon configuration and head/chest routing; avoid changing min/max damage or EFZ stats. Back up the current LAB jar, Lua control files and switch list, then install the candidate. Acceptance: startup log shows the toggle on; one Sol shot removes exactly one ammunition and a nearby live zombie dies, with a `[SolHeadshot] one-shot-kill ... healthAfter=0.0` line. Any single missed condition rejects promotion. No RELEASE or Steam-profile change.

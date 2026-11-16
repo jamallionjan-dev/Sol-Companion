@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/UndeadSurvivor/F_AmazonaDressTrimmed02_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/UndeadSurvivor/F_AmazonaDressTrimmed02_tombfit</m_FemaleModel>
+	<m_GUID>4462f6cd-ba79-463a-b2e0-e026e4a3ac93</m_GUID>
+	<m_Static>false</m_Static>
+	<m_Masks>14</m_Masks>
+	<m_Masks>13</m_Masks>
+	<m_MasksFolder>media/textures/Clothes/Mask_AmazonaDress</m_MasksFolder>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<textureChoices>clothes\Amazonadress</textureChoices>
+</clothingItem>

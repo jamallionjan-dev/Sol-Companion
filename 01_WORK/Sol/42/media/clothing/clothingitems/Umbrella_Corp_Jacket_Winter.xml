@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/Umbrella/cloth/M_Umbrella_Winter_DOWN_breathfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/Umbrella/cloth/F_Umbrella_Winter_DOWN_breathfit</m_FemaleModel>
+	<m_GUID>923f1593-872a-4e5b-a69f-73de85bc146f</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_Masks>12</m_Masks>
+	<m_Masks>13</m_Masks>
+	<m_Masks>14</m_Masks>
+	<m_Masks>3</m_Masks>
+	<m_Masks>5</m_Masks>
+	<m_MasksFolder>Clothes\Jacket\Masks</m_MasksFolder>
+	<textureChoices>Clothes\Military\Jacket\Umbrella_Corp_Jacket_Winter</textureChoices>
+</clothingItem>

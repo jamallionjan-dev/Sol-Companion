@@ -1,0 +1,13 @@
+name=Sol
+author=TH0R
+id=Sol
+description=Sol - AI companion for Project Zomboid, derived from Living Fellows Companion under the MIT License.
+poster=poster.png
+icon=poster.png
+modversion=0.28.8
+versionMin=42.21.0
+versionMax=42.22.99
+require=\ZombieBuddy
+ZBVersionMin=2.3.3
+javaJarFile=media/java/SurvivorCompanionBridge.jar
+javaPkgName=survivorcompanion.bridge

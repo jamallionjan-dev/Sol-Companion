@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<clothingItem>
+	<m_MaleModel>KO_TombCompat/TLOU/armor/M_FEDRAShoulderArmorBigger_M_tombfit</m_MaleModel>
+	<m_FemaleModel>KO_TombCompat/TLOU/armor/F_FEDRAShoulderArmorBigger_F_tombfit</m_FemaleModel>
+	<m_GUID>bd48302d-0872-403d-8b08-8da98e9ade63</m_GUID>
+	<m_Static>false</m_Static>
+	<m_AllowRandomHue>false</m_AllowRandomHue>
+	<m_AllowRandomTint>false</m_AllowRandomTint>
+	<m_AttachBone />
+	<m_HatCategory />
+	<m_MasksFolder>media/textures/Clothes/Hat/Masks</m_MasksFolder>
+	<textureChoices>clothes\FedraClothing\FedraShoulderArmor</textureChoices>
+</clothingItem>
