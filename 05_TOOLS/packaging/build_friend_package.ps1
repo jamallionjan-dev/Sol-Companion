@@ -58,7 +58,7 @@ Get-ChildItem "$pkg\python" -Recurse -Directory -Filter '__pycache__' | Remove-I
 # scrub check
 # (case-sensitive: the Windows account name in a path, a LAN address, an e-mail. The first name in code comments and in the
 #  kill-ledger labels of SolShootDiscipline / SolDamageProbe is code, not a path, and is left as it is.)
-$hits = Get-ChildItem $pkg -Recurse -File -Include *.py,*.pyw,*.lua,*.txt,*.md,*.ps1,*.bat | Select-String -CaseSensitive -Pattern 'JAMAL|Users[\\/]+[Jj]amal|192\.168\.0\.|@gmail' -List   # 192.168.0.x = his own network; the README's example address is 192.168.1.20
+$hits = Get-ChildItem $pkg -Recurse -File -Include *.py,*.pyw,*.lua,*.txt,*.md,*.ps1,*.bat | Select-String -CaseSensitive -Pattern 'JAMAL|Users[\\/]+[Jj]amal|192\.168\.0\.|@gmail' -List   # 192.168.1.x = his own network; the README's example address is 192.168.1.20
 if ($hits) { $hits | ForEach-Object { $_.Path }; throw 'personal data found' }
 $zip = Join-Path $out "Sol-$ver.zip"; if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $pkg -DestinationPath $zip

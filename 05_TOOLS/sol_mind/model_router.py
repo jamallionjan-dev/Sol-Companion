@@ -939,3 +939,17 @@ def offline_answer_s157(said, actions):
     if not ids or any(i in ("none", "unknown") or i not in possible for i in ids): return None
     return answer
 # ---------------------------------------------------------------- s157 end
+
+
+# ---------------------------------------------------------------- s160 bank_first
+EXACT_MIN_S160 = 0.97               # his words are the example itself (her name and small spelling marks aside)
+
+
+def exact_answer_s160(said, actions):
+    """The bank's answer when his words are one of its examples; None otherwise (the model decides)."""
+    global OFFLINE_MIN_S157
+    keep = OFFLINE_MIN_S157
+    OFFLINE_MIN_S157 = EXACT_MIN_S160
+    try: return offline_answer_s157(said, actions)
+    finally: OFFLINE_MIN_S157 = keep
+# ---------------------------------------------------------------- s160 end

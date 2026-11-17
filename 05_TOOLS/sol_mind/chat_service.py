@@ -1500,6 +1500,9 @@ class Chat:
                 return NEUTRAL_S109
             return action_receipt_note(r) or "ما قدرت أرسل طلب المروحية هلأ."
         raw = getattr(self, "_offline_raw_s157", None); self._offline_raw_s157 = None      # s157: the bank's answer, the model is down
+        if raw is None and fix_on(self.dir, "bank_first") and hasattr(MR, "exact_answer_s160"):       # s160
+            raw = MR.exact_answer_s160(text, acts)
+            if raw: self.log("chat: his words are a known order, the model is not asked: %s" % raw[:80])
         try:
             if raw is None: raw = P.chat(c["provider"], key, c["model"], MR.message(text, c["model"]), system=self._session_sheet(snap, mem, acts), custom_base=c.get("base", ""), max_tokens=(80 if c.get("provider") == "custom" else 200), timeout=((PHONE_WAIT_S157 if fix_on(self.dir, "phone_patience") else 4) if c.get("provider") == "custom" else 15))   # LAN phone model fast; cloud (Groq...) slower
         except Exception as e:

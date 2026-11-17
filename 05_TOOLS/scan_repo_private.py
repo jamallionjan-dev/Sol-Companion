@@ -1,10 +1,12 @@
 """Read-only scan before a repository goes public: personal data and secrets in every blob of the history.
 usage: scan_repo_private.py [--head]     --head: only the files of HEAD (fast); default: every blob of every commit
 Prints, per kind, how many blobs hit and a few paths; never prints a secret in full."""
-import re, subprocess, sys, collections
+import os, re, subprocess, sys, collections
 ROOT = r"C:\Users\JAMAL\Desktop\Sol"
+for _a in sys.argv[1:]:
+    if _a.startswith("--root="): ROOT = _a[len("--root="):]          # scan another repository
 PAT = {
-    "email (his)": re.compile(rb"medflux\.dev@gmail\.com", re.I),
+    "email (his)": re.compile(re.escape(os.environ.get("SOL_OWNER_EMAIL", "owner@invalid").encode()), re.I),   # his address is not written in the repo
     "email (any gmail/outlook/hotmail)": re.compile(rb"[A-Za-z0-9._%+-]+@(gmail|outlook|hotmail|yahoo)\.com", re.I),
     "Groq key": re.compile(rb"gsk_[A-Za-z0-9]{20,}"),
     "OpenAI-style key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
